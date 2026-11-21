@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+STATE.md
+screenshots/
+AGENTS.md
+CLAUDE.md
+tools/
+GEMINI.md
+IDEA.md
+PLAN.md

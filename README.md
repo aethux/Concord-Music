@@ -1,3 +1,13 @@
+# Concord
+
+**Concord is a fork of [Mochy Music](https://github.com/realidkroo/Mochy-Music)** — a sleek, open-source
+Android music player. Concord keeps Mochy's player, interface and modules, and changes where the Apple
+Music library is read from. Mochy is itself built on [ViviMusic](https://github.com/vivizzz007/vivi-music)
+and [Metrolist](https://github.com/mostafaalagamy/Metrolist). The full, honest credit list is in
+[`CREDITS.md`](CREDITS.md); the original README follows.
+
+---
+
 <img width="1799" height="927" alt="Frame 420" src="https://github.com/user-attachments/assets/c5e1d307-ecc4-4c26-a88f-f4f468c8e434" />
 
 <div align="center">

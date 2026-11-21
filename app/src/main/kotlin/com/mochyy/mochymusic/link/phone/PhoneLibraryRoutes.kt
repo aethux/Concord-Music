@@ -185,7 +185,7 @@ internal class PhoneLibraryRoutes(
     }
 
     companion object {
-        const val SnapshotType = "application/x-mochy-library+gzip"
+        const val SnapshotType = "application/x-Concord-library+gzip"
 
         // parents before the maps that point at them, so nothing is turned away by a foreign key
         val ParentTables = listOf("song", "artist", "album", "song_artist_map", "song_album_map", "album_artist_map")

@@ -188,7 +188,7 @@ internal object SkinParser {
         val kind = when (action) {
             "play" -> PageControl.Play
             "shuffle" -> PageControl.Shuffle
-            "original", "mochy" -> PageControl.Original
+            "original", "Concord" -> PageControl.Original
             "use", "useplayer", "setplayer" -> PageControl.UsePlayer
             else -> return null
         }

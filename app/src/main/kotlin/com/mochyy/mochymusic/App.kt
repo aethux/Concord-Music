@@ -1,4 +1,8 @@
 // App.kt
+//
+// Concord: forked from Mochy Music (realidkroo/Mochy-Music, GPL-3.0), itself a fork of ViviMusic
+// built on Metrolist. applicationId is com.concord.player; the Kotlin namespace stays
+// com.mochyy.mochymusic. Full attribution: CREDITS.md at the repo root.
 
 package com.mochyy.mochymusic
 

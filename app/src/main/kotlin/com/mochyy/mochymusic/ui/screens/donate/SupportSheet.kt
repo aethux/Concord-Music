@@ -1,4 +1,4 @@
-// the "support mochy's development" sheet: the auto prompt, help us! on the version sheet, and support me on about app all open this
+// the "support Concord's development" sheet: the auto prompt, help us! on the version sheet, and support me on about app all open this
 
 package com.mochyy.mochymusic.ui.screens.donate
 

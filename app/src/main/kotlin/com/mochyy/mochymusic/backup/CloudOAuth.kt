@@ -27,13 +27,13 @@ internal enum class OAuthApp(
         CloudKind.Dropbox,
         authorizeUrl = "https://www.dropbox.com/oauth2/authorize",
         tokenUrl = "https://api.dropboxapi.com/oauth2/token",
-        redirectUri = "mochy-backup://dropbox",
+        redirectUri = "Concord-backup://dropbox",
     ),
     OneDrive(
         CloudKind.OneDrive,
         authorizeUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
         tokenUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-        redirectUri = "mochy-backup://onedrive",
+        redirectUri = "Concord-backup://onedrive",
     ),
     ;
 

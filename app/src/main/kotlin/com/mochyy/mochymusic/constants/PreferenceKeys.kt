@@ -15,6 +15,10 @@ import java.time.ZoneOffset
 import com.music.innertube.models.IpVersion
 
 val IsFirstRunKey = booleanPreferencesKey("isFirstRun")
+
+// Concord: whether Apple's motion artwork is fetched and used at all. On by default; off keeps the
+// still cover and stops the background motion fetch the import starts.
+val AppleAnimatedCoversKey = booleanPreferencesKey("appleAnimatedCovers")
 val EnableHighRefreshRateKey = booleanPreferencesKey("enableHighRefreshRate")
 val DynamicThemeKey = booleanPreferencesKey("dynamicTheme")
 val SelectedThemeColorKey = intPreferencesKey("selectedThemeColor")

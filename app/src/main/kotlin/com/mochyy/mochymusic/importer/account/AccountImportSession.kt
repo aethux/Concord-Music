@@ -3,6 +3,7 @@
 package com.mochyy.mochymusic.importer.account
 
 import android.content.Context
+import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.constants.AccountNameKey
 import com.mochyy.mochymusic.extensions.isUserLoggedIn
 import com.mochyy.mochymusic.importer.ImportSource
@@ -145,8 +146,18 @@ class AccountImportSession(
 
     /** Apple: tokens read straight from MusicKit in the page, as JSON {dev, user}. */
     fun onApplePageProbe(raw: String?) {
-        if (library != null || raw.isNullOrBlank() || raw == "null") return
+        if (raw.isNullOrBlank() || raw == "null") return
         val json = runCatching { JSONObject(raw) }.getOrNull() ?: return
+        // Concord: the Apple engine reads the built-in module's token pair, so keep that one store
+        // current here — this is the only place the two tokens are seen outside the module's own
+        // sign-in. Above the "already connected" gate on purpose: with a live web cookie the session
+        // can connect before this callback arrives, and then the tokens would never be written.
+        val engineDeveloper = json.optString("dev").takeIf { it.length > 20 && it != "null" }
+        val engineUser = json.optString("user").takeIf { it.length > 20 && it != "null" }
+        if (engineDeveloper != null && engineUser != null) {
+            scope.launch(Dispatchers.IO) { AppleTokens(context).save(engineDeveloper, engineUser) }
+        }
+        if (library != null) return
         json.optString("dev").takeIf { it.length > 20 && it != "null" }?.let {
             credentials.addHeader("authorization", "Bearer $it", "https://amp-api.music.apple.com/")
         }

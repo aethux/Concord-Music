@@ -13,7 +13,9 @@ import com.mochyy.mochymusic.importer.ImportOptions
 import com.mochyy.mochymusic.importer.ImportProgress
 import com.mochyy.mochymusic.importer.LinkImportException
 import com.mochyy.mochymusic.importer.LinkImporter
+import androidx.datastore.preferences.core.edit
 import com.mochyy.mochymusic.importer.MusicImportService
+import com.mochyy.mochymusic.utils.dataStore
 import com.mochyy.mochymusic.importer.MochyCsvExporter
 import com.mochyy.mochymusic.importer.ParsedImport
 import com.mochyy.mochymusic.importer.YouTubeSyncManager
@@ -25,8 +27,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -38,16 +43,88 @@ sealed interface PendingImport {
     data class Failed(val message: String) : PendingImport
 }
 
+/** Concord: the state of one YouTube matching pass. */
+sealed interface AppleMatchState {
+    data object Idle : AppleMatchState
+    data class Running(val done: Int, val total: Int) : AppleMatchState
+    data class Done(val matched: Int, val tried: Int, val remaining: Int) : AppleMatchState
+    data class Failed(val message: String) : AppleMatchState
+}
+
+/** Concord: the state of one Apple library read. */
+sealed interface AppleReadState {
+    data object Idle : AppleReadState
+    data class Running(val stage: String = "") : AppleReadState
+    data class Done(val read: Int, val added: Int) : AppleReadState
+    data class Failed(val message: String) : AppleReadState
+}
+
 @HiltViewModel
 class ImportSyncViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val database: MusicDatabase,
     private val importService: MusicImportService,
     private val youTubeSync: YouTubeSyncManager,
+    // Concord: the Apple engine's sidecar DAO and token pair, both provided by AppleSyncModule
+    private val appleDao: com.mochyy.mochymusic.applesync.db.AppleSyncDao,
+    private val appleTokens: com.mochyy.mochymusic.applesync.AppleTokens,
 ) : ViewModel() {
 
     val importProgress: StateFlow<ImportProgress> = importService.progress
     val youTubeState: StateFlow<YtSyncState> = youTubeSync.state
+
+    // Concord: one read of the Apple library, started from Settings → Import and sync
+    private val _appleRead = MutableStateFlow<AppleReadState>(AppleReadState.Idle)
+    val appleRead: StateFlow<AppleReadState> = _appleRead.asStateFlow()
+
+    // Concord: whether Apple's motion artwork is used at all (default on)
+    val appleAnimatedCovers: StateFlow<Boolean> = context.dataStore.data
+        .map { it[com.mochyy.mochymusic.constants.AppleAnimatedCoversKey] ?: true }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    // Concord: fills the Apple <-> YouTube reference, one bounded pass at a time
+    private val _appleMatch = MutableStateFlow<AppleMatchState>(AppleMatchState.Idle)
+    val appleMatch: StateFlow<AppleMatchState> = _appleMatch.asStateFlow()
+
+    fun matchAppleOnYouTube() {
+        if (_appleMatch.value is AppleMatchState.Running) return
+        _appleMatch.value = AppleMatchState.Running(0, 0)
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _appleMatch.value = runCatching {
+                val pass = com.mochyy.mochymusic.applesync.AppleYoutubeMatch(appleDao)
+                val result = pass.run(limit = 200) { done, total ->
+                    _appleMatch.value = AppleMatchState.Running(done, total)
+                }
+                AppleMatchState.Done(result.matched, result.tried, result.remaining)
+            }.getOrElse { AppleMatchState.Failed(it.message ?: "Matching failed") }
+        }
+    }
+
+    fun setAppleAnimatedCovers(on: Boolean) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            context.dataStore.edit { it[com.mochyy.mochymusic.constants.AppleAnimatedCoversKey] = on }
+        }
+    }
+
+    fun readAppleLibrary() {
+        if (_appleRead.value is AppleReadState.Running) return
+        _appleRead.value = AppleReadState.Running("start")
+        // Concord: on IO, not Main. AppleImport's inserts go through Mochy's blocking DAO methods, and
+        // Room refuses those on the main thread ("Cannot access database on the main thread").
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _appleRead.value = runCatching {
+                val refresh = com.mochyy.mochymusic.applesync.AppleLibraryRefresh(
+                    database, appleDao, appleTokens, appleAnimatedCovers.value,
+                )
+                val result = refresh.run { stage -> _appleRead.value = AppleReadState.Running(stage) }
+                AppleReadState.Done(result.read, result.added)
+            }.getOrElse {
+                // the row only shows the message; the stack goes here so a failure is diagnosable
+                timber.log.Timber.tag("AppleRead").e(it, "Apple library read failed")
+                AppleReadState.Failed(it.message ?: "Couldn't read Apple Music")
+            }
+        }
+    }
 
     private val _pending = MutableStateFlow<PendingImport>(PendingImport.Idle)
     val pending: StateFlow<PendingImport> = _pending.asStateFlow()

@@ -20,8 +20,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.viewmodels.AppleMatchState
+import com.mochyy.mochymusic.viewmodels.AppleReadState
 import com.mochyy.mochymusic.ui.component.DefaultDialog
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
+import com.mochyy.mochymusic.ui.component.AppSwitch
 import com.mochyy.mochymusic.ui.component.SettingsGroup
 import com.mochyy.mochymusic.ui.component.SettingsGroupStyle
 import com.mochyy.mochymusic.ui.component.SettingsItem
@@ -39,6 +42,10 @@ fun ImportSyncScreen(
 ) {
     val progress by viewModel.importProgress.collectAsState()
     val exportMessage by viewModel.exportMessage.collectAsState()
+    // Concord: the Apple library read's own state, and the animated-covers switch
+    val appleRead by viewModel.appleRead.collectAsState()
+    val appleAnimated by viewModel.appleAnimatedCovers.collectAsState()
+    val appleMatch by viewModel.appleMatch.collectAsState()
     val signedIn = rememberYouTubeSignedIn()
     val sheets = LocalZoomOutOverlayState.current
     val devices = rememberDevicesLink()
@@ -114,6 +121,73 @@ fun ImportSyncScreen(
                     icon = painterResource(R.drawable.playlist_add),
                     iconShape = CircleShape,
                     onClick = { navController.navigate(ImportProvidersRoute) },
+                ),
+                // Concord: read the Apple Music library into the app. Sits beside Import because it
+                // is the same question — the sign-in it needs lives on that screen.
+                SettingsItem(
+                    // the Grouped style drops descriptionText, so the state has to be the title
+                    title = {
+                        Text(
+                            when (val state = appleRead) {
+                                is AppleReadState.Running -> stringResource(R.string.import_sync_apple_read_running) + " " + state.stage
+                                is AppleReadState.Done -> stringResource(
+                                    R.string.import_sync_apple_read_done,
+                                    state.read,
+                                    state.added,
+                                )
+                                is AppleReadState.Failed -> stringResource(
+                                    R.string.import_sync_apple_read_failed,
+                                    state.message,
+                                )
+                                else -> stringResource(R.string.import_sync_apple_read_title)
+                            },
+                        )
+                    },
+                    icon = painterResource(R.drawable.sync),
+                    iconShape = CircleShape,
+                    onClick = { viewModel.readAppleLibrary() },
+                ),
+                // Concord: fill the Apple <-> YouTube reference, a bounded batch per tap
+                SettingsItem(
+                    title = {
+                        Text(
+                            when (val state = appleMatch) {
+                                is AppleMatchState.Running -> stringResource(
+                                    R.string.import_sync_apple_match_running,
+                                    state.done,
+                                    state.total,
+                                )
+                                is AppleMatchState.Done -> stringResource(
+                                    R.string.import_sync_apple_match_done,
+                                    state.matched,
+                                    state.tried,
+                                    state.remaining,
+                                )
+                                is AppleMatchState.Failed -> stringResource(
+                                    R.string.import_sync_apple_match_failed,
+                                    state.message,
+                                )
+                                else -> stringResource(R.string.import_sync_apple_match_title)
+                            },
+                        )
+                    },
+                    icon = painterResource(R.drawable.sync),
+                    iconShape = CircleShape,
+                    onClick = { viewModel.matchAppleOnYouTube() },
+                ),
+                // Concord: Apple's motion artwork is a fetch and a look; give the person the switch
+                SettingsItem(
+                    title = { Text(stringResource(R.string.import_sync_apple_animated_title)) },
+                    descriptionText = stringResource(R.string.import_sync_apple_animated_desc),
+                    icon = painterResource(R.drawable.slow_motion_video),
+                    iconShape = CircleShape,
+                    onClick = { viewModel.setAppleAnimatedCovers(!appleAnimated) },
+                    trailingContent = {
+                        AppSwitch(
+                            checked = appleAnimated,
+                            onCheckedChange = { viewModel.setAppleAnimatedCovers(it) },
+                        )
+                    },
                 ),
                 SettingsItem(
                     title = { Text(stringResource(R.string.import_sync_sync_title)) },

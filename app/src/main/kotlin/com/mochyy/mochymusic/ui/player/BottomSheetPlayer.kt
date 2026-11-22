@@ -49,7 +49,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.music.innertube.YouTube
+import com.music.innertube.models.WatchEndpoint
+import com.mochyy.mochymusic.applesync.AppleVideoReference
+import com.mochyy.mochymusic.models.toMediaMetadata
+import com.mochyy.mochymusic.playback.queues.YouTubeQueue
+import com.mochyy.mochymusic.ui.component.TopToaster
 import com.mochyy.mochymusic.ui.player.studio.playHoldRamp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -317,6 +324,10 @@ private fun PlayerSheet(
 
     var showExpandMenu by remember { mutableStateOf(false) }
     var seeVideo by remember { mutableStateOf(false) }
+    // Concord: an Apple song has no video of its own, so "see video" plays the YouTube copy the
+    // matching pass recorded. That needs a scope and a context that outlive the menu closing.
+    val appleVideoScope = androidx.compose.runtime.rememberCoroutineScope()
+    val appleVideoContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     // a youtube video is playing on the cover, so the chevron offers the full video mode
     var videoShowing by remember { mutableStateOf(false) }
     var showSleepTimer by remember { mutableStateOf(false) }
@@ -923,7 +934,54 @@ private fun PlayerSheet(
                     showActionMenu = true
                 }
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SLEEP_TIMER -> showSleepTimer = true
-                com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SEE_VIDEO -> seeVideo = !seeVideo
+                com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SEE_VIDEO -> {
+                    val mediaId = trackInfo.mediaId
+                    if (AppleVideoReference.isAppleSong(mediaId)) {
+                        appleVideoScope.launch {
+                            val videoId = AppleVideoReference.youtubeIdFor(appleVideoContext, mediaId)
+                            // nothing matched: the row keeps its still, which is honest — there is no
+                            // video to show rather than a video mode drawing an empty frame
+                            if (videoId == null) {
+                                // Timber never reaches logcat here, so every outcome is said out loud
+                                TopToaster.show(appleVideoContext.getString(R.string.apple_video_none))
+                            } else {
+                                YouTube.queue(listOf(videoId)).onSuccess { found ->
+                                    val item = found.firstOrNull()
+                                    if (item == null) {
+                                        TopToaster.show(appleVideoContext.getString(R.string.apple_video_failed))
+                                        return@onSuccess
+                                    }
+                                    playerConnection.playQueue(
+                                        YouTubeQueue(
+                                            WatchEndpoint(videoId = item.id),
+                                            item.toMediaMetadata(),
+                                        ),
+                                    )
+                                    // Mochy's provider order asks every module first, and Apple answers
+                                    // any song it can match — even a music video, with AAC. Once the
+                                    // video is the current item, pin it to YouTube: that is also what
+                                    // lets the player draw it as video instead of a still.
+                                    for (waited in 0 until 12) {
+                                        if (playerConnection.mediaMetadata.value?.id == item.id) {
+                                            playerConnection.service.providerSwitch.force(
+                                                com.mochyy.mochymusic.modules.SourceModules.YouTubeId,
+                                            )
+                                            break
+                                        }
+                                        kotlinx.coroutines.delay(200)
+                                    }
+                                    // and Mochy's own video style, the same one "Full video" opens
+                                    enterVideoMode()
+                                    TopToaster.show(appleVideoContext.getString(R.string.apple_video_playing))
+                                }.onFailure {
+                                    TopToaster.show(appleVideoContext.getString(R.string.apple_video_unreachable))
+                                }
+                            }
+                        }
+                    } else {
+                        seeVideo = !seeVideo
+                    }
+                }
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.REPEAT -> playerConnection.player.toggleRepeatMode()
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SHUFFLE ->
                     playerConnection.player.shuffleModeEnabled = !playerConnection.player.shuffleModeEnabled

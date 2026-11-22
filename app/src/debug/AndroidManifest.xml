@@ -22,4 +22,14 @@
         android:name="android.permission.REQUEST_INSTALL_PACKAGES"
         tools:node="replace" />
 
+    <!-- Debug-only inspector for enumerating the Apple Music web app's own surface. Exported so
+         `adb shell am start` can open it with a url. Debug builds only; nothing in a release. -->
+    <application>
+        <activity
+            android:name=".AppleInspectorActivity"
+            android:exported="true"
+            android:label="Apple Inspector"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+    </application>
+
 </manifest>

@@ -79,6 +79,10 @@ class App : Application(), SingletonImageLoader.Factory {
         com.mochyy.mochymusic.playback.StoragePlaces.cleanUpLeftovers(this)
         super.onCreate()
 
+        // debug only: lets `adb forward` + the DevTools protocol reach the content WebView, which is
+        // how the Apple page's own surface gets enumerated. Release builds keep this off.
+        if (BuildConfig.DEBUG) android.webkit.WebView.setWebContentsDebuggingEnabled(true)
+
         AppLanguage.initialize(this)
         CrashHandler.install(this)
 

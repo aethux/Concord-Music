@@ -39,6 +39,11 @@ data class SongEntity(
     val dateDownload: LocalDateTime? = null,
     @ColumnInfo(name = "isLocal", defaultValue = false.toString())
     val isLocal: Boolean = false,
+    // Concord: which catalogue the row came from — SongSource.YouTube for what YouTube serves,
+    // LOCAL for a file on this phone, APPLE for an imported Apple Music song (PLAN §9). Written on
+    // every insert; MIGRATION_45_46 classified the rows that already existed.
+    @ColumnInfo(defaultValue = "YOUTUBE")
+    val source: String = SongSource.YouTube,
     val libraryAddToken: String? = null,
     val libraryRemoveToken: String? = null,
     @ColumnInfo(defaultValue = "0")
@@ -94,4 +99,11 @@ data class SongEntity(
     fun toggleUploaded() = copy(
         isUploaded = !isUploaded
     )
+}
+
+/** Concord: the values [SongEntity.source] holds. */
+object SongSource {
+    const val Apple = "APPLE"
+    const val YouTube = "YOUTUBE"
+    const val Local = "LOCAL"
 }

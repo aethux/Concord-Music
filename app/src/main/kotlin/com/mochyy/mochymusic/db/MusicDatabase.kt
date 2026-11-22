@@ -16,6 +16,7 @@ import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
+import com.mochyy.mochymusic.applesync.db.AppleSongDao
 import com.mochyy.mochymusic.db.daos.SpeedDialDao
 import com.mochyy.mochymusic.db.entities.AlbumArtistMap
 import com.mochyy.mochymusic.db.entities.AlbumEntity
@@ -56,6 +57,12 @@ class MusicDatabase(
 ) : DatabaseDao by delegate.dao {
     val speedDialDao: SpeedDialDao
         get() = delegate.speedDialDao
+
+    // Concord: Mocha's Apple DAO. Its queries only read and write the mirror rows (`song.id LIKE
+    // 'AM_%'`, `album.id LIKE 'AM_ALB_%'`), which live in this database by design — Apple's own
+    // library-of-record tables live in concord_sync.db instead.
+    val appleSongDao: AppleSongDao
+        get() = delegate.appleSongDao
 
     /**
      * Pins [item], evicting the oldest pin first if that would push the count past
@@ -107,7 +114,7 @@ class MusicDatabase(
 }
 
 // bump this with every schema change and add its migration to AllMigrations, the import checks old exports against it too
-const val MusicDatabaseVersion = 45
+const val MusicDatabaseVersion = 46
 
 @Database(
     entities = [
@@ -148,6 +155,8 @@ const val MusicDatabaseVersion = 45
 abstract class InternalDatabase : RoomDatabase() {
     abstract val dao: DatabaseDao
     abstract val speedDialDao: SpeedDialDao
+    // Concord: bound here because every query in it targets this database's song/album tables
+    abstract val appleSongDao: com.mochyy.mochymusic.applesync.db.AppleSongDao
 
     companion object {
         const val DB_NAME = "mochy.db"
@@ -202,6 +211,7 @@ val AllMigrations: Array<Migration>
         MIGRATION_42_43,
         MIGRATION_43_44,
         MIGRATION_44_45,
+        MIGRATION_45_46,
     )
 
 val MIGRATION_1_2 =
@@ -901,5 +911,23 @@ val MIGRATION_44_45 =
             db.execSQL("ALTER TABLE `imported_playlist` ADD COLUMN `authorName` TEXT")
             db.execSQL("ALTER TABLE `imported_playlist` ADD COLUMN `authorAvatarUrl` TEXT")
             db.execSQL("ALTER TABLE `imported_playlist` ADD COLUMN `authorUrl` TEXT")
+        }
+    }
+
+/**
+ * Concord: `song.source` — which catalogue a row came from (SongSource.APPLE / YOUTUBE / LOCAL).
+ *
+ * Every row that exists before this migration came from YouTube or from a file on the phone, so the
+ * column's default classifies it. The two UPDATEs then correct the id shapes that say otherwise, so
+ * the column can never disagree with the ids the rest of the app already keys on: `LOCAL_…` is a file
+ * on this phone, `AM_…` is an Apple catalogue id. Apple rows cannot exist yet in a Mochy library, but
+ * the statement costs nothing and makes the migration correct for a database that already holds them.
+ */
+val MIGRATION_45_46 =
+    object : Migration(45, 46) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `song` ADD COLUMN `source` TEXT NOT NULL DEFAULT 'YOUTUBE'")
+            db.execSQL("UPDATE `song` SET `source` = 'LOCAL' WHERE `id` LIKE 'LOCAL\\_%' ESCAPE '\\'")
+            db.execSQL("UPDATE `song` SET `source` = 'APPLE' WHERE `id` LIKE 'AM\\_%' ESCAPE '\\'")
         }
     }

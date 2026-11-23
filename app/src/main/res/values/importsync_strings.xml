@@ -16,8 +16,6 @@
     <!-- Concord: the Apple library read on the import screen -->
     <string name="import_sync_apple_read_title">Read Apple Music library</string>
     <string name="import_sync_apple_read_desc">Songs, albums and favourites from your Apple Music account</string>
-    <string name="import_sync_apple_read_running">Reading your Apple Music library…</string>
-    <string name="import_sync_apple_read_done">%1$d songs read · %2$d new to this library</string>
     <string name="import_sync_apple_read_failed">Apple Music read failed: %1$s</string>
     <!-- Concord: what the player's "see video" action says when it uses an Apple song's YouTube copy -->
     <string name="apple_video_none">No YouTube video matched for this song</string>

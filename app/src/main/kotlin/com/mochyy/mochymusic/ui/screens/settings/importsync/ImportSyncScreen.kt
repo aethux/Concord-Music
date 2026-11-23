@@ -21,7 +21,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.viewmodels.AppleMatchState
-import com.mochyy.mochymusic.viewmodels.AppleReadState
 import com.mochyy.mochymusic.ui.component.DefaultDialog
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
 import com.mochyy.mochymusic.ui.component.AppSwitch
@@ -42,8 +41,9 @@ fun ImportSyncScreen(
 ) {
     val progress by viewModel.importProgress.collectAsState()
     val exportMessage by viewModel.exportMessage.collectAsState()
-    // Concord: the Apple library read's own state, and the animated-covers switch
-    val appleRead by viewModel.appleRead.collectAsState()
+    // Concord: the Apple refresh's shared progress (row, card and notification read it), and the
+    // animated-covers switch
+    val appleSync = com.mochyy.mochymusic.applesync.AppleSyncStatus.progress
     val appleAnimated by viewModel.appleAnimatedCovers.collectAsState()
     val appleMatch by viewModel.appleMatch.collectAsState()
     val signedIn = rememberYouTubeSignedIn()
@@ -128,24 +128,26 @@ fun ImportSyncScreen(
                     // the Grouped style drops descriptionText, so the state has to be the title
                     title = {
                         Text(
-                            when (val state = appleRead) {
-                                is AppleReadState.Running -> stringResource(R.string.import_sync_apple_read_running) + " " + state.stage
-                                is AppleReadState.Done -> stringResource(
-                                    R.string.import_sync_apple_read_done,
-                                    state.read,
-                                    state.added,
-                                )
-                                is AppleReadState.Failed -> stringResource(
-                                    R.string.import_sync_apple_read_failed,
-                                    state.message,
-                                )
+                            when {
+                                // the flow's own phase sentence, so the row says which part is running
+                                appleSync.running -> appleSync.phase.ifBlank {
+                                    stringResource(R.string.import_sync_apple_read_title)
+                                }
+                                appleSync.finishedMessage != null -> if (appleSync.failed) {
+                                    stringResource(
+                                        R.string.import_sync_apple_read_failed,
+                                        appleSync.finishedMessage.orEmpty(),
+                                    )
+                                } else {
+                                    appleSync.finishedMessage.orEmpty()
+                                }
                                 else -> stringResource(R.string.import_sync_apple_read_title)
                             },
                         )
                     },
                     icon = painterResource(R.drawable.sync),
                     iconShape = CircleShape,
-                    onClick = { viewModel.readAppleLibrary() },
+                    onClick = { viewModel.syncAppleMusic() },
                 ),
                 // Concord: fill the Apple <-> YouTube reference, a bounded batch per tap
                 SettingsItem(

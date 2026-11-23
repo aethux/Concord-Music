@@ -1096,6 +1096,11 @@
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
         <service
+            android:name=".applesync.AppleSyncService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <service
             android:name=".playback.MusicService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback"

@@ -51,31 +51,18 @@ sealed interface AppleMatchState {
     data class Failed(val message: String) : AppleMatchState
 }
 
-/** Concord: the state of one Apple library read. */
-sealed interface AppleReadState {
-    data object Idle : AppleReadState
-    data class Running(val stage: String = "") : AppleReadState
-    data class Done(val read: Int, val added: Int) : AppleReadState
-    data class Failed(val message: String) : AppleReadState
-}
-
 @HiltViewModel
 class ImportSyncViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val database: MusicDatabase,
     private val importService: MusicImportService,
     private val youTubeSync: YouTubeSyncManager,
-    // Concord: the Apple engine's sidecar DAO and token pair, both provided by AppleSyncModule
+    // Concord: the Apple engine's sidecar DAO, provided by AppleSyncModule
     private val appleDao: com.mochyy.mochymusic.applesync.db.AppleSyncDao,
-    private val appleTokens: com.mochyy.mochymusic.applesync.AppleTokens,
 ) : ViewModel() {
 
     val importProgress: StateFlow<ImportProgress> = importService.progress
     val youTubeState: StateFlow<YtSyncState> = youTubeSync.state
-
-    // Concord: one read of the Apple library, started from Settings → Import and sync
-    private val _appleRead = MutableStateFlow<AppleReadState>(AppleReadState.Idle)
-    val appleRead: StateFlow<AppleReadState> = _appleRead.asStateFlow()
 
     // Concord: whether Apple's motion artwork is used at all (default on)
     val appleAnimatedCovers: StateFlow<Boolean> = context.dataStore.data
@@ -106,24 +93,12 @@ class ImportSyncViewModel @Inject constructor(
         }
     }
 
-    fun readAppleLibrary() {
-        if (_appleRead.value is AppleReadState.Running) return
-        _appleRead.value = AppleReadState.Running("start")
-        // Concord: on IO, not Main. AppleImport's inserts go through Mochy's blocking DAO methods, and
-        // Room refuses those on the main thread ("Cannot access database on the main thread").
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            _appleRead.value = runCatching {
-                val refresh = com.mochyy.mochymusic.applesync.AppleLibraryRefresh(
-                    database, appleDao, appleTokens, appleAnimatedCovers.value,
-                )
-                val result = refresh.run { stage -> _appleRead.value = AppleReadState.Running(stage) }
-                AppleReadState.Done(result.read, result.added)
-            }.getOrElse {
-                // the row only shows the message; the stack goes here so a failure is diagnosable
-                timber.log.Timber.tag("AppleRead").e(it, "Apple library read failed")
-                AppleReadState.Failed(it.message ?: "Couldn't read Apple Music")
-            }
-        }
+    // Concord: the whole refresh (songs, playlists, removals, reconcile) lives in a foreground
+    // service, so leaving this screen no longer cancels it half way. AppleSyncStatus is the one
+    // progress object behind the row, the card and the notification.
+    fun syncAppleMusic() {
+        if (com.mochyy.mochymusic.applesync.AppleSyncStatus.progress.running) return
+        com.mochyy.mochymusic.applesync.AppleSyncService.start(context)
     }
 
     private val _pending = MutableStateFlow<PendingImport>(PendingImport.Idle)

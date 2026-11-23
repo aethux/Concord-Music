@@ -267,6 +267,68 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         return row["attributes"].obj()?.long("value")
     }
 
+    /**
+     * One album's page, read the way Cider's `/am/album/:id` reads it.
+     *
+     * A library album (`l.…`, which is what the import stored for most albums) is resolved to its
+     * catalogue twin first — `/v1/me/library/albums/{id}?include=catalog`, then
+     * `relationships.catalog.data[0].id` — because a catalogue read of an `l.` id answers 404. The
+     * tracklist then comes from the library album's own `/tracks`, so uploaded and library-only
+     * tracks are on the page; a catalogue album reads its own `/tracks` instead.
+     */
+    suspend fun catalogAlbum(albumId: String, maxPages: Int = 10): AppleAlbumPage? {
+        val storefront = storefront()
+        if (!albumId.startsWith("l.")) {
+            val page = page("/v1/catalog/$storefront/albums/$albumId") ?: return null
+            val album = AppleAlbumReader.album(page) ?: return null
+            return album.copy(
+                songs = all(
+                    first = "/v1/catalog/$storefront/albums/$albumId/tracks?limit=100",
+                    maxPages = maxPages,
+                    parse = AppleLibrary::catalogTracks,
+                ),
+            )
+        }
+        // A library album's page is its catalogue twin — the usual case. Its tracklist is the
+        // catalogue one too: the library's own `/tracks` holds only the songs that are in the
+        // library (one row for a sixteen-track album), not the album.
+        val twin = libraryAlbumTwin(albumId)
+        if (twin != null) {
+            val page = page("/v1/catalog/$storefront/albums/$twin")
+            val album = page?.let(AppleAlbumReader::album)
+            if (album != null) {
+                return album.copy(
+                    songs = all(
+                        first = "/v1/catalog/$storefront/albums/$twin/tracks?limit=100",
+                        maxPages = maxPages,
+                        parse = AppleLibrary::catalogTracks,
+                    ),
+                )
+            }
+        }
+        // no catalogue twin: an upload or an unmatched album. Its own library resource and rows are
+        // all Apple has, and they are playable through the library ids.
+        val page = page("/v1/me/library/albums/$albumId") ?: return null
+        val album = AppleAlbumReader.album(page) ?: return null
+        return album.copy(
+            songs = all(
+                first = "/v1/me/library/albums/$albumId/tracks?limit=100",
+                maxPages = maxPages,
+                parse = AppleLibrary::songs,
+            ),
+        )
+    }
+
+
+    /** The catalogue id behind a library album id, or null when Apple has no catalogue twin for it. */
+    private suspend fun libraryAlbumTwin(libraryId: String): String? = runCatching {
+        page("/v1/me/library/albums/$libraryId?include=catalog")
+            ?.get("data").array()?.firstOrNull()?.obj()
+            ?.get("relationships").obj()?.get("catalog").obj()
+            ?.get("data").array()?.firstOrNull()?.obj()
+            ?.idString("id")
+    }.getOrNull()
+
     /** One linked playlist's entries, in order, with each entry's library id. */
     suspend fun playlistTracks(playlistId: String, maxPages: Int = 400): List<RemoteSong> =
         all("/v1/me/library/playlists/$playlistId/tracks?limit=100", maxPages, AppleLibrary::songs)

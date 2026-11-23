@@ -7,13 +7,24 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.music.innertube.YouTube
 import com.music.innertube.models.AlbumItem
+import com.mochyy.mochymusic.applesync.AppleAlbums
+import com.mochyy.mochymusic.applesync.AppleClient
+import com.mochyy.mochymusic.applesync.AppleCovers
+import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.db.MusicDatabase
+import com.mochyy.mochymusic.db.entities.AlbumEntity
+import com.mochyy.mochymusic.db.entities.AlbumWithSongs
+import com.mochyy.mochymusic.db.entities.ArtistEntity
+import com.mochyy.mochymusic.db.entities.Song
+import com.mochyy.mochymusic.db.entities.SongEntity
+import com.mochyy.mochymusic.db.entities.SongSource
 import com.mochyy.mochymusic.utils.reportException
 import com.mochyy.mochymusic.utils.ArtistImageResolver
 import com.mochyy.mochymusic.utils.ArtistPageCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -27,14 +38,32 @@ class AlbumViewModel
 @Inject
 constructor(
     private val database: MusicDatabase,
+    private val tokens: AppleTokens,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val albumId = savedStateHandle.get<String>("albumId")!!
     val playlistId = MutableStateFlow("")
-    val albumWithSongs =
-        database
-            .albumWithSongs(albumId)
-            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * The Apple id when this page is Apple's: an imported Apple album is `AM_ALB_<apple id>`, a
+     * recommendation card carries the bare id. That inner id is often a **library** album id
+     * (`l.…`), which the read resolves to its catalogue twin. Null means the page stays Mochy's.
+     */
+    private val appleRemoteId = AppleAlbums.remoteIdOf(albumId)
+
+    /** true when this album is Apple's, so the page reads the catalogue and never asks YouTube. */
+    val isAppleAlbum: Boolean get() = appleRemoteId != null
+
+    private val appleAlbum = MutableStateFlow<AlbumWithSongs?>(null)
+
+    val albumWithSongs: StateFlow<AlbumWithSongs?> =
+        if (appleRemoteId == null) {
+            database
+                .albumWithSongs(albumId)
+                .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        } else {
+            appleAlbum
+        }
     var otherVersions = MutableStateFlow<List<AlbumItem>>(emptyList())
     var releasesForYou = MutableStateFlow<List<AlbumItem>>(emptyList())
     var description = MutableStateFlow<String?>(null)
@@ -47,12 +76,74 @@ constructor(
     val loadFailed = MutableStateFlow(false)
 
     init {
-        load()
+        if (appleRemoteId == null) load() else loadApple()
     }
 
     fun retry() {
         loadFailed.value = false
-        load()
+        if (appleRemoteId == null) load() else loadApple()
+    }
+
+    /**
+     * Apple's album page, read the way Cider reads `/am/album/:id`: the catalogue album plus its own
+     * tracklist, drawn from memory, nothing written to the library.
+     *
+     * No YouTube call is made on this path. `YouTube.album("AM_ALB_…")` cannot answer, and its
+     * NOT_FOUND branch deletes the album row — which is exactly what hiding YouTube has to stop.
+     */
+    private fun loadApple() {
+        val remoteId = appleRemoteId ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val pair = tokens.read()
+            val page = pair?.let { runCatching { AppleClient(it).catalogAlbum(remoteId) }.getOrNull() }
+            if (page == null) {
+                loadFailed.value = true
+                return@launch
+            }
+            val localAlbumId = albumId
+            val artistName = page.artistName.ifBlank { "Unknown artist" }
+            // the artist row the page draws its creator line from; untappable unless the artist is
+            // already in the library, because there is no Apple artist page yet
+            val artist = ArtistEntity(
+                id = database.artistByName(artistName)?.id ?: ArtistEntity.generateArtistId(),
+                name = artistName,
+            )
+            val album = AlbumEntity(
+                id = localAlbumId,
+                title = page.title,
+                year = page.year,
+                thumbnailUrl = AppleCovers.sized(page.artworkUrl),
+                songCount = page.songs.size,
+                duration = page.songs.sumOf { ((it.durationMs ?: 0L) / 1000L).toInt() },
+                explicit = page.explicit,
+            )
+            // Apple's own track order; a track with no number keeps the order Apple sent it in
+            val songs = page.songs
+                .sortedBy { it.trackNumber ?: Int.MAX_VALUE }
+                .mapNotNull { remote ->
+                    // a library song with no catalogue id is an upload: its library id is the only
+                    // stable key it has, and playback resolves it by title and artist
+                    val songKey = remote.catalogId ?: remote.libraryId.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+                    Song(
+                        song = SongEntity(
+                            id = "AM_$songKey",
+                            title = remote.title,
+                            duration = ((remote.durationMs ?: 0L) / 1000L).toInt(),
+                            thumbnailUrl = AppleCovers.sized(remote.artworkUrl ?: page.artworkUrl),
+                            albumId = localAlbumId,
+                            albumName = page.title,
+                            year = page.year,
+                            source = SongSource.Apple,
+                        ),
+                        artists = listOf(ArtistEntity(id = artist.id, name = remote.artist.ifBlank { artistName })),
+                        album = album,
+                    )
+                }
+            description.value = page.description
+            loadFailed.value = false
+            appleAlbum.value = AlbumWithSongs(album = album, artists = listOf(artist), songs = songs)
+        }
     }
 
     private fun load() {

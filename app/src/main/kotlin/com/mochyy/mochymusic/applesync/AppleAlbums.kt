@@ -32,6 +32,24 @@ object AppleAlbums {
 
     fun id(remoteAlbumId: String): String = "$PREFIX$remoteAlbumId"
 
+    /**
+     * The Apple id behind an album id the app may be showing: an imported Apple album is
+     * `AM_ALB_<apple id>`, a recommendation card carries the bare id, and anything else (`MPREb_…`,
+     * a local album) is Mochy's own and not Apple's to read.
+     *
+     * The id inside is not always a catalogue id: Apple's library albums are `l.…` (that is what the
+     * import stored, because a song's `relationships.albums` row carries its library id), and those
+     * have to be resolved to their catalogue twin before a catalogue read. Cider does exactly this
+     * in its album page, and `/v1/catalog/{sf}/albums/l.…` answers 404.
+     */
+    fun remoteIdOf(albumId: String): String? = when {
+        albumId.startsWith(PREFIX) -> albumId.removePrefix(PREFIX).takeIf { it.isNotBlank() }
+        albumId.isNotEmpty() && albumId.all { it.isDigit() } -> albumId
+        albumId.startsWith("l.") -> albumId
+        else -> null
+    }
+
+
     data class Result(val albums: Int, val songs: Int)
 
     /** Albums per transaction: big enough that the fixed cost disappears, small enough to stay bounded. */

@@ -440,8 +440,14 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
      */
     suspend fun artistPage(id: String): AppleArtist? {
         val storefront = storefront()
-        val base = page("/v1/catalog/$storefront/artists/$id") ?: return null
+        val base = page("/v1/catalog/$storefront/artists/$id?extend=artistBio") ?: return null
         val artist = AppleArtistReader.artist(base) ?: return null
+        val latestRelease = artistView(id, "latest-release", 1)
+            ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
+            ?.firstOrNull()
+        val videos = artistView(id, "music-videos", 6)
+            ?.let { runCatching { AppleArtistReader.videos(it) }.getOrNull() }
+            .orEmpty()
         val topSongs = artistView(id, "top-songs", 10)
             ?.let { runCatching { AppleLibrary.songs(it) }.getOrNull() }
             .orEmpty()
@@ -458,6 +464,8 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
             ?.let { runCatching { AppleArtistReader.artists(it) }.getOrNull() }
             .orEmpty()
         return artist.copy(
+            latestRelease = latestRelease,
+            videos = videos,
             topSongs = topSongs,
             albums = albums,
             singles = singles,

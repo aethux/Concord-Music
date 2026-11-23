@@ -319,6 +319,23 @@ interface DatabaseDao {
         previewSize: Int = 3,
     ): Flow<List<Song>>
 
+    /** a library artist's songs, found by name: Apple's ids are not in our artist table */
+    @Transaction
+    @Query(
+        "SELECT song.* FROM song_artist_map JOIN song ON song_artist_map.songId = song.id JOIN artist ON artist.id = song_artist_map.artistId WHERE artist.name = :name AND song.inLibrary IS NOT NULL ORDER BY song.title",
+    )
+    fun songsByArtistName(name: String): Flow<List<Song>>
+
+    /** the library albums that hold this artist's songs, for an artist page's saved-albums row */
+    @Query(
+        "SELECT DISTINCT album.* FROM song_album_map JOIN album ON album.id = song_album_map.albumId JOIN song_artist_map ON song_artist_map.songId = song_album_map.songId JOIN artist ON artist.id = song_artist_map.artistId WHERE artist.name = :name AND album.inLibrary IS NOT NULL ORDER BY album.year DESC",
+    )
+    fun albumsByArtistName(name: String): Flow<List<AlbumEntity>>
+
+    /** one artist row by name, observed, for a page that only has the name Apple gave it */
+    @Query("SELECT * FROM artist WHERE name = :name LIMIT 1")
+    fun artistRowByName(name: String): Flow<ArtistEntity?>
+
     @Transaction
     @Query(
         """

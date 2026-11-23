@@ -23,6 +23,14 @@ data class AppleAlbumRef(
     val trackCount: Int?,
 )
 
+/** A music video on an artist's page. */
+data class AppleMusicVideo(
+    val id: String,
+    val name: String,
+    val artworkUrl: String?,
+    val url: String?,
+)
+
 /** Another artist, from the similar-artists view. */
 data class AppleArtistRef(
     val id: String,
@@ -36,10 +44,14 @@ data class AppleArtist(
     val artworkUrl: String?,
     val genres: List<String>,
     val url: String?,
+    /** `attributes.artistBio`, asked for with extend=artistBio; html, as Apple writes it. */
+    val bio: String? = null,
+    val latestRelease: AppleAlbumRef? = null,
     val topSongs: List<RemoteSong> = emptyList(),
     val albums: List<AppleAlbumRef> = emptyList(),
     val singles: List<AppleAlbumRef> = emptyList(),
     val compilations: List<AppleAlbumRef> = emptyList(),
+    val videos: List<AppleMusicVideo> = emptyList(),
     val similar: List<AppleArtistRef> = emptyList(),
 )
 
@@ -54,8 +66,21 @@ object AppleArtistReader {
             artworkUrl = attributes?.get("artwork").obj()?.string("url"),
             genres = attributes?.strings("genreNames").orEmpty(),
             url = attributes?.string("url"),
+            bio = attributes?.string("artistBio"),
         )
     }
+
+    fun videos(page: JsonObject): List<AppleMusicVideo> =
+        page["data"].array().mapNotNull { row ->
+            val item = row.obj() ?: return@mapNotNull null
+            val attributes = item["attributes"].obj()
+            AppleMusicVideo(
+                id = item.idString("id") ?: return@mapNotNull null,
+                name = attributes?.string("name") ?: return@mapNotNull null,
+                artworkUrl = attributes?.get("artwork").obj()?.string("url"),
+                url = attributes?.string("url"),
+            )
+        }
 
     fun albums(page: JsonObject): List<AppleAlbumRef> =
         page["data"].array().mapNotNull { row ->

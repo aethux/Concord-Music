@@ -12,22 +12,28 @@ import com.mochyy.mochymusic.db.entities.ArtistEntity
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.db.entities.SongEntity
 import com.mochyy.mochymusic.db.entities.SongSource
+import com.mochyy.mochymusic.db.MusicDatabase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class AppleArtistViewModel @Inject constructor(
     private val tokens: AppleTokens,
+    private val database: MusicDatabase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     /** the catalogue artist id from the route */
     val artistId: String = savedStateHandle.get<String>("artistId")!!
+
+    /** which list the songs page was opened for: the artist's top songs, or the ones in the library */
+    val source: String? = savedStateHandle.get<String>("source")
 
     data class Page(
         val artist: AppleArtist,
@@ -41,6 +47,20 @@ class AppleArtistViewModel @Inject constructor(
     private val _failed = MutableStateFlow(false)
     val failed: StateFlow<Boolean> = _failed.asStateFlow()
 
+    /** the artist's own songs that are in the library, read from the database by artist name */
+    private val _librarySongs = MutableStateFlow<List<Song>>(emptyList())
+    val librarySongs: StateFlow<List<Song>> = _librarySongs.asStateFlow()
+
+    /** the library albums holding this artist's songs */
+    private val _libraryAlbums = MutableStateFlow<List<com.mochyy.mochymusic.db.entities.AlbumEntity>>(emptyList())
+    val libraryAlbums: StateFlow<List<com.mochyy.mochymusic.db.entities.AlbumEntity>> = _libraryAlbums.asStateFlow()
+
+    /** Mochy's heart on an artist: a bookmark on the artist row, kept on this phone */
+    private val _liked = MutableStateFlow(false)
+    val liked: StateFlow<Boolean> = _liked.asStateFlow()
+
+    private var observer: Job? = null
+
     init {
         load()
     }
@@ -48,6 +68,38 @@ class AppleArtistViewModel @Inject constructor(
     fun retry() {
         _failed.value = false
         load()
+    }
+
+    private fun observeLibrary(name: String) {
+        observer?.cancel()
+        observer = viewModelScope.launch {
+            launch { database.songsByArtistName(name).collect { _librarySongs.value = it } }
+            launch { database.artistRowByName(name).collect { row -> _liked.value = row?.bookmarkedAt != null } }
+            launch { database.albumsByArtistName(name).collect { _libraryAlbums.value = it } }
+        }
+    }
+
+    fun toggleLike() {
+        val artist = page.value?.artist ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = database.artistByName(artist.name)
+            if (existing == null) {
+                database.insert(
+                    com.mochyy.mochymusic.db.entities.ArtistEntity(
+                        id = artist.name,
+                        name = artist.name,
+                        thumbnailUrl = artist.artworkUrl,
+                        bookmarkedAt = java.time.LocalDateTime.now(),
+                    )
+                )
+            } else {
+                database.update(
+                    existing.copy(
+                        bookmarkedAt = if (existing.bookmarkedAt == null) java.time.LocalDateTime.now() else null,
+                    )
+                )
+            }
+        }
     }
 
     private fun load() {
@@ -75,6 +127,7 @@ class AppleArtistViewModel @Inject constructor(
             }
             _failed.value = false
             _page.value = Page(artist = artist, songs = songs)
+            observeLibrary(artist.name)
         }
     }
 }

@@ -434,6 +434,28 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         )
     }
 
+    /** A station's own resource: its name and its art. Its songs are asked for separately. */
+    suspend fun station(id: String): AppleStation? {
+        val page = page("/v1/catalog/${storefront()}/stations/$id") ?: return null
+        return AppleStationReader.station(page)
+    }
+
+    /**
+     * The next songs a station would play, `limit` at a time. Apple answers this one with POST, and
+     * an empty body is what the web player sends.
+     */
+    suspend fun stationNextTracks(id: String, limit: Int = 10): List<RemoteSong> {
+        val response = AccountHttp.post(
+            url = Host + "/v1/me/stations/next-tracks/$id?limit=$limit",
+            headers = tokens.headers,
+            body = "{}",
+            service = "Apple Music",
+        )
+        if (response.status !in 200..299) return emptyList()
+        val page = AccountHttp.parse(response.body) ?: return emptyList()
+        return AppleLibrary.songs(page)
+    }
+
     /** One linked playlist's entries, in order, with each entry's library id. */
     suspend fun playlistTracks(playlistId: String, maxPages: Int = 400): List<RemoteSong> =
         all("/v1/me/library/playlists/$playlistId/tracks?limit=100", maxPages, AppleLibrary::songs)

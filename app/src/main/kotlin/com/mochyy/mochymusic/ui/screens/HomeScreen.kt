@@ -827,8 +827,12 @@ fun HomeScreen(
                     }
                 }
             }
-            item.id.startsWith("ra.") || item.id.startsWith("AM_STN") ->
-                navController.navigate("coming_soon/${Uri.encode(item.title)}")
+            // a station has no page to open: tapping it starts it, the way Apple's does
+            item.id.startsWith("ra.") || item.id.startsWith("AM_STN") -> scope.launch {
+                appleHomeViewModel.stationQueue(item.id)?.let { queue ->
+                    playerConnection.playQueue(queue)
+                }
+            }
             else -> navController.navigate("album/${item.id}")
         }
     }

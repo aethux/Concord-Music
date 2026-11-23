@@ -6,12 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleHomeGroup
 import com.mochyy.mochymusic.applesync.AppleTokens
+import com.mochyy.mochymusic.playback.queues.AppleStationQueue
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -34,6 +36,16 @@ class AppleHomeViewModel @Inject constructor(
     fun retry() {
         _failed.value = false
         load()
+    }
+
+    /**
+     * A station is played, not opened: Apple's own app starts one on tap. The queue reads its first
+     * page and keeps asking for more, so the name and art are read here too.
+     */
+    suspend fun stationQueue(id: String): AppleStationQueue? = withContext(Dispatchers.IO) {
+        val pair = tokens.read() ?: return@withContext null
+        val client = AppleClient(pair)
+        AppleStationQueue(client, id, runCatching { client.station(id) }.getOrNull())
     }
 
     private fun load() {

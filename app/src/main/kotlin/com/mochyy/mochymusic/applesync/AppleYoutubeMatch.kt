@@ -4,9 +4,9 @@
 // importer does (title first, then artist, album and length), remembers what it picked, and answers
 // "nothing good enough" rather than guessing. Four searches at a time, same as ImportSteps.matchAll.
 //
-// It runs as a resumable pass rather than inside the import: 1,434 songs is 6-12 minutes of searching,
-// and the read itself must stay fast. [limit] bounds one run; the next run picks up whatever is left,
-// because the sidecar remembers what it already matched.
+// One call is one bounded pass: [limit] songs at most, and the next pass picks up whatever is left,
+// because the sidecar remembers what it already matched. AppleMatchService runs the passes back to
+// back until one finds nothing new; a single screen can still run one pass on its own.
 package com.mochyy.mochymusic.applesync
 
 import com.mochyy.mochymusic.applesync.db.AppleSyncDao
@@ -25,24 +25,45 @@ class AppleYoutubeMatch(
 ) {
 
     data class Result(
-        /** songs this run looked at */
+        /** songs this pass looked at */
         val tried: Int,
         /** of those, how many got a reference */
         val matched: Int,
-        /** still without one afterwards */
+        /** searches that threw: a dead connection looks like this, not like "nothing found" */
+        val failed: Int,
+        /** still without a reference afterwards */
         val remaining: Int,
     )
 
-    /** [onProgress] reports (done, total in this run) after each song finishes. */
-    suspend fun run(limit: Int = 200, onProgress: (Int, Int) -> Unit = { _, _ -> }): Result {
-        val tracks = dao.tracks().associateBy { it.songId }
+    /**
+     * Catalogue ids that already have a twin. Keyed by catalogue id rather than songId: a track row's
+     * songId is `AM_<catalogId>` for an imported song but a YouTube id for a rematched one, while the
+     * catalogue id is the field both kinds share. Looking a library row up by songId never matched,
+     * so every song counted as unmatchable and every pass re-asked the same first 200.
+     */
+    private suspend fun twinCatalogueIds(): Set<String> =
+        dao.tracks().filter { it.youtubeId != null }.mapNotNull { it.catalogId }.toSet()
+
+    /** songs with no twin right now, however many passes it takes to give them one */
+    suspend fun remaining(): Int {
+        val referenced = twinCatalogueIds()
+        return dao.librarySongsOnce().count { it.catalogId !in referenced }
+    }
+
+    /**
+     * [onProgress] reports (done in this pass, matched in this pass) after each song finishes, so a
+     * caller can show the bar moving without waiting for the pass to end.
+     */
+    suspend fun run(limit: Int = 200, onProgress: (done: Int, matched: Int) -> Unit = { _, _ -> }): Result {
+        val referenced = twinCatalogueIds()
         val pending = dao.librarySongsOnce()
-            .filter { tracks[it.catalogId]?.youtubeId == null }
+            .filter { it.catalogId !in referenced }
             .take(limit)
-        if (pending.isEmpty()) return Result(0, 0, 0)
+        if (pending.isEmpty()) return Result(0, 0, 0, 0)
 
         var done = 0
         var matched = 0
+        var failed = 0
         val lock = Any()
         val semaphore = Semaphore(Parallelism)
 
@@ -50,6 +71,7 @@ class AppleYoutubeMatch(
             pending.map { song ->
                 async {
                     semaphore.withPermit {
+                        var threw = false
                         val found = try {
                             matcher.match(
                                 ImportedTrack(
@@ -63,7 +85,9 @@ class AppleYoutubeMatch(
                             throw e
                         } catch (e: Exception) {
                             // Mochy's importer counts this as unmatched too, and one bad search must not
-                            // stop the pass
+                            // stop the pass — but it is counted separately, so "matched nothing" and
+                            // "could not ask" stay different answers
+                            threw = true
                             null
                         }
                         if (found != null) {
@@ -76,22 +100,21 @@ class AppleYoutubeMatch(
                                 at = System.currentTimeMillis(),
                             )
                         }
-                        synchronized(lock) {
+                        val progress = synchronized(lock) {
                             done += 1
                             if (found != null) matched += 1
+                            if (threw) failed += 1
+                            done to matched
                         }
-                        onProgress(done, pending.size)
-                        found != null
+                        // outside the lock: the caller may post a notification here
+                        onProgress(progress.first, progress.second)
                     }
                 }
             }.awaitAll()
         }
         matcher.flush()
 
-        // one read, not one query per song: whatever the sidecar now holds a reference for
-        val referenced = dao.tracks().filter { it.youtubeId != null }.map { it.catalogId }.toSet()
-        val left = dao.librarySongsOnce().count { it.catalogId !in referenced }
-        return Result(tried = pending.size, matched = matched, remaining = left)
+        return Result(tried = pending.size, matched = matched, failed = failed, remaining = remaining())
     }
 
     private companion object {

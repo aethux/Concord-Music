@@ -288,13 +288,13 @@ fun AlbumScreen(
             PlaylistHeader(
                 onSearchClick = { isSearching = true },
                 title = album.album.title,
-                // an Apple album's creator is not tappable: there is no Apple artist page yet, and
-                // Mochy's artist screen asks YouTube, which cannot answer an Apple id
+                // an Apple album's creator opens Apple's artist page; Mochy's artist screen asks
+                // YouTube, which cannot answer an Apple id
                 creators = album.artists.map {
                     CreatorUi(
                         name = it.name,
                         avatarUrl = it.thumbnailUrl,
-                        artistId = if (viewModel.isAppleAlbum) null else it.id,
+                        artistId = if (viewModel.isAppleAlbum) viewModel.appleArtistId else it.id,
                     )
                 },
                 // the description takes the stats' place, and the stats move under it
@@ -321,7 +321,15 @@ fun AlbumScreen(
                 onShuffleClick = { play(shuffled = true) },
                 isSaved = album.album.bookmarkedAt != null,
                 onSaveClick = { database.query { update(album.album.toggleLike()) } },
-                onCreatorClick = { creator -> creator.artistId?.let { navController.navigate("artist/$it") } },
+                onCreatorClick = { creator ->
+                    creator.artistId?.let { id ->
+                        if (viewModel.isAppleAlbum) {
+                            navController.navigate("apple_artist/$id")
+                        } else {
+                            navController.navigate("artist/$id")
+                        }
+                    }
+                },
             )
         }
 

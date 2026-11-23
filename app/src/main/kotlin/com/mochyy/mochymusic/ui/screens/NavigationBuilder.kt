@@ -272,6 +272,13 @@ fun NavGraphBuilder.navigationBuilder(
     }
 
     coverSourceComposable(
+        route = "apple_artist/{artistId}",
+        arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
+    ) {
+        com.mochyy.mochymusic.ui.screens.artist.AppleArtistScreen(navController = navController)
+    }
+
+    coverSourceComposable(
         route = "apple_playlist/{playlistId}",
         arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
     ) {

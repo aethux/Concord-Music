@@ -54,6 +54,12 @@ constructor(
     /** true when this album is Apple's, so the page reads the catalogue and never asks YouTube. */
     val isAppleAlbum: Boolean get() = appleRemoteId != null
 
+    /** Apple's artist id behind an Apple album, once its page has been read. */
+    val appleArtistId: String?
+        get() = appleArtistIdFlow.value
+
+    private val appleArtistIdFlow = MutableStateFlow<String?>(null)
+
     private val appleAlbum = MutableStateFlow<AlbumWithSongs?>(null)
 
     val albumWithSongs: StateFlow<AlbumWithSongs?> =
@@ -142,6 +148,7 @@ constructor(
                 }
             description.value = page.description
             loadFailed.value = false
+            appleArtistIdFlow.value = page.artistId
             appleAlbum.value = AlbumWithSongs(album = album, artists = listOf(artist), songs = songs)
         }
     }

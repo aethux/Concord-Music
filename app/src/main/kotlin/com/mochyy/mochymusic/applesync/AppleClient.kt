@@ -279,7 +279,7 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
     suspend fun catalogAlbum(albumId: String, maxPages: Int = 10): AppleAlbumPage? {
         val storefront = storefront()
         if (!albumId.startsWith("l.")) {
-            val page = page("/v1/catalog/$storefront/albums/$albumId") ?: return null
+            val page = page("/v1/catalog/$storefront/albums/$albumId?include=artists") ?: return null
             val album = AppleAlbumReader.album(page) ?: return null
             return album.copy(
                 songs = all(
@@ -294,7 +294,7 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         // library (one row for a sixteen-track album), not the album.
         val twin = libraryAlbumTwin(albumId)
         if (twin != null) {
-            val page = page("/v1/catalog/$storefront/albums/$twin")
+            val page = page("/v1/catalog/$storefront/albums/$twin?include=artists")
             val album = page?.let(AppleAlbumReader::album)
             if (album != null) {
                 return album.copy(
@@ -433,6 +433,41 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
             collaborators = ApplePlaylistReader.collaborators(row),
         )
     }
+
+    /**
+     * An artist's page: the resource for its name, photo and genres, then its views — top songs,
+     * albums, singles, compilations and the artists beside it.
+     */
+    suspend fun artistPage(id: String): AppleArtist? {
+        val storefront = storefront()
+        val base = page("/v1/catalog/$storefront/artists/$id") ?: return null
+        val artist = AppleArtistReader.artist(base) ?: return null
+        val topSongs = artistView(id, "top-songs", 10)
+            ?.let { runCatching { AppleLibrary.songs(it) }.getOrNull() }
+            .orEmpty()
+        val albums = artistView(id, "full-albums", 20)
+            ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
+            .orEmpty()
+        val singles = artistView(id, "singles", 20)
+            ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
+            .orEmpty()
+        val compilations = artistView(id, "compilation-albums", 12)
+            ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
+            .orEmpty()
+        val similar = artistView(id, "similar-artists", 12)
+            ?.let { runCatching { AppleArtistReader.artists(it) }.getOrNull() }
+            .orEmpty()
+        return artist.copy(
+            topSongs = topSongs,
+            albums = albums,
+            singles = singles,
+            compilations = compilations,
+            similar = similar,
+        )
+    }
+
+    private suspend fun artistView(id: String, view: String, limit: Int) =
+        page("/v1/catalog/${storefront()}/artists/$id/view/$view?limit=$limit")
 
     /** A station's own resource: its name and its art. Its songs are asked for separately. */
     suspend fun station(id: String): AppleStation? {

@@ -39,7 +39,10 @@ object AppleAlbumReader {
             id = id,
             title = attributes?.string("name") ?: return null,
             artistName = attributes?.string("artistName").orEmpty(),
-            artistId = attributes?.string("artistId"),
+            // Apple's album resource has no artistId attribute: the id is the artists relationship,
+            // asked for with include=artists
+            artistId = attributes?.string("artistId") ?: row["relationships"].obj()
+                ?.get("artists").obj()?.get("data").array()?.firstOrNull()?.obj()?.idString("id"),
             year = attributes?.string("releaseDate")?.take(4)?.toIntOrNull(),
             explicit = attributes?.string("contentRating") == "explicit",
             artworkUrl = attributes?.get("artwork").obj()?.string("url"),

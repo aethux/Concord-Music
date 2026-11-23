@@ -22,6 +22,11 @@ internal fun JsonObject.string(key: String): String? =
 
 internal fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.longOrNull
 
+/** a string array, the way genre lists arrive */
+internal fun JsonObject.strings(key: String): List<String> =
+    (this[key] as? JsonArray).orEmpty()
+        .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.takeIf { value -> value.isNotBlank() } }
+
 /** a number or a numeric string, as ids sometimes come either way */
 internal fun JsonObject.idString(key: String): String? =
     (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() && it != "null" }

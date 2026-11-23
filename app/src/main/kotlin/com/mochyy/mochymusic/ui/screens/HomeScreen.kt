@@ -259,14 +259,42 @@ private fun <T> HomeCardRow(
     key: (T) -> Any,
     content: @Composable (T) -> Unit,
 ) {
+    val rowState = rememberCardRowState()
+    // A swipe settles on a card boundary, leaving a thin sliver of the card before it on show the
+    // way Apple's rows do, and the settle overshoots a touch instead of easing flat.
+    //
+    // The sliver is the row's leading padding minus the gap between cards, so the padding starts
+    // RowSnapPeek short of the inset and only the first card carries that peek back — at rest the
+    // row looks exactly as it did, and a settled card sits where Apple's does.
+    val snapFling = remember(rowState) {
+        androidx.compose.foundation.gestures.snapping.snapFlingBehavior(
+            snapLayoutInfoProvider = androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider(
+                rowState,
+                androidx.compose.foundation.gestures.snapping.SnapPosition.Start,
+            ),
+            decayAnimationSpec = androidx.compose.animation.core.exponentialDecay(),
+            // a softer, less damped spring: it overshoots and settles back, which reads as a snap
+            // rather than a stop. Lower damping is what buys the overshoot; a higher one would
+            // flatten it.
+            // a plain ease for the settle, no overshoot — the back-ease is parked until the feel
+            // of the row is otherwise right
+            snapAnimationSpec = androidx.compose.animation.core.tween(
+                durationMillis = 320,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing,
+            ),
+        )
+    }
     LazyRow(
-        state = rememberCardRowState(),
-        contentPadding = PaddingValues(horizontal = HomeContentInset),
+        state = rowState,
+        flingBehavior = snapFling,
+        contentPadding = PaddingValues(start = HomeContentInset - RowSnapPeek, end = HomeContentInset),
         horizontalArrangement = Arrangement.spacedBy(HomeCardSpacing),
     ) {
         itemsIndexed(items = items, key = { _, item -> key(item) }) { index, item ->
             Box(
-                modifier = Modifier.revealOnAppear(
+                modifier = Modifier
+                    .then(if (index == 0) Modifier.padding(start = RowSnapPeek) else Modifier)
+                    .revealOnAppear(
                     key = "$rowKey/${key(item)}",
                     seenState = revealSeen,
                     delayMillis = min(index, 4) * 60,
@@ -501,6 +529,10 @@ fun AllTimeHitsCard(
 private val HomeMarkWidth = 31.dp
 private val HomeMarkHeight = 34.dp
 private val HomeTopBarRise = 16.dp
+
+/** how far short of the row's inset a settled card stops, leaving a sliver of the card before it */
+private val RowSnapPeek = 15.dp
+
 
 /**
  * Home before the player service is up: the top bar, hero and bones the real Home shows while it

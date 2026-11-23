@@ -381,7 +381,37 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         ) ?: return null
         val playlist = ApplePlaylistReader.playlist(page, inLibrary) ?: return null
         val songs = if (inLibrary) playlistTracks(id) else catalogPlaylistTracks(id, storefront)
-        return playlist.copy(songs = songs)
+        // collaborators, the owner's profile and the playlist's own url live on the catalogue
+        // representation only: a library playlist's resource carries no views
+        val twin = if (inLibrary) ApplePlaylistReader.catalogueTwin(page) else id
+        val social = twin?.let { runCatching { playlistSocial(it, storefront) }.getOrNull() }
+        return playlist.copy(
+            songs = songs,
+            url = playlist.url ?: social?.url,
+            owner = social?.owner ?: playlist.owner,
+            collaborators = social?.collaborators.orEmpty(),
+        )
+    }
+
+    private data class PlaylistSocial(
+        val url: String?,
+        val owner: AppleCollaborator?,
+        val collaborators: List<AppleCollaborator>,
+    )
+
+    /** The catalogue twin, asked for the two things the library resource cannot answer. */
+    private suspend fun playlistSocial(catalogId: String, storefront: String): PlaylistSocial? {
+        val social = page(
+            "/v1/catalog/$storefront/playlists/$catalogId" +
+                "?include=curator&views=collaborators&with=lightProfiles" +
+                "&fields[collaborators]=name,handle,artwork,url,isVerified",
+        ) ?: return null
+        val row = social["data"].array().firstOrNull()?.obj() ?: return null
+        return PlaylistSocial(
+            url = row["attributes"].obj()?.string("url"),
+            owner = ApplePlaylistReader.owner(row),
+            collaborators = ApplePlaylistReader.collaborators(row),
+        )
     }
 
     /** One linked playlist's entries, in order, with each entry's library id. */

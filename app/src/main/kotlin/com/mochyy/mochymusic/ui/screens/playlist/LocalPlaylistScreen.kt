@@ -120,6 +120,7 @@ import com.mochyy.mochymusic.ui.component.librarySwipeAction
 import com.mochyy.mochymusic.ui.component.queueSwipeAction
 import com.mochyy.mochymusic.ui.component.removeFromPlaylistSwipeAction
 import com.mochyy.mochymusic.ui.component.detail.CreatorUi
+import com.mochyy.mochymusic.ui.component.detail.rememberAppleCreators
 import com.mochyy.mochymusic.ui.component.detail.rememberFeaturedArtists
 import com.mochyy.mochymusic.ui.component.detail.FeaturedArtistsRow
 import com.mochyy.mochymusic.ui.component.detail.PlaylistDetailScaffold
@@ -378,12 +379,23 @@ fun LocalPlaylistScreen(
     val creatorAvatar = profilePicUri.takeIf { it.isNotBlank() }?.let { if (it.contains("://")) it else "file://$it" }
     val uriHandler = LocalUriHandler.current
     // a playlist imported from a service credits whoever made it there, the rest are the user's own
-    val creators = remember(imported, accountName, creatorAvatar) {
+    // Apple knows the people on its playlists — the owner's profile and anyone it is shared with —
+    // and their faces are better than the single name the import recorded. Anything else keeps the
+    // credit it had.
+    val importedNow = imported
+    val appleCreators = rememberAppleCreators(
+        remoteId = importedNow?.remoteId?.takeIf {
+            importedNow.source == com.mochyy.mochymusic.importer.ImportSource.APPLE_MUSIC.key
+        },
+    )
+    val creators = remember(imported, accountName, creatorAvatar, appleCreators) {
         val author = imported?.authorName
-        when {
-            author != null -> listOf(CreatorUi(name = author, avatarUrl = imported?.authorAvatarUrl))
-            accountName.isNotBlank() -> listOf(CreatorUi(name = accountName, avatarUrl = creatorAvatar))
-            else -> emptyList()
+        appleCreators.ifEmpty {
+            when {
+                author != null -> listOf(CreatorUi(name = author, avatarUrl = imported?.authorAvatarUrl))
+                accountName.isNotBlank() -> listOf(CreatorUi(name = accountName, avatarUrl = creatorAvatar))
+                else -> emptyList()
+            }
         }
     }
     val onCreatorClick: ((CreatorUi) -> Unit)? = imported?.authorUrl?.let { url ->

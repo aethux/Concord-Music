@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mochyy.mochymusic.applesync.AppleClient
+import com.mochyy.mochymusic.applesync.AppleCollaborator
 import com.mochyy.mochymusic.applesync.AppleCovers
 import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.db.entities.ArtistEntity
@@ -35,6 +36,10 @@ class ApplePlaylistViewModel @Inject constructor(
         val artworkUrl: String?,
         val songs: List<Song>,
         val totalSeconds: Int,
+        /** the playlist's page on music.apple.com */
+        val url: String?,
+        val owner: AppleCollaborator?,
+        val collaborators: List<AppleCollaborator>,
     )
 
     private val _page = MutableStateFlow<Page?>(null)
@@ -84,6 +89,9 @@ class ApplePlaylistViewModel @Inject constructor(
                 artworkUrl = AppleCovers.sized(remote.artworkUrl),
                 songs = songs,
                 totalSeconds = songs.sumOf { it.song.duration },
+                url = remote.url,
+                owner = remote.owner,
+                collaborators = remote.collaborators,
             )
         }
     }

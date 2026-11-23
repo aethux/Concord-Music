@@ -41,7 +41,10 @@ enum class PlayerMenuAction(val label: String, @param:StringRes val labelRes: In
     ROTATE("Rotate", R.string.player_rotate, R.drawable.screen_rotation);
 
     companion object {
-        val DefaultSlots = listOf(OTHER_MENU, SLEEP_TIMER, SEE_VIDEO, REPEAT)
+        // Concord: shuffle sits above repeat in the chevron menu. It reshuffles whatever queue is
+        // playing, and a screen that starts playback queues its own list (a playlist, the library, an
+        // artist), so the order follows where the song was played from.
+        val DefaultSlots = listOf(OTHER_MENU, SLEEP_TIMER, SEE_VIDEO, SHUFFLE, REPEAT)
         val DefaultSide = LIKE
 
         fun parseSlots(stored: String): List<PlayerMenuAction> {

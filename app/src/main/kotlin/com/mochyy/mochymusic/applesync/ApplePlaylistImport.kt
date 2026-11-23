@@ -323,6 +323,26 @@ object ApplePlaylistImport {
             }
         }
 
+        // The account's own name and picture, onto the rows the account owns. A playlist's owner is
+        // in no Apple JSON, so this one read is what makes the creator line real; a playlist the
+        // account does not own keeps no name rather than borrowing the account's.
+        runCatching {
+            val profile = client.socialProfile() ?: return@runCatching
+            val avatar = AppleCovers.sized(profile.avatarUrl)
+            val syncedAt = LocalDateTime.now()
+            remotes.filter { it.canDelete }.forEach { remote ->
+                database.updateImportedPlaylistOrigin(
+                    playlistId = localId(remote.id),
+                    remoteId = remote.id,
+                    remoteUrl = null,
+                    syncedAt = syncedAt,
+                    authorName = profile.name,
+                    authorAvatarUrl = avatar,
+                    authorUrl = profile.profileUrl,
+                )
+            }
+        }
+
         runCatching { dao.saveState(AppleStateEntity(IMPORT_VERSION_KEY, IMPORT_VERSION)) }
         return Result(
             playlists = remotes.size,

@@ -60,6 +60,21 @@ data class RemotePlaylist(
 )
 
 /**
+ * The signed-in account as Apple's own profile describes it: the only place either its name or its
+ * picture is available. A playlist's owner is not in any Apple JSON — `include=social-profiles`
+ * returns no relationships at all, and the relationship endpoints 404 — so this is where an owner
+ * line gets its data, and the web page is where collaborators come from.
+ */
+data class AppleProfile(
+    val name: String?,
+    val handle: String?,
+    /** Artwork template, with {w}x{h}; null when the account has no picture. */
+    val avatarUrl: String?,
+    /** The account's page on the web player, when Apple sends one. */
+    val profileUrl: String?,
+)
+
+/**
  * The result of one read-only audit: what the account holds, and whether anything that existed when
  * the epoch was taken is missing now.
  */

@@ -24,9 +24,17 @@ object AppleCovers {
     const val SOURCE_ART = "apple_art"
     const val SOURCE_YOUTUBE = "youtube"
 
-    /** Apple hands out a template with {w}x{h} in it; the lists draw at 300. */
+    /**
+     * Apple hands out a template with {w}x{h} in it; the lists draw at 300. Some templates also carry
+     * {c} (crop) and {f} (format) — left in, the URL answers 400 and the picture silently stays
+     * blank (found on a social-profile avatar: `300x300{c}.jpg`).
+     */
     fun sized(template: String?, size: Int = 300): String? =
-        template?.replace("{w}", size.toString())?.replace("{h}", size.toString())
+        template
+            ?.replace("{w}", size.toString())
+            ?.replace("{h}", size.toString())
+            ?.replace("{c}", "bb")
+            ?.replace("{f}", "jpg")
 
     private fun dao(context: Context): AppleSyncDao =
         EntryPointAccessors

@@ -49,6 +49,17 @@ internal object AppleLibrary {
         )
     }
 
+    /** `personal-social-profiles`: the account's own name, handle and picture. */
+    fun socialProfile(page: JsonObject): AppleProfile? {
+        val attributes = page["data"].array().firstOrNull()?.obj()?.get("attributes").obj() ?: return null
+        return AppleProfile(
+            name = attributes.string("name")?.trim()?.takeIf { it.isNotEmpty() },
+            handle = attributes.string("handle")?.trim()?.takeIf { it.isNotEmpty() },
+            avatarUrl = attributes.get("artwork").obj()?.string("url"),
+            profileUrl = attributes.string("url")?.takeIf { it.startsWith("http") },
+        )
+    }
+
     fun playlistOwner(page: JsonObject): PlaylistCatalogue {
         val catalog = page["data"].array().firstOrNull()?.obj()
             ?.get("relationships").obj()?.get("catalog").obj()

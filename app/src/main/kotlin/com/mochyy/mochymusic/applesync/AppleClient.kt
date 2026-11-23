@@ -51,6 +51,15 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         AppleLibrary.playlistOwner(page)
     }.getOrNull()
 
+    /**
+     * Who this account is: its own name and picture. Concord: added — the one read that stands in for
+     * the owner field Apple's playlist resources do not have.
+     */
+    suspend fun socialProfile(): AppleProfile? = runCatching {
+        val page = page("/v1/me/social/profile") ?: return null
+        AppleLibrary.socialProfile(page)
+    }.getOrNull()
+
     /** A catalogue playlist's tracks: every one, in Apple's order, not just the library's. */
     suspend fun catalogPlaylistTracks(catalogId: String, storefront: String, maxPages: Int = 40): List<RemoteSong> =
         all(

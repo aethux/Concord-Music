@@ -319,6 +319,46 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         )
     }
 
+    /**
+     * Apple's own Home feed: the shelf list the web player asks for, resources sideloaded. Null means
+     * the read failed, which the page has to tell apart from "this account has no shelves yet".
+     *
+     * `timezone` is required — without it Apple answers 400 — and the bracket parameters are
+     * percent-encoded because this travels as a plain URL string.
+     */
+    suspend fun homeGroups(): List<AppleHomeGroup>? {
+        val page = page(HomeFeedPath()) ?: return null
+        return AppleHomeReader.ordered(AppleHomeReader.groups(page))
+    }
+
+    private fun HomeFeedPath(): String = "/v1/me/recommendations?" + listOf(
+        "art%5Burl%5D=f",
+        "displayFilter%5Bkind%5D=MusicCircleCoverShelf,MusicConcertsEmptyShelf,MusicCoverGrid,MusicCoverShelf,MusicNotesHeroShelf,MusicSocialCardShelf,MusicSuperHeroShelf",
+        "extend=editorialArtwork,editorialVideo,plainEditorialCard,plainEditorialNotes",
+        "extend%5Bplaylists%5D=artistNames",
+        "extend%5Bstations%5D=airTime,supportsAirTimeUpdates",
+        "fields%5Bartists%5D=name,artwork,url",
+        "format%5Bresources%5D=map",
+        "include%5Balbums%5D=artists",
+        "include%5Blibrary-playlists%5D=catalog",
+        "include%5Bpersonal-recommendation%5D=primary-content",
+        "include%5Bstations%5D=radio-show",
+        "meta%5Bstations%5D=inflectionPoints",
+        "name=listen-now",
+        "omit%5Bresource%5D=autos",
+        "platform=web",
+        "timezone=" + timezoneOffset(),
+        "types=activities,albums,apple-curators,artists,concerts,curators,editorial-items,library-albums,library-playlists,music-movies,music-videos,playlists,social-profiles,social-upsells,songs,stations,tv-episodes,tv-shows,uploaded-audios,uploaded-videos",
+        "with=friendsMix,library,social",
+    ).joinToString("&")
+
+    /** the device's offset from UTC as `+05:30`, which Apple's home feed insists on */
+    private fun timezoneOffset(): String {
+        val minutes = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60_000
+        val sign = if (minutes < 0) "-" else "+"
+        val abs = kotlin.math.abs(minutes)
+        return "%s%02d:%02d".format(sign, abs / 60, abs % 60)
+    }
 
     /** The catalogue id behind a library album id, or null when Apple has no catalogue twin for it. */
     private suspend fun libraryAlbumTwin(libraryId: String): String? = runCatching {

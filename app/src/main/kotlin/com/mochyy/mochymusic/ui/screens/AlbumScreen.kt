@@ -29,6 +29,7 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -113,6 +114,7 @@ fun AlbumScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
 
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
+    val creatorScope = androidx.compose.runtime.rememberCoroutineScope()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
 
     val playlistId by viewModel.playlistId.collectAsState()
@@ -322,12 +324,16 @@ fun AlbumScreen(
                 isSaved = album.album.bookmarkedAt != null,
                 onSaveClick = { database.query { update(album.album.toggleLike()) } },
                 onCreatorClick = { creator ->
-                    creator.artistId?.let { id ->
-                        if (viewModel.isAppleAlbum) {
-                            navController.navigate("apple_artist/$id")
-                        } else {
-                            navController.navigate("artist/$id")
+                    val id = creator.artistId
+                    when {
+                        viewModel.isAppleAlbum -> creatorScope.launch {
+                            // the album's resource does not always carry the artist id; a name
+                            // search answers it so the creator is never a dead tap
+                            viewModel.appleArtistIdFor(creator.name)?.let { artistId ->
+                                navController.navigate("apple_artist/$artistId")
+                            }
                         }
+                        id != null -> navController.navigate("artist/$id")
                     }
                 },
             )

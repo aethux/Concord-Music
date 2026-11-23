@@ -480,6 +480,18 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
                 (extend?.let { "&extend=$it" } ?: ""),
         )
 
+    /**
+     * An artist's id from their name, for the places that only know a name — Apple's album resource
+     * carries no artist id, and its artists relationship is not always included.
+     */
+    suspend fun artistIdByName(name: String): String? {
+        val storefront = storefront()
+        val term = java.net.URLEncoder.encode(name, "UTF-8")
+        val page = page("/v1/catalog/$storefront/search?term=$term&types=artists&limit=1") ?: return null
+        return page["results"].obj()?.get("artists").obj()
+            ?.get("data").array()?.firstOrNull()?.obj()?.idString("id")
+    }
+
     /** A station's own resource: its name and its art. Its songs are asked for separately. */
     suspend fun station(id: String): AppleStation? {
         val page = page("/v1/catalog/${storefront()}/stations/$id") ?: return null

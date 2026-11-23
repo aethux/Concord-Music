@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -79,6 +80,7 @@ import com.mochyy.mochymusic.ui.component.detail.PlaylistStatsStyle
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackBones
 import com.mochyy.mochymusic.ui.player.CanvasArtworkPlayer
 import com.mochyy.mochymusic.ui.utils.backToMain
+import com.mochyy.mochymusic.ui.utils.stableSystemBars
 import com.mochyy.mochymusic.utils.makeTimeString
 import com.mochyy.mochymusic.viewmodels.AppleArtistViewModel
 
@@ -305,6 +307,27 @@ fun AppleArtistScreen(
                     ArtistAbout(name = current.artist.name, bio = plainBio(current.artist.bio.orEmpty()))
                 }
             }
+        }
+
+        // the page scrolls under the status bar, so its way back floats over the banner
+        val topInset = androidx.compose.foundation.layout.WindowInsets.stableSystemBars
+            .asPaddingValues().calculateTopPadding()
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 12.dp, top = topInset + 8.dp)
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.42f))
+                .clickable { navController.navigateUp() },
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.foundation.Image(
+                painter = painterResource(R.drawable.arrow_back),
+                contentDescription = "Back",
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White),
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

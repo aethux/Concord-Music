@@ -58,6 +58,16 @@ constructor(
     val appleArtistId: String?
         get() = appleArtistIdFlow.value
 
+    /**
+     * The artist page's id for a name, when the album's own resource did not carry it: Apple's album
+     * has no artistId attribute, so the relationship or a name search is the only way in.
+     */
+    suspend fun appleArtistIdFor(name: String): String? {
+        appleArtistIdFlow.value?.let { return it }
+        val pair = tokens.read() ?: return null
+        return runCatching { AppleClient(pair).artistIdByName(name) }.getOrNull()
+    }
+
     private val appleArtistIdFlow = MutableStateFlow<String?>(null)
 
     private val appleAlbum = MutableStateFlow<AlbumWithSongs?>(null)

@@ -1386,11 +1386,11 @@ private fun MiniSongInfo(
     ) {
         // the leaving and arriving songs' lines ride the row with the cover
         if (carousel == null) {
-            MiniSongLines(trackInfo.title, trackInfo.artist, trackInfo.album, Modifier)
+            MiniSongLines(trackInfo.title, trackInfo.artist, Modifier)
         } else {
             for (slot in rememberTextSlots(carousel)) {
                 key(slot.uid) {
-                    MiniSongLines(slot.title, slot.artist, slot.album, Modifier.carouselText(carousel, slot))
+                    MiniSongLines(slot.title, slot.artist, Modifier.carouselText(carousel, slot))
                 }
             }
         }
@@ -1398,7 +1398,7 @@ private fun MiniSongInfo(
 }
 
 @Composable
-private fun MiniSongLines(title: String, artist: String, album: String, modifier: Modifier) {
+private fun MiniSongLines(title: String, artist: String, modifier: Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -1413,9 +1413,8 @@ private fun MiniSongLines(title: String, artist: String, album: String, modifier
             maxLines = 1,
             softWrap = false,
         )
-        val subtitle = listOf(artist, album)
-            .filter { it.isNotBlank() }
-            .joinToString(" — ")
+        // Concord: the mini player's second line is the artist alone; the album is on the song's page
+        val subtitle = artist.trim()
         if (subtitle.isNotBlank()) {
             Text(
                 text = subtitle,

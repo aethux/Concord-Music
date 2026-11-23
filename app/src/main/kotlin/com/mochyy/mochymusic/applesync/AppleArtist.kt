@@ -29,6 +29,10 @@ data class AppleMusicVideo(
     val name: String,
     val artworkUrl: String?,
     val url: String?,
+    /** the preview clip Apple ships with a video, asked for with extend=previews; a short mp4 */
+    val previewUrl: String? = null,
+    /** the still Apple draws before the clip loads */
+    val previewFrameUrl: String? = null,
 )
 
 /** Another artist, from the similar-artists view. */
@@ -74,11 +78,14 @@ object AppleArtistReader {
         page["data"].array().mapNotNull { row ->
             val item = row.obj() ?: return@mapNotNull null
             val attributes = item["attributes"].obj()
+            val preview = attributes?.get("previews").array()?.firstOrNull()?.obj()
             AppleMusicVideo(
                 id = item.idString("id") ?: return@mapNotNull null,
                 name = attributes?.string("name") ?: return@mapNotNull null,
                 artworkUrl = attributes?.get("artwork").obj()?.string("url"),
                 url = attributes?.string("url"),
+                previewUrl = preview?.string("url"),
+                previewFrameUrl = preview?.get("artwork").obj()?.string("url"),
             )
         }
 

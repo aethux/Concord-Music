@@ -445,7 +445,7 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         val latestRelease = artistView(id, "latest-release", 1)
             ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
             ?.firstOrNull()
-        val videos = artistView(id, "music-videos", 6)
+        val videos = artistView(id, "music-videos", 6, extend = "previews")
             ?.let { runCatching { AppleArtistReader.videos(it) }.getOrNull() }
             .orEmpty()
         val topSongs = artistView(id, "top-songs", 10)
@@ -474,8 +474,11 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         )
     }
 
-    private suspend fun artistView(id: String, view: String, limit: Int) =
-        page("/v1/catalog/${storefront()}/artists/$id/view/$view?limit=$limit")
+    private suspend fun artistView(id: String, view: String, limit: Int, extend: String? = null) =
+        page(
+            "/v1/catalog/${storefront()}/artists/$id/view/$view?limit=$limit" +
+                (extend?.let { "&extend=$it" } ?: ""),
+        )
 
     /** A station's own resource: its name and its art. Its songs are asked for separately. */
     suspend fun station(id: String): AppleStation? {

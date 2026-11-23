@@ -77,6 +77,7 @@ import com.mochyy.mochymusic.ui.component.HomeSectionTitle
 import com.mochyy.mochymusic.ui.component.detail.PlaylistInset
 import com.mochyy.mochymusic.ui.component.detail.PlaylistStatsStyle
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackBones
+import com.mochyy.mochymusic.ui.player.CanvasArtworkPlayer
 import com.mochyy.mochymusic.ui.utils.backToMain
 import com.mochyy.mochymusic.utils.makeTimeString
 import com.mochyy.mochymusic.viewmodels.AppleArtistViewModel
@@ -127,6 +128,7 @@ fun AppleArtistScreen(
         ) {
             item(key = "header", contentType = "header") {
                 Column {
+                    val motion = current?.artist?.videos?.firstOrNull()
                     Box(modifier = Modifier.fillMaxWidth().height(bannerHeight)) {
                         if (current != null) {
                             AsyncImage(
@@ -134,6 +136,16 @@ fun AppleArtistScreen(
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize().background(BoneColor),
+                            )
+                        }
+                        // Apple has no artist video: what it does ship is a preview clip for each music
+                        // video, so the artist's face is the still and their newest video loops over it
+                        if (motion?.previewUrl != null) {
+                            CanvasArtworkPlayer(
+                                primaryUrl = motion.previewUrl,
+                                fallbackUrl = null,
+                                isPlaying = true,
+                                modifier = Modifier.fillMaxSize(),
                             )
                         }
                         Box(
@@ -216,6 +228,7 @@ fun AppleArtistScreen(
             }
 
             if (librarySongs.isNotEmpty()) {
+                item(key = "top_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
                 item(key = "library_title", contentType = "shelf_title") {
                     HomeSectionTitle(
                         title = libraryTitle,
@@ -237,6 +250,10 @@ fun AppleArtistScreen(
                 }
             }
 
+            if (librarySongs.isNotEmpty()) {
+                item(key = "library_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
+            }
+
             if (libraryAlbums.isNotEmpty()) {
                 item(key = "saved_albums_title", contentType = "shelf_title") {
                     HomeSectionTitle(title = savedAlbumsTitle)
@@ -249,11 +266,16 @@ fun AppleArtistScreen(
                 }
             }
 
+            if (libraryAlbums.isNotEmpty()) {
+                item(key = "saved_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
+            }
+
             albumSection("albums", albumsTitle, current.artist.albums, navController)
-            albumSection("singles", singlesTitle, current.artist.singles, navController)
-            albumSection("compilations", "Compilations", current.artist.compilations, navController)
+            albumSection("singles", singlesTitle, current.artist.singles, navController, gapBefore = true)
+            albumSection("compilations", "Compilations", current.artist.compilations, navController, gapBefore = true)
 
             if (current.artist.videos.isNotEmpty()) {
+                item(key = "videos_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
                 item(key = "videos_title", contentType = "shelf_title") {
                     HomeSectionTitle(title = videosTitle)
                 }
@@ -267,6 +289,7 @@ fun AppleArtistScreen(
             }
 
             if (current.artist.similar.isNotEmpty()) {
+                item(key = "similar_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
                 item(key = "similar_title", contentType = "shelf_title") {
                     HomeSectionTitle(title = "Similar artists")
                 }
@@ -429,8 +452,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.albumSection(
     title: String,
     albums: List<AppleAlbumRef>,
     navController: NavController,
+    gapBefore: Boolean = false,
 ) {
     if (albums.isEmpty()) return
+    if (gapBefore) {
+        item(key = "${key}_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
+    }
     item(key = "${key}_title", contentType = "shelf_title") {
         HomeSectionTitle(title = title)
     }

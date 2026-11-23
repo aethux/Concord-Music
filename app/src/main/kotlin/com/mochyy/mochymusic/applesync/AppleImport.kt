@@ -135,6 +135,7 @@ class AppleImport(
 
         /** Writes the mapping only when one of its fields actually moved. */
         fun noteTrack(songId: String, catalogId: String, song: RemoteSong, state: String) {
+            val was = tracks[songId]
             val row = AppleTrackEntity(
                 songId = songId,
                 catalogId = catalogId,
@@ -142,8 +143,11 @@ class AppleImport(
                 isrc = song.isrc,
                 state = state,
                 updatedAt = System.currentTimeMillis(),
+                // Concord: this row is written with REPLACE, so a video chosen by hand (or found by
+                // the matching pass) has to be carried across or a re-read would drop it
+                youtubeId = was?.youtubeId,
+                youtubeTitle = was?.youtubeTitle,
             )
-            val was = tracks[songId]
             if (was != null && was.catalogId == row.catalogId && was.libraryId == row.libraryId &&
                 was.isrc == row.isrc && was.state == row.state
             ) {

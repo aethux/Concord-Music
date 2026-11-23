@@ -57,6 +57,7 @@ import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import com.music.innertube.YouTube
 import com.mochyy.mochymusic.LocalDatabase
+import com.mochyy.mochymusic.applesync.AppleVersionSwitch
 import com.mochyy.mochymusic.importer.ImportedVersions
 import com.mochyy.mochymusic.importer.TrackMatch
 import com.mochyy.mochymusic.ui.component.LocalMenuState
@@ -675,8 +676,13 @@ fun SongMenu(
                             onClick = {
                                 refetchIconDegree -= 360
                                 val match = importMatch
+                                // Concord: an Apple row has no import record but does have a video;
+                                // Refetch searches for it again and never replaces the song
+                                val appleMatch = if (match == null) AppleVersionSwitch.trackFor(song) else null
                                 if (match != null) {
                                     refetchImported(context, database, match)
+                                } else if (appleMatch != null) {
+                                    refetchAppleVideo(context, appleMatch)
                                 } else {
                                     scope.launch(Dispatchers.IO) {
                                         YouTube.queue(listOf(song.id)).onSuccess {
@@ -729,6 +735,26 @@ private fun refetchImported(context: android.content.Context, database: com.moch
         } else {
             TopToaster.show(
                 text = context.getString(R.string.pc_closest_match),
+                iconRes = R.drawable.sync,
+                durationMs = 4000L,
+            )
+        }
+    }
+}
+
+/** Refetch on an Apple row: searches again and records what it finds as the song's video. */
+private fun refetchAppleVideo(context: android.content.Context, match: TrackMatch) {
+    ImportedVersions.scope.launch {
+        val found = AppleVersionSwitch.refetch(context.applicationContext, match)
+        if (found != null) {
+            TopToaster.show(
+                text = context.getString(R.string.pc_video_set, found.title),
+                thumbnail = found.thumbnail,
+                iconRes = R.drawable.sync,
+            )
+        } else {
+            TopToaster.show(
+                text = context.getString(R.string.pc_video_no_match),
                 iconRes = R.drawable.sync,
                 durationMs = 4000L,
             )

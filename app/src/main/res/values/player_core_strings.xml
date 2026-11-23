@@ -131,6 +131,8 @@
     <string name="pc_refetch_import_desc">Search again for the right version of this song</string>
     <string name="pc_closer_match">Found a closer match: %1$s</string>
     <string name="pc_closest_match">This is already the closest match we can find. Try Choose different version.</string>
+    <string name="pc_video_set">Video set to %1$s</string>
+    <string name="pc_video_no_match">Nothing closer found. The video is unchanged.</string>
     <string name="pc_error_no_app">No app available</string>
     <string name="pc_like_added">Added to Library and Liked Songs</string>
     <string name="pc_like_mixing">Mixxing…</string>

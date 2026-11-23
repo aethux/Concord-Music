@@ -30,17 +30,22 @@ interface AppleCreatorsEntryPoint {
 }
 
 /**
- * The owner and collaborators of an Apple playlist, as header creators. Empty for anything that is
- * not an Apple id, and empty while it loads, so the header keeps its existing credit until then.
+ * Apple's people for a playlist, and whether they are still on their way. null means the question
+ * does not apply — not an Apple id — so the caller keeps whatever credit it already had.
  */
-@Composable
-fun rememberAppleCreators(remoteId: String?): List<CreatorUi> {
-    val context = LocalContext.current
-    var people by remember(remoteId) { mutableStateOf(emptyList<CreatorUi>()) }
+data class ApplePeople(
+    val loading: Boolean,
+    val people: List<CreatorUi>,
+)
 
-    LaunchedEffect(remoteId) {
-        val id = remoteId ?: return@LaunchedEffect
-        if (!id.startsWith("p.") && !id.startsWith("pl.")) return@LaunchedEffect
+@Composable
+fun rememberApplePeople(remoteId: String?): ApplePeople? {
+    val context = LocalContext.current
+    val appleId = remoteId?.takeIf { it.startsWith("p.") || it.startsWith("pl.") }
+    var people by remember(remoteId) { mutableStateOf<List<CreatorUi>?>(null) }
+
+    LaunchedEffect(appleId) {
+        val id = appleId ?: return@LaunchedEffect
         // A page opened seconds after a cold start can find the Apple session still loading, and a
         // single failed read would leave the header crediting one person for as long as the page is
         // open. Three goes, then it settles on what the import recorded.
@@ -62,10 +67,14 @@ fun rememberAppleCreators(remoteId: String?): List<CreatorUi> {
                         )
                     }
             }
-            if (people.isNotEmpty()) return@LaunchedEffect
+            if (!people.isNullOrEmpty()) return@LaunchedEffect
             kotlinx.coroutines.delay(900L * (attempt + 1))
         }
+        // three goes and still nothing: an empty list is a real answer, and stops the header waiting
+        if (people == null) people = emptyList()
     }
 
-    return people
+    if (appleId == null) return null
+    return people?.let { ApplePeople(loading = false, people = it) }
+        ?: ApplePeople(loading = true, people = emptyList())
 }

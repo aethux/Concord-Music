@@ -120,7 +120,7 @@ import com.mochyy.mochymusic.ui.component.librarySwipeAction
 import com.mochyy.mochymusic.ui.component.queueSwipeAction
 import com.mochyy.mochymusic.ui.component.removeFromPlaylistSwipeAction
 import com.mochyy.mochymusic.ui.component.detail.CreatorUi
-import com.mochyy.mochymusic.ui.component.detail.rememberAppleCreators
+import com.mochyy.mochymusic.ui.component.detail.rememberApplePeople
 import com.mochyy.mochymusic.ui.component.detail.rememberFeaturedArtists
 import com.mochyy.mochymusic.ui.component.detail.FeaturedArtistsRow
 import com.mochyy.mochymusic.ui.component.detail.PlaylistDetailScaffold
@@ -383,15 +383,21 @@ fun LocalPlaylistScreen(
     // and their faces are better than the single name the import recorded. Anything else keeps the
     // credit it had.
     val importedNow = imported
-    val appleCreators = rememberAppleCreators(
+    val applePeople = rememberApplePeople(
         remoteId = importedNow?.remoteId?.takeIf {
             importedNow.source == com.mochyy.mochymusic.importer.ImportSource.APPLE_MUSIC.key
         },
     )
-    val creators = remember(imported, accountName, creatorAvatar, appleCreators) {
+    // while Apple's people are on their way the header waits on a placeholder: showing the imported
+    // name first and swapping it a moment later reads as the wrong credit, not as a load
+    val creatorsLoading = applePeople?.loading == true
+    val creators = remember(imported, accountName, creatorAvatar, applePeople) {
         val author = imported?.authorName
-        appleCreators.ifEmpty {
+        val apple = applePeople?.people.orEmpty()
+        apple.ifEmpty {
             when {
+                // an Apple playlist credits nobody until its people have been read
+                applePeople != null -> emptyList()
                 author != null -> listOf(CreatorUi(name = author, avatarUrl = imported?.authorAvatarUrl))
                 accountName.isNotBlank() -> listOf(CreatorUi(name = accountName, avatarUrl = creatorAvatar))
                 else -> emptyList()
@@ -598,6 +604,7 @@ fun LocalPlaylistScreen(
                     onSearchClick = { isSearching = true },
                     title = currentPlaylist.playlist.name,
                     creators = creators,
+                    creatorsLoading = creatorsLoading,
                     onCreatorClick = onCreatorClick,
                     stats = playlistStats(
                         context.resources.getQuantityString(R.plurals.n_song, songs.size, songs.size),

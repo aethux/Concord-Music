@@ -43,14 +43,6 @@ sealed interface PendingImport {
     data class Failed(val message: String) : PendingImport
 }
 
-/** Concord: the state of one YouTube matching pass. */
-sealed interface AppleMatchState {
-    data object Idle : AppleMatchState
-    data class Running(val done: Int, val total: Int) : AppleMatchState
-    data class Done(val matched: Int, val tried: Int, val remaining: Int) : AppleMatchState
-    data class Failed(val message: String) : AppleMatchState
-}
-
 /** Concord: the state of one Apple library read. */
 sealed interface AppleReadState {
     data object Idle : AppleReadState
@@ -82,22 +74,11 @@ class ImportSyncViewModel @Inject constructor(
         .map { it[com.mochyy.mochymusic.constants.AppleAnimatedCoversKey] ?: true }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
-    // Concord: fills the Apple <-> YouTube reference, one bounded pass at a time
-    private val _appleMatch = MutableStateFlow<AppleMatchState>(AppleMatchState.Idle)
-    val appleMatch: StateFlow<AppleMatchState> = _appleMatch.asStateFlow()
-
+    // Concord: fills the Apple <-> YouTube reference in a foreground service, so a run that is a few
+    // thousand searches long survives leaving this screen; AppleMatchStatus is what the row reads
     fun matchAppleOnYouTube() {
-        if (_appleMatch.value is AppleMatchState.Running) return
-        _appleMatch.value = AppleMatchState.Running(0, 0)
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            _appleMatch.value = runCatching {
-                val pass = com.mochyy.mochymusic.applesync.AppleYoutubeMatch(appleDao)
-                val result = pass.run(limit = 200) { done, total ->
-                    _appleMatch.value = AppleMatchState.Running(done, total)
-                }
-                AppleMatchState.Done(result.matched, result.tried, result.remaining)
-            }.getOrElse { AppleMatchState.Failed(it.message ?: "Matching failed") }
-        }
+        if (com.mochyy.mochymusic.applesync.AppleMatchStatus.progress.running) return
+        com.mochyy.mochymusic.applesync.AppleMatchService.start(context)
     }
 
     fun setAppleAnimatedCovers(on: Boolean) {

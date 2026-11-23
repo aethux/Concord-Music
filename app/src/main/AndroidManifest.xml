@@ -1164,6 +1164,13 @@
             </intent-filter>
         </service>
 
+        <!-- Concord: matches every Apple Music song on YouTube; a run is a few thousand searches, so
+             it outlives the settings screen that starts it -->
+        <service
+            android:name=".applesync.AppleMatchService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <receiver
             android:name="androidx.media3.session.MediaButtonReceiver"
             android:exported="true">

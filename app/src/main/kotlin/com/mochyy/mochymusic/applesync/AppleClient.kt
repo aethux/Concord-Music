@@ -384,7 +384,16 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         // collaborators, the owner's profile and the playlist's own url live on the catalogue
         // representation only: a library playlist's resource carries no views
         val twin = if (inLibrary) ApplePlaylistReader.catalogueTwin(page) else id
-        val social = twin?.let { runCatching { playlistSocial(it, storefront) }.getOrNull() }
+        var social = twin?.let { runCatching { playlistSocial(it, storefront) }.getOrNull() }
+        // a playlist shared with the account is not always on the catalogue twin's views; the library
+        // resource answers `include=collaborators` for exactly that case
+        if (inLibrary && social?.collaborators.isNullOrEmpty()) {
+            social = runCatching { libraryPlaylistSocial(id) }.getOrNull() ?: social
+        }
+        timber.log.Timber.tag("ApplePlaylist").d(
+            "page %s library=%s twin=%s collaborators=%d",
+            id, inLibrary, twin, social?.collaborators?.size ?: -1,
+        )
         return playlist.copy(
             songs = songs,
             url = playlist.url ?: social?.url,
@@ -398,6 +407,17 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         val owner: AppleCollaborator?,
         val collaborators: List<AppleCollaborator>,
     )
+
+    /** `/v1/me/library/playlists/{id}?include=collaborators,curator` — the library's own answer. */
+    private suspend fun libraryPlaylistSocial(id: String): PlaylistSocial? {
+        val social = page("/v1/me/library/playlists/$id?include=collaborators,curator") ?: return null
+        val row = social["data"].array().firstOrNull()?.obj() ?: return null
+        return PlaylistSocial(
+            url = row["attributes"].obj()?.string("url"),
+            owner = ApplePlaylistReader.owner(row),
+            collaborators = ApplePlaylistReader.relationshipsCollaborators(row),
+        )
+    }
 
     /** The catalogue twin, asked for the two things the library resource cannot answer. */
     private suspend fun playlistSocial(catalogId: String, storefront: String): PlaylistSocial? {

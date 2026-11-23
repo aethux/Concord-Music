@@ -86,6 +86,13 @@ object ApplePlaylistReader {
             .mapNotNull { it.obj()?.let(::collaborator) }
             .distinctBy { it.handle ?: it.name }
 
+    /** `relationships.collaborators.data[]`, for the library resource's own include. */
+    fun relationshipsCollaborators(row: JsonObject): List<AppleCollaborator> =
+        row["relationships"].obj()?.get("collaborators").obj()?.get("data").array()
+            .orEmpty()
+            .mapNotNull { it.obj()?.let(::collaborator) }
+            .distinctBy { it.handle ?: it.name }
+
     private fun collaborator(row: JsonObject): AppleCollaborator? {
         val attributes = row["attributes"].obj() ?: return null
         val name = attributes.string("name")?.trim()?.takeIf { it.isNotEmpty() } ?: return null

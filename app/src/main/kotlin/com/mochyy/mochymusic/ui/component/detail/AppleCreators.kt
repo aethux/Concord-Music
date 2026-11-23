@@ -41,22 +41,29 @@ fun rememberAppleCreators(remoteId: String?): List<CreatorUi> {
     LaunchedEffect(remoteId) {
         val id = remoteId ?: return@LaunchedEffect
         if (!id.startsWith("p.") && !id.startsWith("pl.")) return@LaunchedEffect
-        people = withContext(Dispatchers.IO) {
-            val tokens = EntryPointAccessors
-                .fromApplication(context.applicationContext, AppleCreatorsEntryPoint::class.java)
-                .appleTokens()
-            val pair = tokens.read() ?: return@withContext emptyList()
-            val playlist = runCatching { AppleClient(pair).playlistPage(id) }.getOrNull()
-                ?: return@withContext emptyList()
-            (listOfNotNull(playlist.owner) + playlist.collaborators)
-                .distinctBy { it.handle ?: it.name }
-                .map { person ->
-                    CreatorUi(
-                        name = person.name,
-                        avatarUrl = person.avatarUrl?.let { url -> AppleCovers.sized(url, 160) },
-                        artistId = null,
-                    )
-                }
+        // A page opened seconds after a cold start can find the Apple session still loading, and a
+        // single failed read would leave the header crediting one person for as long as the page is
+        // open. Three goes, then it settles on what the import recorded.
+        repeat(3) { attempt ->
+            people = withContext(Dispatchers.IO) {
+                val tokens = EntryPointAccessors
+                    .fromApplication(context.applicationContext, AppleCreatorsEntryPoint::class.java)
+                    .appleTokens()
+                val pair = tokens.read() ?: return@withContext emptyList<CreatorUi>()
+                val playlist = runCatching { AppleClient(pair).playlistPage(id) }.getOrNull()
+                    ?: return@withContext emptyList<CreatorUi>()
+                (listOfNotNull(playlist.owner) + playlist.collaborators)
+                    .distinctBy { it.handle ?: it.name }
+                    .map { person ->
+                        CreatorUi(
+                            name = person.name,
+                            avatarUrl = person.avatarUrl?.let { url -> AppleCovers.sized(url, 160) },
+                            artistId = null,
+                        )
+                    }
+            }
+            if (people.isNotEmpty()) return@LaunchedEffect
+            kotlinx.coroutines.delay(900L * (attempt + 1))
         }
     }
 

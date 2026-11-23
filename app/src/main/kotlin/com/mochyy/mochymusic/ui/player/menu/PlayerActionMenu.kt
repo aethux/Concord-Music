@@ -37,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -345,8 +346,23 @@ fun PlayerActionMenu(
                 var videoRowsShown = onFullVideo != null
                 // with videos on, the song's video can be put right: "wrong video?" once one was found, "find video" when none was
                 val videoSong = currentMetadata
-                if (videoSong != null && (videoBackgroundOn || videoSong.isVideoSong)) {
-                    val found = remember(videoSong.id) { hasFoundVideo(videoSong.id, videoSong.isVideoSong) }
+                // Concord: an Apple song has no video of its own — the matched twin or a hand pick is
+                // what "see video" plays — so this row is offered for it whatever the video setting says
+                val appleVideoSong = videoSong?.takeIf {
+                    com.mochyy.mochymusic.applesync.AppleVideoReference.isAppleSong(it.id)
+                }
+                val appleVideoFound by produceState(initialValue = false, appleVideoSong?.id) {
+                    value = appleVideoSong?.let { song ->
+                        runCatching {
+                            com.mochyy.mochymusic.applesync.AppleVideoReference.youtubeIdFor(context, song.id)
+                        }.getOrNull() != null
+                    } ?: false
+                }
+                val youtubeVideoFound = remember(videoSong?.id) {
+                    videoSong?.let { hasFoundVideo(it.id, it.isVideoSong) } == true
+                }
+                if (videoSong != null && (videoBackgroundOn || videoSong.isVideoSong || appleVideoSong != null)) {
+                    val found = if (appleVideoSong != null) appleVideoFound else youtubeVideoFound
                     Spacer(modifier = Modifier.height(if (videoRowsShown) 8.dp else SectionGap))
                     MenuRow(
                         icon = R.drawable.slow_motion_video,

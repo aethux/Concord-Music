@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.media3.common.Player
 import com.mochyy.mochymusic.constants.PlayerHorizontalPadding
+import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.extensions.toggleRepeatMode
 import com.mochyy.mochymusic.ui.component.BlurEffectCache
 import androidx.compose.foundation.layout.Column
@@ -49,12 +50,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.music.innertube.YouTube
 import com.music.innertube.models.WatchEndpoint
 import com.mochyy.mochymusic.applesync.AppleVideoReference
 import com.mochyy.mochymusic.models.toMediaMetadata
+import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.playback.queues.YouTubeQueue
 import com.mochyy.mochymusic.ui.component.TopToaster
 import com.mochyy.mochymusic.ui.player.studio.playHoldRamp
@@ -328,6 +331,10 @@ private fun PlayerSheet(
     // matching pass recorded. That needs a scope and a context that outlive the menu closing.
     val appleVideoScope = androidx.compose.runtime.rememberCoroutineScope()
     val appleVideoContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val database = com.mochyy.mochymusic.LocalDatabase.current
+    // Concord: which Apple song's video is up, so the same button can put the song back
+    var appleVideoSource by remember { mutableStateOf<String?>(null) }
+    var appleVideoId by remember { mutableStateOf<String?>(null) }
     // a youtube video is playing on the cover, so the chevron offers the full video mode
     var videoShowing by remember { mutableStateOf(false) }
     var showSleepTimer by remember { mutableStateOf(false) }
@@ -915,10 +922,13 @@ private fun PlayerSheet(
             playerConnection = playerConnection,
             openLyrics = { if (transition.page != PlayerPage.LYRICS) transition.open(PlayerPage.LYRICS) },
         )
+        // Concord: the Apple video is up while its own item is the one playing — the player may be in
+        // the video style or back in a normal one, and either way the same button puts the song back
+        val inAppleVideo = appleVideoSource != null && appleVideoId != null && trackInfo.mediaId == appleVideoId
         fun menuActionActive(action: com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction): Boolean = when (action) {
             com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.LIKE -> trackInfo.liked
             com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SLEEP_TIMER -> playerConnection.service.sleepTimer.isActive
-            com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SEE_VIDEO -> seeVideo
+            com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SEE_VIDEO -> seeVideo || inAppleVideo
             com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.REPEAT -> transportState.repeatMode != Player.REPEAT_MODE_OFF
             com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SHUFFLE -> transportState.shuffleModeEnabled
             com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.ROTATE -> styleTurned
@@ -937,44 +947,67 @@ private fun PlayerSheet(
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SEE_VIDEO -> {
                     val mediaId = trackInfo.mediaId
                     if (AppleVideoReference.isAppleSong(mediaId)) {
-                        appleVideoScope.launch {
-                            val videoId = AppleVideoReference.youtubeIdFor(appleVideoContext, mediaId)
-                            // nothing matched: the row keeps its still, which is honest — there is no
-                            // video to show rather than a video mode drawing an empty frame
-                            if (videoId == null) {
-                                // Timber never reaches logcat here, so every outcome is said out loud
-                                TopToaster.show(appleVideoContext.getString(R.string.apple_video_none))
-                            } else {
-                                YouTube.queue(listOf(videoId)).onSuccess { found ->
-                                    val item = found.firstOrNull()
-                                    if (item == null) {
-                                        TopToaster.show(appleVideoContext.getString(R.string.apple_video_failed))
-                                        return@onSuccess
-                                    }
+                        // Concord: one button, two states — see the video, then stop it and be back on
+                        // the song's own audio
+                        if (inAppleVideo) {
+                            val songId = appleVideoSource
+                            appleVideoSource = null
+                            appleVideoId = null
+                            appleVideoScope.launch {
+                                // the video replaced the queue, so the song has to be queued back
+                                songId?.let { id -> database.song(id).firstOrNull() }?.let { song ->
                                     playerConnection.playQueue(
-                                        YouTubeQueue(
-                                            WatchEndpoint(videoId = item.id),
-                                            item.toMediaMetadata(),
+                                        ListQueue(
+                                            title = song.song.title,
+                                            items = listOf(song.toMediaItem()),
                                         ),
                                     )
-                                    // Mochy's provider order asks every module first, and Apple answers
-                                    // any song it can match — even a music video, with AAC. Once the
-                                    // video is the current item, pin it to YouTube: that is also what
-                                    // lets the player draw it as video instead of a still.
-                                    for (waited in 0 until 12) {
-                                        if (playerConnection.mediaMetadata.value?.id == item.id) {
-                                            playerConnection.service.providerSwitch.force(
-                                                com.mochyy.mochymusic.modules.SourceModules.YouTubeId,
-                                            )
-                                            break
+                                }
+                                TopToaster.show(appleVideoContext.getString(R.string.apple_video_stopped))
+                            }
+                        } else {
+                            appleVideoScope.launch {
+                                val videoId = AppleVideoReference.youtubeIdFor(appleVideoContext, mediaId)
+                                // nothing matched: the row keeps its still, which is honest — there is
+                                // no video to show rather than a video mode drawing an empty frame
+                                if (videoId == null) {
+                                    // Timber never reaches logcat here, so every outcome is said out loud
+                                    TopToaster.show(appleVideoContext.getString(R.string.apple_video_none))
+                                } else {
+                                    YouTube.queue(listOf(videoId)).onSuccess { found ->
+                                        val item = found.firstOrNull()
+                                        if (item == null) {
+                                            TopToaster.show(appleVideoContext.getString(R.string.apple_video_failed))
+                                            return@onSuccess
                                         }
-                                        kotlinx.coroutines.delay(200)
+                                        playerConnection.playQueue(
+                                            YouTubeQueue(
+                                                WatchEndpoint(videoId = item.id),
+                                                item.toMediaMetadata(),
+                                            ),
+                                        )
+                                        // Mochy's provider order asks every module first, and Apple
+                                        // answers any song it can match — even a music video, with AAC.
+                                        // Once the video is the current item, pin it to YouTube: that is
+                                        // also what lets the player draw it as video instead of a still.
+                                        for (waited in 0 until 12) {
+                                            if (playerConnection.mediaMetadata.value?.id == item.id) {
+                                                playerConnection.service.providerSwitch.force(
+                                                    com.mochyy.mochymusic.modules.SourceModules.YouTubeId,
+                                                )
+                                                break
+                                            }
+                                            kotlinx.coroutines.delay(200)
+                                        }
+                                        // Concord: no style change. Mochy draws a video song's picture in
+                                        // the cover of the player that is already open (the full-screen
+                                        // style stays behind Mochy's own "Full video" action).
+                                        appleVideoSource = mediaId
+                                        appleVideoId = item.id
+                                        TopToaster.show(appleVideoContext.getString(R.string.apple_video_playing))
+                                    }.onFailure {
+                                        TopToaster.show(appleVideoContext.getString(R.string.apple_video_unreachable))
                                     }
-                                    // and Mochy's own video style, the same one "Full video" opens
-                                    enterVideoMode()
-                                    TopToaster.show(appleVideoContext.getString(R.string.apple_video_playing))
-                                }.onFailure {
-                                    TopToaster.show(appleVideoContext.getString(R.string.apple_video_unreachable))
                                 }
                             }
                         }
@@ -2150,7 +2183,14 @@ private fun ExpandMenuOverlay(
     controlsDrawShift: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier
 ) {
-    val menuLabels = slots.map { stringResource(it.labelRes) }
+    // Concord: the video button reads "Stop video" while that video is up
+    val menuLabels = slots.map { action ->
+        if (action == com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SEE_VIDEO && isActive(action)) {
+            stringResource(R.string.ps_action_stop_video)
+        } else {
+            stringResource(action.labelRes)
+        }
+    }
     val menuItems = slots.mapIndexed { i, action -> menuLabels[i] to action.icon }
 
     val density = LocalDensity.current

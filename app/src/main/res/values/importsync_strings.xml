@@ -24,6 +24,7 @@
     <string name="apple_video_failed">Could not fetch that video</string>
     <string name="apple_video_unreachable">Could not reach YouTube</string>
     <string name="apple_video_playing">Playing the video</string>
+    <string name="apple_video_stopped">Back to the song</string>
     <string name="import_sync_apple_match_title">Match songs on YouTube</string>
     <string name="import_sync_apple_match_progress">%1$d of %2$d matched</string>
     <string name="import_sync_apple_match_left">Matched %1$d · %2$d have no YouTube match</string>

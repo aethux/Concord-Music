@@ -101,15 +101,14 @@ private val LocalizedSettingsTitles = mapOf(
     "Save Player's last state" to R.string.playback_save_state,
     "Local song auto metadata" to R.string.settings_local_auto_metadata,
     "Keep shuffle on" to R.string.settings_persistent_shuffle,
-    "Disable auto-playing YouTube video" to R.string.settings_disable_video_autoplay,
-    "Translations from YouTube" to R.string.settings_youtube_translations,
+    // YouTube's own settings (video autoplay, translations, background, play counting) are hidden
+    // while Apple is the only source; the rows and their keys stay in the tree
     "Sync lyrics to music videos" to R.string.settings_sync_lyrics_video,
     "Don't skip on failure" to R.string.settings_dont_skip_failure,
     "Skip timeout failure" to R.string.settings_skip_timeout,
     "Skip Silence" to R.string.playback_skip_silence,
     "Audio format badge" to R.string.appearance_format_badge,
     "Show sample rate" to R.string.appearance_sample_rate,
-    "Always enable Youtube background" to R.string.appearance_youtube_background,
     "Enable animated canvas" to R.string.appearance_canvas,
     "High quality bloom" to R.string.appearance_bloom,
     "Tinted lyrics" to R.string.appearance_lyrics_soft_light,
@@ -183,7 +182,6 @@ private val SettingsIndex = listOf(
     SettingsEntry("Albums from liked songs", "App behaviour", "general_settings", "albums library liked songs old way apple music"),
     SettingsEntry("Local song auto metadata", "App behaviour", "general_settings", "match tags id3 covers lyrics"),
     SettingsEntry("Pause search history", "App behaviour", "general_settings", "search history pause private incognito privacy", R.string.pause_search_history),
-    SettingsEntry("Count plays on YouTube views", "App behaviour", "general_settings", "youtube history plays views report count privacy", R.string.settings_youtube_plays),
 
     // Playback
     SettingsEntry("Playback", "Playback", PlaybackSettingsRoute, "background bluetooth shuffle skip silence mute queue failure"),

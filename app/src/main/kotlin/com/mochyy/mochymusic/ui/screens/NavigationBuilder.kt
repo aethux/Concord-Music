@@ -682,8 +682,14 @@ fun NavGraphBuilder.navigationBuilder(
                 type = NavType.StringType
             },
         ),
-    ) {
-        ArtistScreen(navController, scrollBehavior)
+    ) { entry ->
+        // a numeric id is Apple's, and every other road an artist can be opened from lands here too:
+        // the route decides which artist page can answer for the id
+        com.mochyy.mochymusic.ui.screens.artist.ArtistRoute(
+            rawId = entry.arguments?.getString("artistId").orEmpty(),
+            navController = navController,
+            scrollBehavior = scrollBehavior,
+        )
     }
 
     coverSourceComposable(

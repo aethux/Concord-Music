@@ -24,6 +24,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -357,23 +358,28 @@ internal fun ArtistName(
     logoUrl: String?,
     logoAspect: Float?,
     modifier: Modifier = Modifier,
+    // a real wordmark is ~12:1; sized by width alone it came out a few millimetres tall
+    logoHeight: Dp = 38.dp,
 ) {
     var logoLoaded by remember(logoUrl) { mutableStateOf(false) }
     val logoAlpha by animateFloatAsState(if (logoLoaded) 1f else 0f, tween(350), label = "artistLogo")
     Box(modifier = modifier.animateContentSize(spring(dampingRatio = 0.9f, stiffness = 380f))) {
         if (logoUrl != null) {
-            val aspect = (logoAspect ?: 3f).coerceIn(0.6f, 12f)
-            val width = min(260.dp, 72.dp * aspect)
-            AsyncImage(
-                model = logoUrl,
-                contentDescription = name,
-                contentScale = ContentScale.Fit,
-                alignment = Alignment.BottomStart,
-                onSuccess = { logoLoaded = true },
-                modifier = Modifier
-                    .size(width = width, height = width / aspect)
-                    .graphicsLayer { alpha = logoAlpha },
-            )
+            BoxWithConstraints {
+                val aspect = (logoAspect ?: 3f).coerceIn(0.3f, 14f)
+                // scaled by height, so the wordmark is legible, and never wider than most of the line
+                val width = min(maxWidth * 0.85f, logoHeight * aspect)
+                AsyncImage(
+                    model = logoUrl,
+                    contentDescription = name,
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.BottomStart,
+                    onSuccess = { logoLoaded = true },
+                    modifier = Modifier
+                        .size(width = width, height = width / aspect)
+                        .graphicsLayer { alpha = logoAlpha },
+                )
+            }
         }
         if (!logoLoaded) {
             Text(
@@ -414,6 +420,10 @@ internal fun ArtistActions(
     onLike: () -> Unit,
     onSubscribe: () -> Unit,
     modifier: Modifier = Modifier,
+    /** starts the artist's radio, when the page has one to start */
+    onRadio: (() -> Unit)? = null,
+    /** shuffles the artist's songs, when the page has songs to shuffle */
+    onShuffle: (() -> Unit)? = null,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
         if (showSubscribe) {
@@ -424,6 +434,22 @@ internal fun ArtistActions(
             )
         } else {
             PlayPill(isPlaying = isPlaying, onClick = onPlay)
+        }
+        if (onRadio != null) {
+            Spacer(Modifier.width(if (showSubscribe) 4.dp else 9.dp))
+            CircleAction(
+                icon = R.drawable.radio,
+                contentDescription = "Start radio",
+                onClick = onRadio,
+            )
+        }
+        if (onShuffle != null) {
+            Spacer(Modifier.width(if (showSubscribe) 4.dp else 9.dp))
+            CircleAction(
+                icon = R.drawable.shuffle,
+                contentDescription = stringResource(R.string.shuffle),
+                onClick = onShuffle,
+            )
         }
         Spacer(Modifier.width(if (showSubscribe) 4.dp else 9.dp))
         CircleAction(

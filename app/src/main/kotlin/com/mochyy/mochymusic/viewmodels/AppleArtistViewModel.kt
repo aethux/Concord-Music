@@ -12,7 +12,10 @@ import com.mochyy.mochymusic.db.entities.ArtistEntity
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.db.entities.SongEntity
 import com.mochyy.mochymusic.db.entities.SongSource
+import com.mochyy.mochymusic.canvas.AppleArtistEditorial
+import com.mochyy.mochymusic.canvas.AppleMusicArtistBackgroundProvider
 import com.mochyy.mochymusic.db.MusicDatabase
+import com.mochyy.mochymusic.playback.queues.AppleStationQueue
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -59,6 +63,10 @@ class AppleArtistViewModel @Inject constructor(
     private val _liked = MutableStateFlow(false)
     val liked: StateFlow<Boolean> = _liked.asStateFlow()
 
+    /** Apple's editorial for this artist: the motion loops, the still, the wordmark and the bio */
+    private val _editorial = MutableStateFlow<AppleArtistEditorial?>(null)
+    val editorial: StateFlow<AppleArtistEditorial?> = _editorial.asStateFlow()
+
     private var observer: Job? = null
 
     init {
@@ -68,6 +76,14 @@ class AppleArtistViewModel @Inject constructor(
     fun retry() {
         _failed.value = false
         load()
+    }
+
+    /** the artist's radio: a station seeded from the artist itself */
+    suspend fun stationQueue(): AppleStationQueue? = withContext(Dispatchers.IO) {
+        val pair = tokens.read() ?: return@withContext null
+        val client = AppleClient(pair)
+        val stationId = "ra.${artistId}"
+        AppleStationQueue(client, stationId, runCatching { client.station(stationId) }.getOrNull())
     }
 
     private fun observeLibrary(name: String) {
@@ -128,6 +144,12 @@ class AppleArtistViewModel @Inject constructor(
             _failed.value = false
             _page.value = Page(artist = artist, songs = songs)
             observeLibrary(artist.name)
+            // by Apple's id, not by name: the id is already known, and a name search can land on
+            // the wrong artist
+            val storefront = runCatching { AppleClient(pair).storefront() }.getOrDefault("us")
+            _editorial.value = runCatching {
+                AppleMusicArtistBackgroundProvider.getArtistEditorialById(artist.id, storefront)
+            }.getOrNull()
         }
     }
 }

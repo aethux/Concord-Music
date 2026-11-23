@@ -52,6 +52,13 @@ data class AppleRelease(
     val trackCount: Int?,
 )
 
+/**
+ * The loop to play for a banner of this width/height ratio: a tall banner crops a 16:9 asset badly,
+ * so the square loop wins there and the wide one wins on a wide banner.
+ */
+fun AppleArtistEditorial.motionFor(aspectRatio: Float): String? =
+    if (aspectRatio < 1f) motionSquareUrl ?: motionVideoUrl else motionVideoUrl ?: motionSquareUrl
+
 /** a sized url from an mzstatic {w}x{h} template, png or webp as format keeps transparency */
 fun appleArtworkUrl(template: String, width: Int, height: Int, format: String = "jpg"): String =
     template
@@ -111,6 +118,25 @@ object AppleMusicArtistBackgroundProvider {
         cache[cacheKey("artist", artistName, storefront)]
             ?.takeIf { it.expiresAtMs > System.currentTimeMillis() }
             ?.editorial
+
+    /**
+     * The same editorial by Apple's own artist id. Every Apple page already knows the id, so this is
+     * the entry to prefer: no search, no chance of the wrong artist with a similar name.
+     */
+    suspend fun getArtistEditorialById(
+        artistId: String,
+        storefront: String = "us",
+    ): AppleArtistEditorial? {
+        if (artistId.isBlank()) return null
+        val key = cacheKey("appleId", artistId, storefront)
+        cache[key]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let { return it.editorial }
+        val result = fetchArtist(artistId, storefront)
+        cache[key] = CacheEntry(
+            result,
+            System.currentTimeMillis() + if (result != null) CACHE_TTL_MS else MISS_TTL_MS,
+        )
+        return result
+    }
 
     suspend fun getArtistEditorial(
         artistName: String,
@@ -220,7 +246,14 @@ object AppleMusicArtistBackgroundProvider {
         val logoWidth = logo?.get("width")?.jsonPrimitive?.contentOrNull?.toFloatOrNull()
         val logoHeight = logo?.get("height")?.jsonPrimitive?.contentOrNull?.toFloatOrNull()
 
-        val banner = listOf("bannerUber", "storeFlowcase", "subscriptionHero", "originalFlowcaseBrick")
+        // Apple's own first choice for the header still, then the older banners
+        val banner = listOf(
+            "centeredFullscreenBackground",
+            "bannerUber",
+            "storeFlowcase",
+            "subscriptionHero",
+            "originalFlowcaseBrick",
+        )
             .firstNotNullOfOrNull { key -> artwork?.get(key)?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull }
 
         val latest = artist["views"]?.jsonObject?.get("latest-release")?.jsonObject

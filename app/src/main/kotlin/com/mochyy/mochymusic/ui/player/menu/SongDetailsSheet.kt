@@ -105,12 +105,16 @@ fun SongDetailsSheet(
                     song.artists.filter { !it.id.isNullOrBlank() }.forEach { artist ->
                         val artistId = artist.id!!
                         val avatar by rememberArtistAvatar(artistId)
+                        // an Apple artist keeps no picture in our tables, so its name asks Apple
+                        val appleAvatar = com.mochyy.mochymusic.ui.component.detail.rememberAppleArtistAvatar(artist.name)
                         DetailRow(
                             title = stringResource(R.string.ps_details_view, artist.name),
                             onClick = { onOpenArtist(artistId) },
                         ) {
                             DetailImage(
-                                url = avatar,
+                                // the artist's own photo once Apple has answered; the song's cover
+                                // until then, so the row is never a bare person glyph
+                                url = avatar ?: appleAvatar ?: song.thumbnailUrl?.resize(120, 120),
                                 shape = CircleShape,
                                 placeholder = R.drawable.person,
                             )

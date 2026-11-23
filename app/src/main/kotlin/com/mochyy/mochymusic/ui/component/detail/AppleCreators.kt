@@ -78,3 +78,40 @@ fun rememberApplePeople(remoteId: String?): ApplePeople? {
     return people?.let { ApplePeople(loading = false, people = it) }
         ?: ApplePeople(loading = true, people = emptyList())
 }
+
+
+/**
+ * An Apple artist's picture by name, for the places that only carry the name: the song details
+ * sheet credits whoever made the song, and an Apple row keeps no artwork of its own.
+ */
+private val appleAvatarCache = mutableMapOf<String, String?>()
+
+@Composable
+fun rememberAppleArtistAvatar(artistName: String?): String? {
+    val context = LocalContext.current
+    var url by remember(artistName) {
+        mutableStateOf(artistName?.let { appleAvatarCache[it] })
+    }
+
+    LaunchedEffect(artistName) {
+        val name = artistName?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        if (appleAvatarCache.containsKey(name)) {
+            url = appleAvatarCache[name]
+            return@LaunchedEffect
+        }
+        val fetched = withContext(Dispatchers.IO) {
+            val tokens = EntryPointAccessors
+                .fromApplication(context.applicationContext, AppleCreatorsEntryPoint::class.java)
+                .appleTokens()
+            val pair = tokens.read() ?: return@withContext null
+            val client = AppleClient(pair)
+            val id = runCatching { client.artistIdByName(name) }.getOrNull() ?: return@withContext null
+            runCatching { client.artistPage(id)?.artworkUrl }.getOrNull()
+                ?.let { AppleCovers.sized(it, 300) }
+        }
+        appleAvatarCache[name] = fetched
+        url = fetched
+    }
+
+    return url
+}

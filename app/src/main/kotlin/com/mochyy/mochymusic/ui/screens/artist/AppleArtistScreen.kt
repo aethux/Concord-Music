@@ -1,11 +1,12 @@
-// Concord: new — Apple's artist page, in Mochy's artist-page clothes.
-//
-// The header is Mochy's: a full-bleed photo, the round avatar over its foot, the name in the artist
-// title style, and the same play pill and heart. The shelves are Mochy's too — the Most Played grid
-// for songs, cover rows for albums, round cards for similar artists, the same about at the end. What
-// is Apple's is the content: its artist resource, its five views, its music videos and its bio.
+// Concord: new — Apple's artist page, built out of Mochy's artist page: the same banner with its
+// blurred bands, the same avatar that fades away, the same name, the same release-and-about pager,
+// the same shelf titles and cards. Apple supplies the content; Mochy supplies every pixel of the look.
 package com.mochyy.mochymusic.ui.screens.artist
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -18,39 +19,40 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -66,23 +68,32 @@ import com.mochyy.mochymusic.applesync.AppleAlbumRef
 import com.mochyy.mochymusic.applesync.AppleArtistRef
 import com.mochyy.mochymusic.applesync.AppleCovers
 import com.mochyy.mochymusic.applesync.AppleMusicVideo
+import com.mochyy.mochymusic.canvas.appleArtworkUrl
+import com.mochyy.mochymusic.canvas.motionFor
+import com.mochyy.mochymusic.constants.ShowArtistBackgroundVideoKey
 import com.mochyy.mochymusic.db.entities.AlbumEntity
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.ui.component.BoneColor
+import com.mochyy.mochymusic.ui.component.GlassState
 import com.mochyy.mochymusic.ui.component.HomeCardHighlight
 import com.mochyy.mochymusic.ui.component.HomeCardSpacing
 import com.mochyy.mochymusic.ui.component.HomeCoverCard
-import com.mochyy.mochymusic.ui.component.HomeSectionTitle
+import com.mochyy.mochymusic.ui.component.revealOnAppear
+import com.mochyy.mochymusic.ui.component.rememberRevealSeenState
 import com.mochyy.mochymusic.ui.component.detail.PlaylistInset
 import com.mochyy.mochymusic.ui.component.detail.PlaylistStatsStyle
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackBones
-import com.mochyy.mochymusic.ui.player.CanvasArtworkPlayer
+import com.mochyy.mochymusic.ui.component.detail.playlistCoverHeight
 import com.mochyy.mochymusic.ui.utils.backToMain
-import com.mochyy.mochymusic.ui.utils.stableSystemBars
 import com.mochyy.mochymusic.utils.makeTimeString
+import com.mochyy.mochymusic.utils.rememberPreference
+import com.mochyy.mochymusic.ui.component.rememberCoverBlurAvailable
+import com.mochyy.mochymusic.ui.theme.rememberCoverThemeColor
 import com.mochyy.mochymusic.viewmodels.AppleArtistViewModel
+import com.mochyy.mochymusic.viewmodels.ArtistRelease
+import kotlinx.coroutines.launch
 
 @Composable
 fun AppleArtistScreen(
@@ -95,27 +106,80 @@ fun AppleArtistScreen(
     val librarySongs by viewModel.librarySongs.collectAsState()
     val libraryAlbums by viewModel.libraryAlbums.collectAsState()
     val liked by viewModel.liked.collectAsState()
+    val editorial by viewModel.editorial.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
-    val lazyListState = rememberLazyListState()
+    val showBackgroundVideo by rememberPreference(key = ShowArtistBackgroundVideoKey, defaultValue = true)
+    val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
 
     val current = page
+    val artist = current?.artist
     val songs = current?.songs.orEmpty()
+    val name = artist?.name.orEmpty()
 
-    val topSongsTitle = stringResource(R.string.artist_top_songs)
+    val topTitle = stringResource(R.string.artist_top_songs)
     val libraryTitle = stringResource(R.string.artist_in_your_library)
-    val savedAlbumsTitle = stringResource(R.string.artist_saved_albums_of, current?.artist?.name.orEmpty())
+    val savedTitle = stringResource(R.string.artist_saved_albums_of, name)
     val albumsTitle = stringResource(R.string.artist_albums)
     val singlesTitle = stringResource(R.string.artist_singles_eps)
     val videosTitle = stringResource(R.string.artist_videos)
+    val similarTitle = stringResource(R.string.artist_similar)
+
+    val lazyListState = rememberLazyListState()
+    val revealSeen = rememberRevealSeenState()
+
+    val bannerHeight = playlistCoverHeight()
+    val headerFoot = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding() + 6.dp
+    val bannerHeightPx = with(LocalDensity.current) { bannerHeight.toPx() }
+    val scrollProgress = remember(lazyListState, bannerHeightPx) {
+        derivedStateOf {
+            if (lazyListState.firstVisibleItemIndex > 0) 1f
+            else (lazyListState.firstVisibleItemScrollOffset / bannerHeightPx).coerceIn(0f, 1f)
+        }
+    }
+    val collapsed by remember(scrollProgress) { derivedStateOf { scrollProgress.value > 0.62f } }
+    val morph = remember { Animatable(0f) }
+    LaunchedEffect(collapsed) {
+        morph.animateTo(
+            targetValue = if (collapsed) 1f else 0f,
+            animationSpec = spring(dampingRatio = if (collapsed) 0.62f else 0.9f, stiffness = 360f),
+        )
+    }
+    val glassState = remember { GlassState() }
+
+    // the loop only starts once the page has opened and only runs while the banner sits still, the
+    // way Mochy's does: every frame of it repaints the banner and both blur bands
+    var opened by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(420)
+        opened = true
+    }
+    val atRest by remember { derivedStateOf { scrollProgress.value < 0.02f } }
+    val edgeBlur = rememberCoverBlurAvailable()
+
+    val stillUrl = editorial?.previewFrameUrl?.let { appleArtworkUrl(it, 1200, 1200, "webp") }
+        ?: artist?.artworkUrl?.let { AppleCovers.sized(it, 1200) }
+    val themeColor by rememberCoverThemeColor(stillUrl ?: artist?.artworkUrl)
+    val background = animateColorAsState(
+        targetValue = themeColor ?: MaterialTheme.colorScheme.background,
+        animationSpec = tween(600),
+        label = "artistTheme",
+    )
+    val bannerAspect = bannerHeight.value / androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    val motionUrl = editorial?.motionFor(bannerAspect)
+
+    val avatarAlpha by remember(scrollProgress) {
+        derivedStateOf { (1f - scrollProgress.value / 0.32f).coerceIn(0f, 1f) }
+    }
+    val avatarGone = avatarAlpha <= 0.01f
 
     fun play(list: List<Song>, shuffled: Boolean, startIndex: Int = 0) {
         val queue = if (shuffled) list.shuffled() else list
         if (queue.isEmpty()) return
         playerConnection.playQueue(
             ListQueue(
-                title = current?.artist?.name,
+                title = name,
                 items = queue.map { it.toMediaItem() },
                 startIndex = if (shuffled) 0 else startIndex.coerceIn(0, queue.size - 1),
             )
@@ -123,49 +187,69 @@ fun AppleArtistScreen(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val bannerHeight = maxWidth * 0.98f
         LazyColumn(
             state = lazyListState,
             contentPadding = LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Bottom).asPaddingValues(),
         ) {
             item(key = "header", contentType = "header") {
-                Column {
-                    val motion = current?.artist?.videos?.firstOrNull()
-                    Box(modifier = Modifier.fillMaxWidth().height(bannerHeight)) {
-                        if (current != null) {
-                            AsyncImage(
-                                model = current.artist.artworkUrl?.let { AppleCovers.sized(it, 1200) },
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize().background(BoneColor),
+                val landscape = com.mochyy.mochymusic.ui.utils.isLandscapeLayout()
+                Box(
+                    contentAlignment = Alignment.BottomStart,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // portrait lets the block sit past the photo, so the actions are never clipped
+                        .then(if (landscape) Modifier.height(bannerHeight - headerFoot) else Modifier),
+                ) {
+                    ArtistBanner(
+                        photoUrl = artist?.artworkUrl?.let { AppleCovers.sized(it, 1200) },
+                        stillUrl = stillUrl,
+                        motionUrl = motionUrl?.takeIf { showBackgroundVideo },
+                        playMotion = { opened && atRest && showBackgroundVideo },
+                        edgeBlur = edgeBlur,
+                        height = bannerHeight,
+                        scrollProgress = { scrollProgress.value },
+                        background = background,
+                    )
+                    // the foot of the cover is always smoked, whether the photo is blurred or not:
+                    // the name and the actions sit on it, and a bright banner would swallow them
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(bannerHeight * 0.55f)
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    0f to Color.Transparent,
+                                    0.55f to Color.Black.copy(alpha = 0.55f),
+                                    1f to Color.Black.copy(alpha = 0.88f),
+                                )
+                            ),
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = bannerHeight * ArtistAvatarAt)
+                            .padding(start = PlaylistInset - 3.dp, end = PlaylistInset),
+                    ) {
+                        // its room stays, so the name and the list don't jump when the circle leaves
+                        if (avatarGone) {
+                            Spacer(Modifier.height(ArtistAvatarSize))
+                        } else {
+                            ArtistAvatar(
+                                url = stillUrl ?: artist?.artworkUrl,
+                                modifier = Modifier.graphicsLayer { alpha = avatarAlpha },
                             )
                         }
-                        // Apple has no artist video: what it does ship is a preview clip for each music
-                        // video, so the artist's face is the still and their newest video loops over it
-                        if (motion?.previewUrl != null) {
-                            CanvasArtworkPlayer(
-                                primaryUrl = motion.previewUrl,
-                                fallbackUrl = null,
-                                isPlaying = true,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.verticalGradient(
-                                        0.55f to Color.Transparent,
-                                        1f to Color.Black.copy(alpha = 0.72f),
-                                    )
-                                ),
-                        )
-                    }
-                    Column(modifier = Modifier.padding(start = PlaylistInset, end = PlaylistInset, bottom = 8.dp)) {
-                        ArtistAvatar(url = current?.artist?.artworkUrl?.let { AppleCovers.sized(it, 544) })
                         Spacer(Modifier.height(14.dp))
-                        ArtistName(name = current?.artist?.name.orEmpty(), logoUrl = null, logoAspect = null)
-                        val genres = current?.artist?.genres.orEmpty()
+                        ArtistName(
+                            name = name,
+                            logoUrl = editorial?.logoUrl?.let { template ->
+                                val aspect = editorial?.logoAspect ?: 3f
+                                appleArtworkUrl(template, 1200, (1200 / aspect).toInt().coerceAtLeast(1), "webp")
+                            },
+                            logoAspect = editorial?.logoAspect,
+                        )
+                        val genres = artist?.genres.orEmpty()
                         if (genres.isNotEmpty()) {
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -182,9 +266,13 @@ fun AppleArtistScreen(
                             liked = liked,
                             subscribed = null,
                             showSubscribe = false,
-                            onPlay = { if (isPlaying) playerConnection.togglePlayPause() else play(songs, shuffled = false) },
+                            onPlay = { if (isPlaying) playerConnection.togglePlayPause() else play(songs, false) },
                             onLike = viewModel::toggleLike,
                             onSubscribe = {},
+                            onRadio = {
+                                scope.launch { viewModel.stationQueue()?.let { playerConnection.playQueue(it) } }
+                            },
+                            onShuffle = { play(songs, shuffled = true) },
                         )
                     }
                 }
@@ -208,11 +296,41 @@ fun AppleArtistScreen(
                 return@LazyColumn
             }
 
+            // Mochy's release-and-about pager: the newest release with the bio a swipe away
+            val release = artist?.latestRelease
+            if (release != null || !editorial?.bio.isNullOrBlank()) {
+                item(key = "release", contentType = "release") {
+                    ArtistReleasePager(
+                        release = release?.let {
+                            ArtistRelease(
+                                label = "Latest release",
+                                title = it.name,
+                                subtitle = name,
+                                thumbnailUrl = it.artworkUrl?.let { url -> AppleCovers.sized(url, 600) },
+                                dateLabel = it.year?.toString(),
+                            )
+                        },
+                        bio = editorial?.bio,
+                        artistName = name,
+                        releaseSaved = false,
+                        isReleasePlaying = false,
+                        onReleaseClick = { release?.let { navController.navigate("album/${it.id}") } },
+                        onReleasePlay = { release?.let { navController.navigate("album/${it.id}") } },
+                        onReleaseSave = {},
+                        onBioClick = {},
+                        modifier = Modifier.padding(top = 20.dp),
+                    )
+                }
+            }
+
             if (songs.isNotEmpty()) {
                 item(key = "top_title", contentType = "shelf_title") {
-                    HomeSectionTitle(
-                        title = topSongsTitle,
-                        onClick = { navController.navigate("apple_artist_songs/${viewModel.artistId}/top") },
+                    // every top song is already on the page, so the title has nowhere to send you
+                    ArtistShelfTitle(
+                        title = topTitle,
+                        modifier = Modifier
+                            .padding(top = 30.dp, bottom = 8.dp)
+                            .revealOnAppear(key = "top_title", seenState = revealSeen),
                     )
                 }
                 item(key = "top_grid", contentType = "track_grid") {
@@ -224,17 +342,20 @@ fun AppleArtistScreen(
                             val id = songs[index].id
                             if (id == mediaMetadata?.id) playerConnection.togglePlayPause() else play(songs, false, index)
                         },
-                        onViewAll = { navController.navigate("apple_artist_songs/${viewModel.artistId}/top") },
+                        onViewAll = null,
+                        modifier = Modifier.revealOnAppear(key = "top_grid", seenState = revealSeen),
                     )
                 }
             }
 
             if (librarySongs.isNotEmpty()) {
-                item(key = "top_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
                 item(key = "library_title", contentType = "shelf_title") {
-                    HomeSectionTitle(
+                    ArtistShelfTitle(
                         title = libraryTitle,
                         onClick = { navController.navigate("apple_artist_songs/${viewModel.artistId}/library") },
+                        modifier = Modifier
+                            .padding(top = 30.dp, bottom = 8.dp)
+                            .revealOnAppear(key = "library_title", seenState = revealSeen),
                     )
                 }
                 item(key = "library_grid", contentType = "track_grid") {
@@ -248,112 +369,190 @@ fun AppleArtistScreen(
                             else play(librarySongs, false, index)
                         },
                         onViewAll = { navController.navigate("apple_artist_songs/${viewModel.artistId}/library") },
+                        modifier = Modifier.revealOnAppear(key = "library_grid", seenState = revealSeen),
                     )
                 }
             }
 
-            if (librarySongs.isNotEmpty()) {
-                item(key = "library_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
-            }
-
-            if (libraryAlbums.isNotEmpty()) {
-                item(key = "saved_albums_title", contentType = "shelf_title") {
-                    HomeSectionTitle(title = savedAlbumsTitle)
-                }
-                item(key = "saved_albums_row", contentType = "cover_row") {
-                    AlbumRow(
-                        albums = libraryAlbums.map { it.id to (it.title to it.thumbnailUrl) },
-                        onAlbum = { navController.navigate("album/$it") },
+            coverRow(
+                key = "saved_albums",
+                title = savedTitle,
+                seen = revealSeen,
+            ) {
+                libraryAlbums.map { album ->
+                    AlbumCard(
+                        id = album.id,
+                        title = album.title,
+                        subtitle = album.year?.toString(),
+                        artworkUrl = album.thumbnailUrl,
+                        onClick = { navController.navigate("album/${album.id}") },
                     )
                 }
             }
 
-            if (libraryAlbums.isNotEmpty()) {
-                item(key = "saved_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
+            coverRow("albums", albumsTitle, revealSeen) {
+                artist?.albums.orEmpty().map { it.toCard() }
+            }
+            coverRow("singles", singlesTitle, revealSeen) {
+                artist?.singles.orEmpty().map { it.toCard() }
+            }
+            coverRow("compilations", "Compilations", revealSeen) {
+                artist?.compilations.orEmpty().map { it.toCard() }
             }
 
-            albumSection("albums", albumsTitle, current.artist.albums, navController)
-            albumSection("singles", singlesTitle, current.artist.singles, navController, gapBefore = true)
-            albumSection("compilations", "Compilations", current.artist.compilations, navController, gapBefore = true)
-
-            if (current.artist.videos.isNotEmpty()) {
-                item(key = "videos_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
-                item(key = "videos_title", contentType = "shelf_title") {
-                    HomeSectionTitle(title = videosTitle)
-                }
-                item(key = "videos_row", contentType = "video_row") {
-                    VideoRow(current.artist.videos) { video ->
-                        // Apple plays music videos through its own player; the page opens them on
-                        // music.apple.com until that player exists here
-                        video.url?.let { url -> uriHandler.openUri(url) }
+            if (!artist?.videos.isNullOrEmpty()) {
+                coverRow("videos", videosTitle, revealSeen) {
+                    artist!!.videos.map { video ->
+                        AlbumCard(
+                            id = "video_${video.id}",
+                            title = video.name,
+                            subtitle = null,
+                            artworkUrl = video.artworkUrl?.let { AppleCovers.sized(it, 600) },
+                            wide = true,
+                            onClick = { video.url?.let { uriHandler.openUri(it) } },
+                        )
                     }
                 }
             }
 
-            if (current.artist.similar.isNotEmpty()) {
-                item(key = "similar_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
-                item(key = "similar_title", contentType = "shelf_title") {
-                    HomeSectionTitle(title = "Similar artists")
-                }
-                item(key = "similar_row", contentType = "artist_row") {
-                    SimilarRow(current.artist.similar) { artist ->
-                        navController.navigate("apple_artist/${artist.id}")
-                    }
-                }
-            }
-
-            if (!current.artist.bio.isNullOrBlank()) {
-                item(key = "about") {
-                    ArtistAbout(name = current.artist.name, bio = plainBio(current.artist.bio.orEmpty()))
+            coverRow("similar", similarTitle, revealSeen, circular = true) {
+                artist?.similar.orEmpty().map { other ->
+                    AlbumCard(
+                        id = other.id,
+                        title = other.name,
+                        subtitle = null,
+                        artworkUrl = other.artworkUrl?.let { AppleCovers.sized(it, 600) },
+                        circular = true,
+                        onClick = { navController.navigate("apple_artist/${other.id}") },
+                    )
                 }
             }
         }
 
-        // the page scrolls under the status bar, so its way back floats over the banner
-        val topInset = androidx.compose.foundation.layout.WindowInsets.stableSystemBars
-            .asPaddingValues().calculateTopPadding()
-        Box(
+        ArtistTopBar(
+            glassState = glassState,
+            morph = { morph.value },
+            title = name,
+            background = background,
+            profileImage = null,
+            onBackClick = { navController.navigateUp() },
+            onBackLongClick = { navController.backToMain() },
+            onProfileClick = {},
+        )
+    }
+}
+
+private data class CardItem(
+    val id: String,
+    val title: String,
+    val subtitle: String?,
+    val artworkUrl: String?,
+    val circular: Boolean = false,
+    val wide: Boolean = false,
+    val onClick: () -> Unit,
+)
+
+private fun AppleAlbumRef.toCard(): CardItem =
+    CardItem(
+        id = id,
+        title = name,
+        subtitle = year?.toString(),
+        artworkUrl = artworkUrl?.let { AppleCovers.sized(it, 600) },
+        onClick = {},
+    )
+
+/** a shelf title and its row of cards, revealed on the way in like every other Mochy shelf */
+private fun androidx.compose.foundation.lazy.LazyListScope.coverRow(
+    key: String,
+    title: String,
+    seen: com.mochyy.mochymusic.ui.component.RevealSeenState,
+    circular: Boolean = false,
+    cards: () -> List<CardItem>,
+) {
+    val items = cards()
+    if (items.isEmpty()) return
+    item(key = "${key}_title", contentType = "shelf_title") {
+        ArtistShelfTitle(
+            title = title,
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 12.dp, top = topInset + 8.dp)
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.42f))
-                .clickable { navController.navigateUp() },
-            contentAlignment = Alignment.Center,
+                .padding(top = 30.dp, bottom = 8.dp)
+                .revealOnAppear(key = "${key}_title", seenState = seen),
+        )
+    }
+    item(key = "${key}_row", contentType = "cover_row") {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = PlaylistInset),
+            horizontalArrangement = Arrangement.spacedBy(HomeCardSpacing),
+            modifier = Modifier.revealOnAppear(key = "${key}_row", seenState = seen),
         ) {
-            androidx.compose.foundation.Image(
-                painter = painterResource(R.drawable.arrow_back),
-                contentDescription = "Back",
-                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White),
-                modifier = Modifier.size(20.dp),
-            )
+            items(items = items, key = { it.id }) { card ->
+                CoverCard(card, circular = circular)
+            }
         }
     }
 }
 
-/** the Most Played grid: a few rows tall and scrolling sideways, with the last cell opening the rest */
+@Composable
+private fun CoverCard(card: CardItem, circular: Boolean = false) {
+    HomeCoverCard(
+        title = card.title,
+        subtitle = card.subtitle,
+        thumbnailUrl = card.artworkUrl,
+        circular = card.circular || circular,
+        size = if (card.wide) 190.dp else 150.dp,
+        isPlaying = { false },
+        modifier = Modifier.combinedClickable(
+            interactionSource = null,
+            indication = HomeCardHighlight,
+            onClick = card.onClick,
+            onLongClick = {},
+        ),
+    )
+}
+
+/** album cards handed to the shelf builder already carrying their own tap */
+private fun AlbumCard(
+    id: String,
+    title: String,
+    subtitle: String?,
+    artworkUrl: String?,
+    circular: Boolean = false,
+    wide: Boolean = false,
+    onClick: () -> Unit,
+): CardItem = CardItem(id, title, subtitle, artworkUrl, circular, wide, onClick)
+
+/**
+ * The grid the page had: three rows tall, scrolling sideways, each cell a compact song. It stops at
+ * three columns now — eight songs and a View all in the ninth cell — so it reads as a batch rather
+ * than an endless strip.
+ */
 @Composable
 private fun ArtistSongGrid(
     songs: List<Song>,
     playingId: () -> String?,
     isPlaying: () -> Boolean,
     onSong: (Int) -> Unit,
-    onViewAll: () -> Unit,
+    /** when given, the grid stops at three columns and its ninth cell is View all */
+    onViewAll: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     val rows = minOf(3, songs.size).coerceAtLeast(1)
-    val gridState = rememberLazyGridState()
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+    val shown = if (onViewAll != null) songs.take(8) else songs
+    val more = onViewAll != null && songs.size > shown.size
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val columnWidth = maxWidth * 0.78f
-        LazyHorizontalGrid(
+        androidx.compose.foundation.lazy.grid.LazyHorizontalGrid(
             state = gridState,
-            rows = GridCells.Fixed(rows),
-            contentPadding = PaddingValues(horizontal = PlaylistInset),
+            rows = androidx.compose.foundation.lazy.grid.GridCells.Fixed(rows),
+            // the shelf title starts at PlaylistInset - 4dp, so the rows do too: the grid's left
+            // edge sits on the title's, not four dp past it
+            contentPadding = PaddingValues(start = 34.dp, end = PlaylistInset),
             horizontalArrangement = Arrangement.spacedBy(26.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.fillMaxWidth().height(56.dp * rows),
         ) {
-            itemsIndexed(items = songs, key = { _, song -> song.id }) { index, song ->
+            itemsIndexed(items = shown, key = { _, song -> song.id }) { index, song ->
                 CompactTrackRow(
                     song = song,
                     active = song.id == playingId(),
@@ -362,8 +561,10 @@ private fun ArtistSongGrid(
                     modifier = Modifier.width(columnWidth),
                 )
             }
-            item(key = "view_all") {
-                ViewAllTile(onClick = onViewAll, modifier = Modifier.width(columnWidth).height(52.dp))
+            if (more && onViewAll != null) {
+                item(key = "view_all") {
+                    ViewAllTile(onClick = onViewAll, modifier = Modifier.width(columnWidth).height(52.dp))
+                }
             }
         }
     }
@@ -423,8 +624,7 @@ private fun ViewAllTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp),
+            .clickable(onClick = onClick),
     ) {
         Text(
             text = "View all",
@@ -440,143 +640,3 @@ private fun ViewAllTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
         )
     }
 }
-
-@Composable
-private fun AlbumRow(
-    albums: List<Pair<String, Pair<String, String?>>>,
-    onAlbum: (String) -> Unit,
-) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = PlaylistInset),
-        horizontalArrangement = Arrangement.spacedBy(HomeCardSpacing),
-    ) {
-        items(items = albums, key = { it.first }) { (id, meta) ->
-            val (title, art) = meta
-            HomeCoverCard(
-                title = title,
-                subtitle = null,
-                thumbnailUrl = art,
-                size = 150.dp,
-                isPlaying = { false },
-                sharedElementKey = "album-$id",
-                modifier = Modifier.combinedClickable(
-                    interactionSource = null,
-                    indication = HomeCardHighlight,
-                    onClick = { onAlbum(id) },
-                    onLongClick = {},
-                ),
-            )
-        }
-    }
-}
-
-private fun androidx.compose.foundation.lazy.LazyListScope.albumSection(
-    key: String,
-    title: String,
-    albums: List<AppleAlbumRef>,
-    navController: NavController,
-    gapBefore: Boolean = false,
-) {
-    if (albums.isEmpty()) return
-    if (gapBefore) {
-        item(key = "${key}_gap", contentType = "gap") { Spacer(Modifier.height(26.dp)) }
-    }
-    item(key = "${key}_title", contentType = "shelf_title") {
-        HomeSectionTitle(title = title)
-    }
-    item(key = "${key}_row", contentType = "cover_row") {
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = PlaylistInset),
-            horizontalArrangement = Arrangement.spacedBy(HomeCardSpacing),
-        ) {
-            items(items = albums, key = { it.id }) { album ->
-                HomeCoverCard(
-                    title = album.name,
-                    subtitle = album.year?.toString(),
-                    thumbnailUrl = album.artworkUrl?.let { AppleCovers.sized(it, 400) },
-                    size = 150.dp,
-                    isPlaying = { false },
-                    sharedElementKey = "album-${album.id}",
-                    modifier = Modifier.combinedClickable(
-                        interactionSource = null,
-                        indication = HomeCardHighlight,
-                        onClick = { navController.navigate("album/${album.id}") },
-                        onLongClick = {},
-                    ),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun VideoRow(videos: List<AppleMusicVideo>, onClick: (AppleMusicVideo) -> Unit) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = PlaylistInset),
-        horizontalArrangement = Arrangement.spacedBy(HomeCardSpacing),
-    ) {
-        items(items = videos, key = { it.id }) { video ->
-            HomeCoverCard(
-                title = video.name,
-                subtitle = null,
-                thumbnailUrl = video.artworkUrl?.let { AppleCovers.sized(it, 400) },
-                size = 190.dp,
-                isPlaying = { false },
-                modifier = Modifier.clickable { onClick(video) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun SimilarRow(similar: List<AppleArtistRef>, onClick: (AppleArtistRef) -> Unit) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = PlaylistInset),
-        horizontalArrangement = Arrangement.spacedBy(HomeCardSpacing),
-    ) {
-        items(items = similar, key = { it.id }) { artist ->
-            HomeCoverCard(
-                title = artist.name,
-                subtitle = null,
-                thumbnailUrl = artist.artworkUrl?.let { AppleCovers.sized(it, 400) },
-                circular = true,
-                size = 120.dp,
-                isPlaying = { false },
-                modifier = Modifier.clickable { onClick(artist) },
-            )
-        }
-    }
-}
-
-/** the bio at the foot of the page: six lines, and a tap opens the rest in place */
-@Composable
-private fun ArtistAbout(name: String, bio: String) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = PlaylistInset).padding(top = 26.dp, bottom = 18.dp)) {
-        Text(
-            text = stringResource(R.string.artist_about, name),
-            color = Color.White,
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = bio,
-            color = Color.White.copy(alpha = 0.72f),
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = if (expanded) Int.MAX_VALUE else 6,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.clickable { expanded = !expanded },
-        )
-    }
-}
-
-/** Apple writes the bio as html; this is its text, with its paragraph breaks kept */
-private fun plainBio(html: String): String =
-    html.replace(Regex("(?i)<br\\s*/?>"), "\n")
-        .replace(Regex("(?i)</p>"), "\n\n")
-        .replace(Regex("<[^>]+>"), "")
-        .replace("&amp;", "&")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace(Regex("\n{3,}"), "\n\n")
-        .trim()

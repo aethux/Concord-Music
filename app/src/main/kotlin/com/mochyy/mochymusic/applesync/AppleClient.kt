@@ -439,6 +439,7 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
      * albums, singles, compilations and the artists beside it.
      */
     suspend fun artistPage(id: String): AppleArtist? {
+        artistCache[id]?.takeIf { it.second > System.currentTimeMillis() }?.let { return it.first }
         val storefront = storefront()
         val base = page("/v1/catalog/$storefront/artists/$id?extend=artistBio") ?: return null
         val artist = AppleArtistReader.artist(base) ?: return null
@@ -463,7 +464,7 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         val similar = artistView(id, "similar-artists", 12)
             ?.let { runCatching { AppleArtistReader.artists(it) }.getOrNull() }
             .orEmpty()
-        return artist.copy(
+        val page = artist.copy(
             latestRelease = latestRelease,
             videos = videos,
             topSongs = topSongs,
@@ -472,6 +473,9 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
             compilations = compilations,
             similar = similar,
         )
+        // the songs screens read the same artist; a short cache keeps that from being a second read
+        artistCache[id] = page to (System.currentTimeMillis() + ArtistCacheMs)
+        return page
     }
 
     private suspend fun artistView(id: String, view: String, limit: Int, extend: String? = null) =
@@ -561,5 +565,9 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
 
     private companion object {
         const val Host = "https://amp-api.music.apple.com"
+
+        /** the artist pages read this run, with the moment they expire */
+        val artistCache = java.util.concurrent.ConcurrentHashMap<String, Pair<AppleArtist, Long>>()
+        const val ArtistCacheMs = 1000L * 60 * 10
     }
 }

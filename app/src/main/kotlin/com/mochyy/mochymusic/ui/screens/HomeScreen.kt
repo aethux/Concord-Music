@@ -812,11 +812,10 @@ fun HomeScreen(
     val appleFailed by appleHomeViewModel.failed.collectAsState()
 
     val openAppleItem: (AppleHomeItem) -> Unit = { item ->
-        when (item.kind) {
-            AppleHomeItem.Kind.Album -> navController.navigate("album/${item.id}")
-            // a playlist that is already in the library opens as the playlist it is; one that is not
-            // needs Apple's own playlist page, which is the next feature
-            AppleHomeItem.Kind.Playlist -> scope.launch(Dispatchers.IO) {
+        // routed by the id, not the shelf kind: a mood shelf can arrive typed as a station, and the
+        // id is what Apple actually promises
+        when {
+            item.id.startsWith("pl.") || item.id.startsWith("p.") -> scope.launch(Dispatchers.IO) {
                 val local = runCatching {
                     viewModel.database.importedPlaylistByRemoteId(ImportSource.APPLE_MUSIC.key, item.id)
                 }.getOrNull()
@@ -824,11 +823,13 @@ fun HomeScreen(
                     if (local != null) {
                         navController.navigate("local_playlist/${local.playlistId}")
                     } else {
-                        navController.navigate("coming_soon/${Uri.encode(item.title)}")
+                        navController.navigate("apple_playlist/${item.id}")
                     }
                 }
             }
-            AppleHomeItem.Kind.Station -> navController.navigate("coming_soon/${Uri.encode(item.title)}")
+            item.id.startsWith("ra.") || item.id.startsWith("AM_STN") ->
+                navController.navigate("coming_soon/${Uri.encode(item.title)}")
+            else -> navController.navigate("album/${item.id}")
         }
     }
 

@@ -369,6 +369,21 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
             ?.idString("id")
     }.getOrNull()
 
+    /**
+     * One playlist's page: the resource for `p.…` (library) or `pl.…` (catalogue), then its tracks.
+     * Read-only — writes belong behind `AppleGuard`, not here.
+     */
+    suspend fun playlistPage(id: String): ApplePlaylist? {
+        val storefront = storefront()
+        val inLibrary = id.startsWith("p.")
+        val page = page(
+            if (inLibrary) "/v1/me/library/playlists/$id" else "/v1/catalog/$storefront/playlists/$id",
+        ) ?: return null
+        val playlist = ApplePlaylistReader.playlist(page, inLibrary) ?: return null
+        val songs = if (inLibrary) playlistTracks(id) else catalogPlaylistTracks(id, storefront)
+        return playlist.copy(songs = songs)
+    }
+
     /** One linked playlist's entries, in order, with each entry's library id. */
     suspend fun playlistTracks(playlistId: String, maxPages: Int = 400): List<RemoteSong> =
         all("/v1/me/library/playlists/$playlistId/tracks?limit=100", maxPages, AppleLibrary::songs)

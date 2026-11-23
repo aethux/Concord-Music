@@ -271,6 +271,13 @@ fun NavGraphBuilder.navigationBuilder(
         ComingSoonScreen(navController = navController, sectionTitle = sectionTitle)
     }
 
+    coverSourceComposable(
+        route = "apple_playlist/{playlistId}",
+        arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
+    ) {
+        com.mochyy.mochymusic.ui.screens.playlist.ApplePlaylistScreen(navController = navController)
+    }
+
     coverSourceComposable(Screens.Search.route) {
         // YouTube's browse and suggestions were this whole page; hidden, so the tab says so
         com.mochyy.mochymusic.ui.screens.search.AppleSearchPlaceholder(navController = navController)

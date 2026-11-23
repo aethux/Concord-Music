@@ -315,6 +315,7 @@
     <string name="player_slider_style">Player slider style</string>
     <string name="default_">Default</string>
     <string name="apple_music">Apple Music</string>
+    <string name="search_apple_coming">Apple Music search is coming. Your library is still searchable from Your Library.</string>
     <string name="home_apple_failed">Could not load Apple Music</string>
     <string name="home_apple_retry">Tap to try again</string>
     <string name="squiggly">Squiggly</string>

@@ -192,15 +192,6 @@ fun ImportSyncScreen(
                     },
                 ),
                 SettingsItem(
-                    title = { Text(stringResource(R.string.import_sync_sync_title)) },
-                    highlightKey = "Sync",
-                    descriptionText = if (signedIn) stringResource(R.string.import_sync_sync_desc_connected)
-                    else stringResource(R.string.import_sync_sync_desc_disconnected),
-                    icon = painterResource(R.drawable.sync),
-                    iconShape = CircleShape,
-                    onClick = { navController.navigate(YouTubeSyncRoute) },
-                ),
-                SettingsItem(
                     title = { Text(stringResource(R.string.devices_title)) },
                     highlightKey = "Device integration",
                     descriptionText = stringResource(R.string.devices_row_detail),

@@ -272,15 +272,8 @@ fun NavGraphBuilder.navigationBuilder(
     }
 
     coverSourceComposable(Screens.Search.route) {
-        val pureBlackEnabled by rememberPreference(PureBlackKey, defaultValue = false)
-        val useDarkTheme = ForceDarkTheme
-        val pureBlack = remember(pureBlackEnabled, useDarkTheme) {
-            pureBlackEnabled && useDarkTheme
-        }
-        SearchScreen(
-            navController = navController,
-            pureBlack = pureBlack
-        )
+        // YouTube's browse and suggestions were this whole page; hidden, so the tab says so
+        com.mochyy.mochymusic.ui.screens.search.AppleSearchPlaceholder(navController = navController)
     }
 
     composable(
@@ -838,21 +831,6 @@ fun NavGraphBuilder.navigationBuilder(
         )
     }
 
-    composable(
-        route = "youtube_browse/{browseId}?params={params}",
-        arguments = listOf(
-            navArgument("browseId") {
-                type = NavType.StringType
-                nullable = true
-            },
-            navArgument("params") {
-                type = NavType.StringType
-                nullable = true
-            },
-        ),
-    ) {
-        YouTubeBrowseScreen(navController)
-    }
 
     coverSourceComposable("library/albums") {
         com.mochyy.mochymusic.ui.screens.library.LibraryAlbumsScreen(navController = navController)

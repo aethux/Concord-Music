@@ -29,6 +29,14 @@ enum class PageKind(val key: String, val ttlMs: Long) {
     ALBUM("album", 6L * 60 * 60 * 1000),
     PLAYLIST("playlist", 6L * 60 * 60 * 1000),
     HOME("home", 15L * 60 * 1000),
+
+    /**
+     * The storefront the account is in. Not a page, but it is read in front of every page —
+     * `artistPage`, `catalogAlbum` and `playlistPage` each ask it first — so leaving it live put one
+     * request in front of every page in the app. It changes when the account moves storefront, and
+     * the refresh-behind-the-paint path picks that up after the lifetime.
+     */
+    STOREFRONT("storefront", 24L * 60 * 60 * 1000),
 }
 
 /** The rows, without Room, so the policy below is testable on the JVM. */
@@ -169,12 +177,12 @@ class ApplePageCache(
         suspend fun invalidateLibrary(dao: AppleSyncDao) = dao.clearPages(PageKind.HOME.key)
 
         /**
-         * The key, or null when this URL is not a detail page.
+         * The key, or null when this URL is not something worth keeping.
          *
-         * Only the four page reads are recognised — an artist and its views, an album and its
-         * tracks, a playlist and its tracks, the home feed. Everything else (library lists, search,
-         * ratings, the storefront, a song's cover lookup, station next-tracks) is a normal read:
-         * a stale list is what the sync exists to fix, and a cached rating would be wrong.
+         * The four page reads — an artist and its views, an album and its tracks, a playlist and its
+         * tracks — plus the home feed and the storefront. Everything else (library lists, search,
+         * ratings, a song's cover lookup, station next-tracks) is a normal read: a stale list is what
+         * the sync exists to fix, and a cached rating would be wrong.
          */
         internal fun pageKey(url: String): PageKey? {
             val path = if (url.startsWith("http")) url.substringAfter("://").substringAfter('/', "") else url.trimStart('/')
@@ -218,6 +226,11 @@ class ApplePageCache(
                 // /v1/me/recommendations — Apple's own home feed
                 p.size == 3 && at(0) == "v1" && at(1) == "me" && at(2) == "recommendations" -> {
                     kind = PageKind.HOME
+                    id = ""
+                }
+                // /v1/me/storefront — asked before every page, so it is worth one row
+                p.size == 3 && at(0) == "v1" && at(1) == "me" && at(2) == "storefront" -> {
+                    kind = PageKind.STOREFRONT
                     id = ""
                 }
                 else -> return null

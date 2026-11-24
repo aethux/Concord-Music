@@ -139,7 +139,6 @@ class ApplePageCacheTest {
             "/v1/me/library/albums?limit=100",
             "/v1/catalog/us/search?term=faded&types=songs&limit=10",
             "/v1/me/ratings/songs?ids=1,2",
-            "/v1/me/storefront",
             "/v1/catalog/us/songs/99?extend=editorialVideo&include=albums",
             "/v1/catalog/us/stations/ra.123",
         )
@@ -181,6 +180,17 @@ class ApplePageCacheTest {
         assertEquals(ApplePageCache.MaxRows, store.rows.size)
         assertTrue(store.rows.values.none { it.remoteId == "0" })
         assertTrue(store.rows.values.any { it.remoteId == (ApplePageCache.MaxRows + 4).toString() })
+    }
+
+    @Test
+    fun `the storefront is read once and then answered from the row`() = runBlocking {
+        var fetches = 0
+        cache.page("/v1/me/storefront") { fetches++; body("in") }
+        // every page asks this first; a second ask must not be a second request
+        val again = cache.page("/v1/me/storefront") { fetches++; body("us") }
+        assertEquals(1, fetches)
+        assertEquals("in", again.text("v"))
+        assertEquals(listOf("storefront"), store.rows.values.map { it.kind })
     }
 
     private fun body(value: String): JsonObject = buildJsonObject { put("v", JsonPrimitive(value)) }

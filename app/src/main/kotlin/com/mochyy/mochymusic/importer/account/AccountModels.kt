@@ -31,7 +31,9 @@ enum class AccountService(
     APPLE_MUSIC(
         route = "apple_music",
         label = "Apple Music",
-        loginUrl = "https://music.apple.com/us/library/playlists",
+        // Concord: the library page 404s when signed out; the web player's home is the page that
+        // offers Apple's sign-in button
+        loginUrl = "https://music.apple.com/",
         webOrigins = listOf("https://music.apple.com", "https://idmsa.apple.com", "https://authorize.music.apple.com", "https://www.apple.com"),
         playerOrigins = setOf("https://music.apple.com"),
     ),

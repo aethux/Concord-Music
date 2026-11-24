@@ -22,6 +22,10 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -55,6 +60,8 @@ import com.mochyy.mochymusic.ui.screens.settings.importsync.YouTubeLoginWebConte
 import com.mochyy.mochymusic.ui.screens.settings.importsync.clearWebSession
 import com.mochyy.mochymusic.ui.screens.settings.importsync.onSignInTick
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.BehindScale
+import com.mochyy.mochymusic.ui.screens.setup.onboarding.BrowserSheetBar
+import com.mochyy.mochymusic.ui.screens.setup.onboarding.ProviderSquircle
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.BrowserSpring
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.LinkImportPage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.Onb
@@ -82,22 +89,38 @@ private enum class ImportStep { Providers, ProviderSetup, WhatToSync, SyncOption
  */
 private val SheetHandleRow = 32.dp
 
-/** Opens the import sheet over whatever is showing: the onboarding's import pages, in one sheet. */
-fun PopupSheetState.showLibraryImportSheet() {
+/** the import browser's own grey, so the sign-in sheet matches the module sign-in's */
+private val BrowserSurface = Color(0xFF1C1C1C)
+
+/**
+ * Opens the import sheet over whatever is showing: the onboarding's import pages, in one sheet.
+ *
+ * [startWith] opens straight on that service's sign-in instead of the provider list — the signed-out
+ * Home, artist and playlist pages know the account they need is Apple's.
+ */
+fun PopupSheetState.showLibraryImportSheet(startWith: AccountService? = null) {
     var sheet: PopupSheetHandle? = null
     sheet = showWithHandle(fullBleed = true, surface = Onb.Page) {
-        LibraryImportFlow(onClose = { sheet?.dismiss() })
+        LibraryImportFlow(startWith = startWith, onClose = { sheet?.dismiss() })
     }
 }
 
 @Composable
-private fun LibraryImportFlow(onClose: () -> Unit) {
+private fun LibraryImportFlow(startWith: AccountService? = null, onClose: () -> Unit) {
     val vm: OnboardingViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
 
     val history = remember { mutableStateListOf(ImportStep.Providers) }
     var forward by remember { mutableStateOf(true) }
     val step = history.last()
+
+    // Concord: a caller that already knows the service opens on its sign-in; back then closes the sheet
+    LaunchedEffect(Unit) {
+        if (startWith != null && vm.session == null) {
+            vm.startProvider(startWith)
+            history[history.lastIndex] = ImportStep.ProviderSetup
+        }
+    }
 
     fun go(next: ImportStep, replaceCurrent: Boolean = false) {
         forward = true
@@ -122,6 +145,8 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
     val browserPresence = remember { Animatable(0f) }
     var browserShown by remember { mutableStateOf(false) }
     var browserWanted by remember { mutableStateOf(false) }
+    // Concord: the bar's address line, for the sheet that opens straight onto a sign-in
+    var browserUrl by remember { mutableStateOf("https://") }
 
     fun openBrowser() {
         if (session == null || browserWanted) return
@@ -209,8 +234,9 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
                 }
             },
     ) {
-        // the page, receding like a covered sheet while the browser is open over it
-        Box(
+        // the page, receding like a covered sheet while the browser is open over it; when the sheet
+        // was opened straight onto a sign-in there is no page to recede (see below)
+        if (startWith == null || !browserShown) Box(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
@@ -313,6 +339,37 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
         }
 
         if (browserShown && session != null) {
+            if (startWith != null) {
+                // Concord: opened straight onto sign-in, so this is the Apple Music module sign-in's
+                // shape — one bar over the web view, no second handle, no page behind it
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = browserPresence.value }
+                        .background(BrowserSurface)
+                        .padding(top = SheetHandleRow),
+                ) {
+                    BrowserSheetBar(
+                        icon = { ProviderSquircle(session.service, size = 38.dp) },
+                        title = stringResource(R.string.onb_sign_in_to, session.service.label),
+                        url = browserUrl,
+                        onClose = ::finish,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    CaptureWebContent(
+                        startUrl = session.service.loginUrl.orEmpty(),
+                        playerOrigins = session.service.playerOrigins,
+                        desktopSite = session.service.desktopSite,
+                        onHeader = session::onHeader,
+                        onTick = { view -> session.service.onSignInTick(view, session::onApplePageProbe, session::onCookies) },
+                        onExit = ::finish,
+                        onUrlChange = { browserUrl = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height((LocalConfiguration.current.screenHeightDp * 0.78f).dp),
+                    )
+                }
+            } else {
             // dims the page behind, and a tap on that strip closes the browser
             Box(
                 modifier = Modifier
@@ -350,6 +407,7 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
                         modifier = modifier,
                     )
                 }
+            }
             }
         }
     }

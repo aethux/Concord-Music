@@ -4,6 +4,10 @@
 // they belong behind AppleGuard with the epoch and the audit row, not on a page that only shows one.
 package com.mochyy.mochymusic.ui.screens.playlist
 
+import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
+import com.mochyy.mochymusic.ui.screens.library.showLibraryImportSheet
+import com.mochyy.mochymusic.ui.component.AppleSignInPrompt
+import com.mochyy.mochymusic.importer.account.AccountService
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.WindowInsets
@@ -63,6 +67,15 @@ fun ApplePlaylistScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
     val page by viewModel.page.collectAsState()
     val failed by viewModel.failed.collectAsState()
+    val signedOut by viewModel.signedOut.collectAsState()
+
+    // Concord: signing in is Mochy's own import sheet, opened on Apple's sign-in
+    val sheets = LocalZoomOutOverlayState.current
+// Concord: no Apple session means the page cannot exist — the prompt is the whole screen
+    if (signedOut) {
+        AppleSignInPrompt(onSignIn = { sheets.showLibraryImportSheet(AccountService.APPLE_MUSIC) })
+        return
+    }
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
     val lazyListState = rememberLazyListState()

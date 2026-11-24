@@ -331,6 +331,9 @@
     <string name="player_slider_style">Player slider style</string>
     <string name="default_">Default</string>
     <string name="apple_music">Apple Music</string>
+    <string name="apple_sign_in_title">Sign in to Apple Music</string>
+    <string name="apple_sign_in_body">Your library, playlists and Apple\'s catalogue load once you are signed in.</string>
+    <string name="apple_sign_in_action">Sign in</string>
     <string name="playlist_load_failed">Could not load this playlist. Tap to try again.</string>
     <string name="search_apple_coming">Apple Music search is coming. Your library is still searchable from Your Library.</string>
     <string name="home_apple_failed">Could not load Apple Music</string>

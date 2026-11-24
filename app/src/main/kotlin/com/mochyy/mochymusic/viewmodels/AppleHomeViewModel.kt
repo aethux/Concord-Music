@@ -31,6 +31,10 @@ class AppleHomeViewModel @Inject constructor(
     private val _failed = MutableStateFlow(false)
     val failed: StateFlow<Boolean> = _failed.asStateFlow()
 
+    /** no Apple session at all: the page draws the sign-in prompt instead of its shelves */
+    private val _signedOut = MutableStateFlow(false)
+    val signedOut: StateFlow<Boolean> = _signedOut.asStateFlow()
+
     init {
         load()
     }
@@ -53,6 +57,7 @@ class AppleHomeViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
+            _signedOut.value = pair == null
             val groups = pair?.let { runCatching { AppleClient(it, pageCache).homeGroups() }.getOrNull() }
             _failed.value = groups == null
             _groups.value = groups.orEmpty()

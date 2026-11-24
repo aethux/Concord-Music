@@ -3,6 +3,10 @@
 // the same shelf titles and cards. Apple supplies the content; Mochy supplies every pixel of the look.
 package com.mochyy.mochymusic.ui.screens.artist
 
+import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
+import com.mochyy.mochymusic.ui.screens.library.showLibraryImportSheet
+import com.mochyy.mochymusic.ui.component.AppleSignInPrompt
+import com.mochyy.mochymusic.importer.account.AccountService
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
@@ -103,6 +107,15 @@ fun AppleArtistScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
     val page by viewModel.page.collectAsState()
     val failed by viewModel.failed.collectAsState()
+    val signedOut by viewModel.signedOut.collectAsState()
+
+    // Concord: signing in is Mochy's own import sheet, opened on Apple's sign-in
+    val sheets = LocalZoomOutOverlayState.current
+// Concord: no Apple session means the page cannot exist — the prompt is the whole screen
+    if (signedOut) {
+        AppleSignInPrompt(onSignIn = { sheets.showLibraryImportSheet(AccountService.APPLE_MUSIC) })
+        return
+    }
     val librarySongs by viewModel.librarySongs.collectAsState()
     val libraryAlbums by viewModel.libraryAlbums.collectAsState()
     val liked by viewModel.liked.collectAsState()

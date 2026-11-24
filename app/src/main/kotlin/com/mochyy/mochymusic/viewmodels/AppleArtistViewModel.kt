@@ -52,6 +52,10 @@ class AppleArtistViewModel @Inject constructor(
     private val _failed = MutableStateFlow(false)
     val failed: StateFlow<Boolean> = _failed.asStateFlow()
 
+    /** no Apple session at all: the page draws the sign-in prompt instead of an error */
+    private val _signedOut = MutableStateFlow(false)
+    val signedOut: StateFlow<Boolean> = _signedOut.asStateFlow()
+
     /** the artist's own songs that are in the library, read from the database by artist name */
     private val _librarySongs = MutableStateFlow<List<Song>>(emptyList())
     val librarySongs: StateFlow<List<Song>> = _librarySongs.asStateFlow()
@@ -122,6 +126,7 @@ class AppleArtistViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
+            _signedOut.value = pair == null
             val artist = pair?.let { runCatching { AppleClient(it, pageCache).artistPage(artistId) }.getOrNull() }
             if (artist == null) {
                 _failed.value = true

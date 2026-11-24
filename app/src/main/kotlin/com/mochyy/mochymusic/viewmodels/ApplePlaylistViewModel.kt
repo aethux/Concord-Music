@@ -54,6 +54,10 @@ class ApplePlaylistViewModel @Inject constructor(
     private val _failed = MutableStateFlow(false)
     val failed: StateFlow<Boolean> = _failed.asStateFlow()
 
+    /** no Apple session at all: the page draws the sign-in prompt instead of an error */
+    private val _signedOut = MutableStateFlow(false)
+    val signedOut: StateFlow<Boolean> = _signedOut.asStateFlow()
+
     init {
         load()
     }
@@ -66,6 +70,7 @@ class ApplePlaylistViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
+            _signedOut.value = pair == null
             val remote = pair?.let { runCatching { AppleClient(it, pageCache).playlistPage(playlistId) }.getOrNull() }
             if (remote == null) {
                 _failed.value = true

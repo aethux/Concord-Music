@@ -2,6 +2,8 @@
 
 package com.mochyy.mochymusic.ui.screens
 
+import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
+import com.mochyy.mochymusic.ui.screens.library.showLibraryImportSheet
 import com.mochyy.mochymusic.ui.utils.stableSystemBars
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -140,7 +142,9 @@ import com.mochyy.mochymusic.models.toMediaMetadata
 import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.playback.queues.YouTubeQueue
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.ui.component.AppleSignInPrompt
 import com.mochyy.mochymusic.ui.component.ArtistListCard
+import com.mochyy.mochymusic.importer.account.AccountService
 import com.mochyy.mochymusic.ui.component.BonesHost
 import com.mochyy.mochymusic.ui.component.coverTintBackground
 import com.mochyy.mochymusic.ui.component.HeroCarousel
@@ -810,6 +814,15 @@ fun HomeScreen(
 
     val appleGroups by appleHomeViewModel.groups.collectAsState()
     val appleFailed by appleHomeViewModel.failed.collectAsState()
+    val appleSignedOut by appleHomeViewModel.signedOut.collectAsState()
+
+    // Concord: signing in is Mochy's own import sheet, opened on Apple's sign-in
+    val sheets = LocalZoomOutOverlayState.current
+// Concord: no Apple session means no Home to draw — one line of copy and one action
+    if (appleSignedOut) {
+        AppleSignInPrompt(onSignIn = { sheets.showLibraryImportSheet(AccountService.APPLE_MUSIC) })
+        return
+    }
 
     val openAppleItem: (AppleHomeItem) -> Unit = { item ->
         // routed by the id, not the shelf kind: a mood shelf can arrive typed as a station, and the

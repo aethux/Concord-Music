@@ -12,8 +12,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.applesync.AppleClient
+import com.mochyy.mochymusic.applesync.AppleCollaborator
 import com.mochyy.mochymusic.applesync.AppleCovers
 import com.mochyy.mochymusic.applesync.ApplePageCache
 import com.mochyy.mochymusic.applesync.AppleTokens
@@ -114,4 +129,69 @@ fun rememberAppleArtistAvatar(artistName: String?): String? {
     }
 
     return url
+}
+
+/**
+ * Who added each song on a shared playlist, keyed by the **catalogue** song id.
+ *
+ * The local page is the one people actually open for their own playlists, and Apple answers this
+ * only on the catalogue representation — the library one has no per-track meta at all. It is the same
+ * read [rememberApplePeople] makes, so the page cache keeps both for the same six hours.
+ */
+@Composable
+fun rememberAppleAddedBy(remoteId: String?): Map<String, AppleCollaborator> {
+    val context = LocalContext.current
+    val appleId = remoteId?.takeIf { it.startsWith("p.") || it.startsWith("pl.") }
+    var addedBy by remember(remoteId) { mutableStateOf<Map<String, AppleCollaborator>>(emptyMap()) }
+
+    LaunchedEffect(appleId) {
+        val id = appleId ?: return@LaunchedEffect
+        repeat(2) { attempt ->
+            addedBy = withContext(Dispatchers.IO) {
+                val entry = EntryPointAccessors
+                    .fromApplication(context.applicationContext, AppleCreatorsEntryPoint::class.java)
+                val pair = entry.appleTokens().read() ?: return@withContext emptyMap()
+                runCatching { AppleClient(pair, entry.pageCache()).playlistPage(id) }
+                    .getOrNull()?.addedBy.orEmpty()
+            }
+            if (addedBy.isNotEmpty()) return@LaunchedEffect
+            kotlinx.coroutines.delay(900L * (attempt + 1))
+        }
+    }
+    return addedBy
+}
+
+/**
+ * A row's adder, at its trailing edge: the face only, 18 dp, so it reads as a mark rather than a
+ * control. Each person's picture is the 500 px avatar Apple attaches to their profile.
+ */
+@Composable
+fun AppleAddedByAvatar(avatarUrl: String?) {
+    val sized = avatarUrl?.let { AppleCovers.sized(it, 36) }
+    if (sized != null) {
+        AsyncImage(
+            model = sized,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(18.dp)
+                .clip(CircleShape),
+        )
+        return
+    }
+    // a person Apple names but draws no picture for (a private profile): a glyph, not a blank row
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(18.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.16f)),
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.person),
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.7f),
+            modifier = Modifier.size(11.dp),
+        )
+    }
 }

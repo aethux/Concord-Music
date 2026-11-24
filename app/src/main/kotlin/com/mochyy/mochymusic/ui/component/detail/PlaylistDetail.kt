@@ -1455,6 +1455,8 @@ fun PlaylistTrackRow(
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
+    /** drawn just before the menu, for a mark that must not replace it (who added the row) */
+    badge: (@Composable () -> Unit)? = null,
     /** an artist's row: a round photo instead of the rounded square */
     coverShape: androidx.compose.ui.graphics.Shape = TrackShape,
     /** applied to the cover itself, e.g. to open an album growing out of it */
@@ -1533,6 +1535,9 @@ fun PlaylistTrackRow(
                     modifier = Modifier.size(20.dp),
                 )
             }
+        }
+        if (badge != null) {
+            badge()
         }
         if (trailing != null) {
             trailing()

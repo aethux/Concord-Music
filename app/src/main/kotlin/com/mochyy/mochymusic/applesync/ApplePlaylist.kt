@@ -45,6 +45,12 @@ data class ApplePlaylist(
     val owner: AppleCollaborator? = null,
     /** everyone on the playlist, in Apple's order */
     val collaborators: List<AppleCollaborator> = emptyList(),
+    /**
+     * Who added each song, for a playlist more than one person built: **catalogue** song id → the
+     * person Apple associates with that row. Empty for a playlist one person made, and for rows
+     * Apple answers with a bare reference instead of a profile.
+     */
+    val addedBy: Map<String, AppleCollaborator> = emptyMap(),
     val songs: List<RemoteSong> = emptyList(),
 )
 
@@ -77,6 +83,29 @@ object ApplePlaylistReader {
         val curator = row["relationships"].obj()?.get("curator").obj()
             ?.get("data").array()?.firstOrNull()?.obj() ?: return null
         return collaborator(curator)
+    }
+
+    /**
+     * Who added each song, keyed by the song's **catalogue** id.
+     *
+     * Only the resource form carries it: `?include=tracks&associate[playlists:tracks]=collaborators`
+     * answers `meta.associations.collaborators` on every track row, while the `/tracks` sub-path
+     * answers none of it even with the same parameter. A row whose association is a bare reference —
+     * an id and an href, no attributes, because Apple will not disclose that profile — is skipped
+     * rather than guessed at.
+     */
+    fun addedBy(page: JsonObject): Map<String, AppleCollaborator> {
+        val tracks = page["data"].array().firstOrNull()?.obj()
+            ?.get("relationships").obj()?.get("tracks").obj()
+            ?.get("data").array().orEmpty()
+        return tracks.mapNotNull { row ->
+            val song = row.obj() ?: return@mapNotNull null
+            val id = song.idString("id") ?: return@mapNotNull null
+            val association = song["meta"].obj()?.get("associations").obj()
+                ?.get("collaborators").obj()?.get("data").array()
+                ?.firstOrNull()?.obj() ?: return@mapNotNull null
+            collaborator(association)?.let { id to it }
+        }.toMap()
     }
 
     /** `views.collaborators.data[]`, asked for with `views=collaborators`. */

@@ -371,8 +371,34 @@ class AppleClient(
             url = playlist.url ?: social?.url,
             owner = social?.owner ?: playlist.owner,
             collaborators = social?.collaborators.orEmpty(),
+            // who added each song: only the catalogue representation says so, and only a playlist
+            // more than one person built can have more than one answer, so one read and only then
+            addedBy = if (twin != null && !social?.collaborators.isNullOrEmpty()) {
+                runCatching { playlistAddedBy(twin, storefront) }.getOrNull().orEmpty()
+            } else {
+                emptyMap()
+            },
         )
     }
+
+    /**
+     * Who added each song, in one read of the catalogue twin's own tracks.
+     *
+     * The resource form is the only one that answers it: `associate[playlists:tracks]=collaborators`
+     * on `/…/playlists/{id}/tracks` returns the same rows with no `meta` at all. `limit[tracks]=100`
+     * is the resource's ceiling, so a longer playlist keeps no avatar past row 100 rather than a
+     * guessed one. The read goes through [page], so a page cache put in front of this client keeps it
+     * for the same six hours as the playlist itself.
+     */
+    private suspend fun playlistAddedBy(
+        playlistId: String,
+        storefront: String,
+    ): Map<String, AppleCollaborator> =
+        page(
+            "/v1/catalog/$storefront/playlists/$playlistId?include=tracks" +
+                "&limit%5Btracks%5D=100&associate%5Bplaylists%3Atracks%5D=collaborators" +
+                "&fields%5Bsongs%5D=name",
+        )?.let(ApplePlaylistReader::addedBy).orEmpty()
 
     private data class PlaylistSocial(
         val url: String?,

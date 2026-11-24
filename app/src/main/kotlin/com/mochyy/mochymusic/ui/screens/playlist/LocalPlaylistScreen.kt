@@ -121,6 +121,8 @@ import com.mochyy.mochymusic.ui.component.queueSwipeAction
 import com.mochyy.mochymusic.ui.component.removeFromPlaylistSwipeAction
 import com.mochyy.mochymusic.ui.component.detail.CreatorUi
 import com.mochyy.mochymusic.ui.component.detail.rememberApplePeople
+import com.mochyy.mochymusic.ui.component.detail.rememberAppleAddedBy
+import com.mochyy.mochymusic.ui.component.detail.AppleAddedByAvatar
 import com.mochyy.mochymusic.ui.component.detail.rememberFeaturedArtists
 import com.mochyy.mochymusic.ui.component.detail.FeaturedArtistsRow
 import com.mochyy.mochymusic.ui.component.detail.PlaylistDetailScaffold
@@ -388,6 +390,11 @@ fun LocalPlaylistScreen(
             importedNow.source == com.mochyy.mochymusic.importer.ImportSource.APPLE_MUSIC.key
         },
     )
+    // who added which row: one cached read, and Apple answers it only for a shared playlist
+    val addedBy = rememberAppleAddedBy(
+        remoteId = importedNow?.remoteId?.takeIf { it.startsWith("p.") || it.startsWith("pl.") },
+    )
+    val adders = remember(addedBy) { addedBy.values.map { it.name }.distinct() }
     // while Apple's people are on their way the header waits on a placeholder: showing the imported
     // name first and swapping it a moment later reads as the wrong credit, not as a load
     val creatorsLoading = applePeople?.loading == true
@@ -719,6 +726,16 @@ fun LocalPlaylistScreen(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 inSelectMode = true
                                 onCheckedChange(true)
+                            }
+                        },
+                        badge = {
+                            // who added it, only when more than one person built the playlist: a
+                            // column of one face repeating says nothing, and Apple's own app draws
+                            // nothing there either
+                            if (adders.size > 1) {
+                                addedBy[song.song.id.removePrefix("AM_")]?.let { person ->
+                                    AppleAddedByAvatar(person.avatarUrl)
+                                }
                             }
                         },
                         onMenuClick = {

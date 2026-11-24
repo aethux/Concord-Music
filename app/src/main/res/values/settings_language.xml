@@ -158,9 +158,9 @@
     <string name="customise_icons">Icons</string>
     <string name="customise_icons_caption">Your home screen can take a few seconds to show the new icon. Opening Concord from it starts from that icon too.</string>
     <string name="app_icon_family_concord">Concord</string>
-    <string name="app_icon_family_mark">Concord</string>
-    <string name="app_icon_family_outline">Concord outline</string>
-    <string name="app_icon_family_anime">Anime Concord</string>
+    <string name="app_icon_family_mark">Mocha</string>
+    <string name="app_icon_family_outline">Mocha outline</string>
+    <string name="app_icon_family_anime">Anime Mocha</string>
     <string name="app_icon_concord_new_dark">Concord new dark</string>
     <string name="app_icon_concord_new_light">Concord new light</string>
     <string name="app_icon_concord_old">Concord old</string>
@@ -176,10 +176,10 @@
     <string name="app_icon_outline_black">Black</string>
     <string name="app_icon_outline_material">Material u</string>
     <string name="app_icon_outline_transparent">Transparent</string>
-    <string name="app_icon_anime_white">Concord white</string>
-    <string name="app_icon_anime_dark">Concord dark</string>
-    <string name="app_icon_anime_material">Concord material u</string>
-    <string name="app_icon_anime_transparent">Concord transparent</string>
+    <string name="app_icon_anime_white">Mocha white</string>
+    <string name="app_icon_anime_dark">Mocha dark</string>
+    <string name="app_icon_anime_material">Mocha material u</string>
+    <string name="app_icon_anime_transparent">Mocha transparent</string>
     <string name="customise_icons_show_all">Show all icons</string>
     <string name="customise_icons_show_less">Show fewer icons</string>
     <string name="app_icon_customize">Customize</string>

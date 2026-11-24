@@ -73,7 +73,7 @@ private fun DonateSheetContent() {
         val characterWidth = characterWidth(maxWidth, maxHeight)
 
         VersionRing(
-            text = "MOCHY MUSIC",
+            text = "CONCORD MUSIC",
             modifier =
                 Modifier
                     .align(Alignment.TopEnd)

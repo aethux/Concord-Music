@@ -206,7 +206,7 @@ private fun ColumnScope.UpdateSheetContent(
     Box(Modifier.fillMaxWidth()) {
         // centred just inside the sheet's top-right corner so its edge cuts the ring off, no size of its own so it never pushes content around
         VersionRing(
-            text = "MOCHY $installed",
+            text = "CONCORD $installed",
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .layout { measurable, constraints ->

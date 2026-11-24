@@ -39,7 +39,10 @@ class AppleLibraryPull(
 
             val now = System.currentTimeMillis()
             val rows = songs.mapNotNull { song ->
-                val catalogId = song.catalogId ?: return@mapNotNull null
+                // Concord: an upload has no catalogue id. Apple's own app addresses it by its library
+                // id (`i.…`) and `cider/uploads.md` says the same, so that id is the row's key — the
+                // song reaches the library instead of being dropped here.
+                val catalogId = song.catalogId ?: song.libraryId
                 AppleLibrarySongEntity(
                     catalogId = catalogId,
                     libraryId = song.libraryId,
@@ -50,7 +53,8 @@ class AppleLibraryPull(
                     isrc = song.isrc,
                     addedAt = null,
                     pulledAt = now,
-                    rated = rated[catalogId] == 1L,
+                    // a favourite is a catalogue rating; an upload cannot be one
+                    rated = song.catalogId?.let { rated[it] == 1L } ?: false,
                 )
             }
             AppleSyncStatus.update(

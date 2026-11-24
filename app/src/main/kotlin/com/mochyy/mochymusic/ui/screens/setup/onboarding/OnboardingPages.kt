@@ -78,7 +78,6 @@ import androidx.compose.runtime.remember
 import com.mochyy.mochymusic.ui.component.ReorderCards
 import com.mochyy.mochymusic.ui.player.StreamFormatBadge
 import com.mochyy.mochymusic.ui.screens.audiolab.ProviderLogo
-import com.mochyy.mochymusic.ui.screens.settings.modules.ModuleRowColor
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 
 // ---- 1. import? ----
@@ -334,15 +333,15 @@ internal fun SourcesPage(
         }
         Spacer(Modifier.height(18.dp))
         // the heading the page has always used, with the hint the module page gives under its list
+        var sorting by remember { mutableStateOf(false) }
         Text(stringResource(R.string.onb_sources_playback_preference), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(stringResource(R.string.onb_sources_reorder_hint), color = Onb.Muted, fontSize = 13.sp)
+        Text(
+            stringResource(R.string.onb_sources_reorder_hint), color = Onb.Muted, fontSize = 13.sp,
+            lineHeight = 15.sp,
+        )
         Spacer(Modifier.height(10.dp))
         // Monochrome is only a source once it is switched on: off, the list is the two services
         val shown = if (monochromeOn) order else order.filter { it != MonochromeModule.Id }
-        // the lines show while a card is held and go again when it is dropped — a three-card list has
-        // no need for the module page's Done button
-        var sorting by remember { mutableStateOf(false) }
         ReorderCards(
             ids = shown,
             rowHeight = 104.dp,
@@ -351,11 +350,17 @@ internal fun SourcesPage(
                 val next = visible.iterator()
                 onReorder(order.map { if (it == MonochromeModule.Id) it else next.next() })
             },
+            // the lines come out with the hold and go when it is dropped
             sorting = sorting,
             onStartSorting = { sorting = true },
             onDragEnd = { sorting = false },
         ) { id, lifted, hold ->
-            SourceCard(id = id, name = nameOf(id), tag = sourceFormat(id), lifted = lifted, hold = hold)
+            // the card takes what is left of the row, so the lines take their width from it rather
+            // than drawing over its edge
+            SourceCard(
+                id = id, name = nameOf(id), tag = sourceFormat(id), lifted = lifted, hold = hold,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
         }
         Spacer(Modifier.height(6.dp))
     }
@@ -367,16 +372,14 @@ internal fun SourcesPage(
  * wears the player's own tag under its name.
  */
 @Composable
-private fun SourceCard(id: String, name: String, tag: String?, lifted: Boolean, hold: Modifier) {
+private fun SourceCard(id: String, name: String, tag: String?, lifted: Boolean, hold: Modifier, modifier: Modifier = Modifier) {
     // the module card's own measurements: 18/16/14/12 of padding, the name at the top of the column,
     // its second line right under it where a module puts its status
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight()
+        modifier = modifier
             .clip(RoundedCornerShape(26.dp))
-            .background(if (lifted) Color(0xFF222225) else ModuleRowColor)
+            .background(if (lifted) Onb.CardPressed else Onb.Card)
             .then(hold)
             .padding(start = 18.dp, top = 14.dp, end = 16.dp, bottom = 12.dp),
     ) {

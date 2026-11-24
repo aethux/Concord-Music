@@ -166,7 +166,10 @@ class AppleImport(
         }
 
         songs.forEachIndexed { index, song ->
-            val catalogId = song.catalogId ?: return@forEachIndexed
+            // Concord: an upload has no catalogue id. The pull already keyed it on its library id,
+            // and this is the only place an Apple row is created, so the same key is used here or
+            // the song never reaches the library at all.
+            val catalogId = song.catalogId ?: song.libraryId
             if (index % 20 == 0) {
                 AppleSyncStatus.update(
                     phase = "Importing songs…",

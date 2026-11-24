@@ -349,6 +349,10 @@ class MusicService :
     @Inject
     lateinit var sourceModules: com.mochyy.mochymusic.modules.SourceModules
 
+    /** Apple's token pair: an upload is only playable by asking Apple, never through a module */
+    @Inject
+    lateinit var appleTokens: com.mochyy.mochymusic.applesync.AppleTokens
+
     @Inject
     lateinit var widgetManager: MochyWidgetManager
 
@@ -4296,7 +4300,9 @@ class MusicService :
                     },
                     fetcherAction = { mediaId ->
                         val forced = forcedRoutes.containsKey(mediaId)
-                        ((if (forced) null else deviceStream(mediaItem)) ?: routeStream(mediaId)).also { stream ->
+                        // a file on the phone, else an Apple upload, else a provider in the order
+                        val ours = if (forced) null else (deviceStream(mediaItem) ?: appleUploadStream(mediaItem))
+                        (ours ?: routeStream(mediaId)).also { stream ->
                             if (stream != null) playingStreams[mediaId] = stream else playingStreams.remove(mediaId)
                         }
                     },
@@ -5254,6 +5260,38 @@ class MusicService :
             )
         }
         return null
+    }
+
+    /**
+     * An upload — an Apple library song with no catalogue id, so no source module can ever find it:
+     * a module matches a recording in the catalogue, and an upload has no catalogue entry. Its row's
+     * id carries the library id (`AM_i.…`), which is the whole detection rule; a catalogue song's is
+     * `AM_<catalogueId>` and still goes through the module exactly as before.
+     *
+     * Apple answers the file itself, with no HLS playlist and no Widevine key (`cider/uploads.md`),
+     * so it plays as a plain m4a: no licence, no decryption.
+     */
+    private suspend fun appleUploadStream(
+        mediaItem: androidx.media3.common.MediaItem,
+    ): com.mochyy.mochymusic.playback.custom.CustomStreamResult? {
+        if (com.mochyy.mochymusic.utils.OfflineMode.isOn) return null
+        val mediaId = mediaItem.mediaId
+        val libraryId = mediaId.removePrefix("AM_").takeIf { it.startsWith("i.") } ?: return null
+        val pair = appleTokens.read() ?: return null
+        val url = com.mochyy.mochymusic.applesync.AppleClient(pair).uploadPlaybackUrl(libraryId)
+            ?: return null
+        val module = com.mochyy.mochymusic.module.applemusic.AppleMusicModule.Id
+        forgetModuleFacts(mediaId)
+        resolvedSourceIds[mediaId] = module
+        notePlayingFrom(mediaId, PlayingFrom(module, "Apple Music", "your upload"))
+        Timber.tag("StreamFetch").i("$mediaId plays from Apple Music as an upload")
+        return com.mochyy.mochymusic.playback.custom.CustomStreamResult(
+            streamUrl = url,
+            // a module's shape: without a key of this kind the data source takes the song's own
+            // media id for a YouTube video id and asks YouTube for a stream this song never had
+            cacheKey = "$ModuleCacheKeyPrefix$module|$mediaId",
+            source = "Apple Music · your upload",
+        )
     }
 
     private suspend fun routeStream(mediaId: String): com.mochyy.mochymusic.playback.custom.CustomStreamResult? {

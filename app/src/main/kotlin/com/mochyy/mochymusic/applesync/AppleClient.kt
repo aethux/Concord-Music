@@ -579,6 +579,34 @@ class AppleClient(
         return AppleLibrary.songs(page)
     }
 
+    /**
+     * The file behind an upload — a library song Apple has no catalogue entry for.
+     *
+     * The same `webPlayback` call the Apple module makes for a catalogue song, with a different
+     * body: `universalLibraryId` alone, no `subscriptionAdamId` (`cider/uploads.md`, captured live
+     * on an account with 74 uploads). Apple answers one asset carrying an `md5` and a signed
+     * blobstore URL — no HLS playlist and no Widevine key — so the reply is a plain m4a the player
+     * can open as a file.
+     *
+     * Null means Apple had no file to give for this id, not that it wanted a licence.
+     */
+    suspend fun uploadPlaybackUrl(libraryId: String): String? {
+        val response = AccountHttp.post(
+            url = WebPlaybackUrl,
+            headers = tokens.headers,
+            body = """{"universalLibraryId":"$libraryId"}""",
+            service = "Apple Music",
+        )
+        if (response.status !in 200..299) return null
+        val page = AccountHttp.parse(response.body) ?: return null
+        val song = page["songList"].array().orEmpty().firstOrNull()?.obj() ?: return null
+        // an upload's asset is the one with an `md5`; a catalogue answer is a set of flavours
+        return song["assets"].array().orEmpty()
+            .mapNotNull { it.obj() }
+            .firstOrNull { it.string("md5") != null }
+            ?.string("URL")
+    }
+
     /** One linked playlist's entries, in order, with each entry's library id. */
     suspend fun playlistTracks(playlistId: String, maxPages: Int = 400): List<RemoteSong> =
         all("/v1/me/library/playlists/$playlistId/tracks?limit=100", maxPages, AppleLibrary::songs, keep = "limit=100")
@@ -632,6 +660,9 @@ class AppleClient(
 
     private companion object {
         const val Host = "https://amp-api.music.apple.com"
+
+        /** playback's own host, not amp-api: the call every Apple player makes for a stream */
+        const val WebPlaybackUrl = "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback"
 
         /** the artist pages read this run, with the moment they expire */
         val artistCache = java.util.concurrent.ConcurrentHashMap<String, Pair<AppleArtist, Long>>()

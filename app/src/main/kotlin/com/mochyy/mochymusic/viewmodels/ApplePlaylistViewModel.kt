@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleCollaborator
 import com.mochyy.mochymusic.applesync.AppleCovers
+import com.mochyy.mochymusic.applesync.ApplePageCache
 import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.db.entities.ArtistEntity
 import com.mochyy.mochymusic.db.entities.Song
@@ -23,6 +24,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ApplePlaylistViewModel @Inject constructor(
     private val tokens: AppleTokens,
+    private val pageCache: ApplePageCache,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -60,7 +62,7 @@ class ApplePlaylistViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
-            val remote = pair?.let { runCatching { AppleClient(it).playlistPage(playlistId) }.getOrNull() }
+            val remote = pair?.let { runCatching { AppleClient(it, pageCache).playlistPage(playlistId) }.getOrNull() }
             if (remote == null) {
                 _failed.value = true
                 return@launch

@@ -19,7 +19,15 @@ import kotlinx.serialization.json.JsonObject
  * [AccountHttp], which already waits out 429s, marks a 401 as "sign in again" and turns transport
  * failures into something a user can read.
  */
-class AppleClient(private val tokens: AppleTokens.Pair) {
+class AppleClient(
+    private val tokens: AppleTokens.Pair,
+    /**
+     * Concord: when set, every read goes through the page cache — a revisit is a disk read with a
+     * refresh behind it. This class stays a reader; the lifetime, the size cap and the invalidation
+     * live in [ApplePageCache].
+     */
+    private val cache: ApplePageCache? = null,
+) {
 
     suspend fun storefront(): String =
         page("/v1/me/storefront")?.let(AppleLibrary::storefront)
@@ -551,7 +559,11 @@ class AppleClient(private val tokens: AppleTokens.Pair) {
         return out
     }
 
+    // An elvis here would re-ask Apple for a 404: a null from the cache is an answer, not a miss.
     private suspend fun page(url: String): JsonObject? =
+        if (cache == null) read(url) else cache.page(url) { read(url) }
+
+    private suspend fun read(url: String): JsonObject? =
         try {
             AccountHttp.getJson(
                 url = if (url.startsWith("http")) url else Host + url,

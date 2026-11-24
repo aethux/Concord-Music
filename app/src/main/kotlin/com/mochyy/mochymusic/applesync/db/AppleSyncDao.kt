@@ -310,4 +310,32 @@ interface AppleSyncDao {
 
     @Query("SELECT * FROM audit ORDER BY id DESC LIMIT :limit")
     fun recentAudit(limit: Int = 200): Flow<List<AppleAuditEntity>>
+
+    // ---- detail pages held on disk, so a revisit paints before the network ----------------------
+
+    @Query("SELECT * FROM page_cache WHERE cacheKey = :key")
+    suspend fun page(key: String): PageCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun savePage(page: PageCacheEntity)
+
+    @Query("UPDATE page_cache SET lastUsedAt = :at WHERE cacheKey = :key")
+    suspend fun touchPage(key: String, at: Long)
+
+    /** Every variant of one page — its different `views`/`extend` spellings go together. */
+    @Query("DELETE FROM page_cache WHERE kind = :kind AND remoteId IN (:ids)")
+    suspend fun clearPagesOf(kind: String, ids: List<String>)
+
+    @Query("DELETE FROM page_cache WHERE kind = :kind")
+    suspend fun clearPages(kind: String)
+
+    @Query("SELECT COUNT(*) FROM page_cache")
+    suspend fun pageCount(): Int
+
+    @Query("SELECT COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM page_cache")
+    suspend fun pageBytes(): Long
+
+    /** The size cap's only eviction: the pages drawn longest ago go first. */
+    @Query("DELETE FROM page_cache WHERE cacheKey IN (SELECT cacheKey FROM page_cache ORDER BY lastUsedAt ASC LIMIT :count)")
+    suspend fun evictPages(count: Int)
 }

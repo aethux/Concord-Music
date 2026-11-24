@@ -148,5 +148,8 @@ object AppleSyncFlow {
             dao.saveState(AppleStateEntity(KEY_LAST_SYNC_AT, System.currentTimeMillis().toString()))
             dao.saveState(AppleStateEntity(KEY_LAST_SYNC_SUMMARY, message))
         }
+        // the home feed is built from the library this refresh has just rewritten, so a stored copy
+        // of it is now the one thing that would be wrong
+        runCatching { ApplePageCache.invalidateLibrary(dao) }
     }
 }

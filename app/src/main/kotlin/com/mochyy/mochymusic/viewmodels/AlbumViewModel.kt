@@ -10,6 +10,7 @@ import com.music.innertube.models.AlbumItem
 import com.mochyy.mochymusic.applesync.AppleAlbums
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleCovers
+import com.mochyy.mochymusic.applesync.ApplePageCache
 import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.db.MusicDatabase
 import com.mochyy.mochymusic.db.entities.AlbumEntity
@@ -39,6 +40,7 @@ class AlbumViewModel
 constructor(
     private val database: MusicDatabase,
     private val tokens: AppleTokens,
+    private val pageCache: ApplePageCache,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val albumId = savedStateHandle.get<String>("albumId")!!
@@ -111,7 +113,7 @@ constructor(
         val remoteId = appleRemoteId ?: return
         viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
-            val page = pair?.let { runCatching { AppleClient(it).catalogAlbum(remoteId) }.getOrNull() }
+            val page = pair?.let { runCatching { AppleClient(it, pageCache).catalogAlbum(remoteId) }.getOrNull() }
             if (page == null) {
                 loadFailed.value = true
                 return@launch

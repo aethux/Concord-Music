@@ -2,8 +2,10 @@
 package com.mochyy.mochymusic.applesync.di
 
 import android.content.Context
+import com.mochyy.mochymusic.applesync.ApplePageCache
 import com.mochyy.mochymusic.applesync.AppleRematchStore
 import com.mochyy.mochymusic.applesync.AppleTokens
+import com.mochyy.mochymusic.applesync.RoomApplePageStore
 import com.mochyy.mochymusic.applesync.db.AppleRematchEntity
 import com.mochyy.mochymusic.applesync.db.AppleSyncDao
 import com.mochyy.mochymusic.applesync.db.AppleSyncDatabase
@@ -34,6 +36,15 @@ object AppleSyncModule {
     @Provides
     @Singleton
     fun provideAppleTokens(@ApplicationContext context: Context): AppleTokens = AppleTokens(context)
+
+    /**
+     * The page cache Cider keeps in IndexedDB, on this app's sidecar instead: one row per detail
+     * page so a revisit paints from disk. See `ApplePageCache`.
+     */
+    @Provides
+    @Singleton
+    fun provideApplePageCache(dao: AppleSyncDao): ApplePageCache =
+        ApplePageCache(RoomApplePageStore(dao))
 
     /**
      * The rematch table, narrowed to the five calls playback and the sheet make, so nothing on the

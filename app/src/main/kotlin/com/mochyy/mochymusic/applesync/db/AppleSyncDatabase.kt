@@ -39,8 +39,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AppleStateEntity::class,
         PlaylistCollaboratorEntity::class,
         UnmatchedDecisionEntity::class,
+        PageCacheEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppleSyncDatabase : RoomDatabase() {
@@ -61,10 +62,26 @@ abstract class AppleSyncDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Concord: the page-payload cache's own table. Nothing existing is touched — this only adds
+         * rows Apple reads can be served from, so a device upgrading from 2 keeps its replica, epoch,
+         * links and covers exactly as they were.
+         */
+        private val Migration2To3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `page_cache` (`cacheKey` TEXT NOT NULL, " +
+                        "`kind` TEXT NOT NULL, `remoteId` TEXT NOT NULL, `paramsHash` TEXT NOT NULL, " +
+                        "`body` TEXT NOT NULL, `fetchedAt` INTEGER NOT NULL, `lastUsedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`cacheKey`))",
+                )
+            }
+        }
+
         fun newInstance(context: Context): AppleSyncDatabase =
             Room
                 .databaseBuilder(context, AppleSyncDatabase::class.java, DB_NAME)
-                .addMigrations(Migration1To2)
+                .addMigrations(Migration1To2, Migration2To3)
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                 .build()
     }

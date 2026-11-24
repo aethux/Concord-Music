@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleHomeGroup
+import com.mochyy.mochymusic.applesync.ApplePageCache
 import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.playback.queues.AppleStationQueue
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,6 +20,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AppleHomeViewModel @Inject constructor(
     private val tokens: AppleTokens,
+    private val pageCache: ApplePageCache,
 ) : ViewModel() {
 
     /** null while the first read is in flight; empty when Apple sent nothing. */
@@ -51,7 +53,7 @@ class AppleHomeViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
-            val groups = pair?.let { runCatching { AppleClient(it).homeGroups() }.getOrNull() }
+            val groups = pair?.let { runCatching { AppleClient(it, pageCache).homeGroups() }.getOrNull() }
             _failed.value = groups == null
             _groups.value = groups.orEmpty()
         }

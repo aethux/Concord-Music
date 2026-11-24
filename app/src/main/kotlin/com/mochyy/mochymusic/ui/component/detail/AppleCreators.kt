@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleCovers
+import com.mochyy.mochymusic.applesync.ApplePageCache
 import com.mochyy.mochymusic.applesync.AppleTokens
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -27,6 +28,7 @@ import kotlinx.coroutines.withContext
 @InstallIn(SingletonComponent::class)
 interface AppleCreatorsEntryPoint {
     fun appleTokens(): AppleTokens
+    fun pageCache(): ApplePageCache
 }
 
 /**
@@ -51,11 +53,10 @@ fun rememberApplePeople(remoteId: String?): ApplePeople? {
         // open. Three goes, then it settles on what the import recorded.
         repeat(3) { attempt ->
             people = withContext(Dispatchers.IO) {
-                val tokens = EntryPointAccessors
+                val entry = EntryPointAccessors
                     .fromApplication(context.applicationContext, AppleCreatorsEntryPoint::class.java)
-                    .appleTokens()
-                val pair = tokens.read() ?: return@withContext emptyList<CreatorUi>()
-                val playlist = runCatching { AppleClient(pair).playlistPage(id) }.getOrNull()
+                val pair = entry.appleTokens().read() ?: return@withContext emptyList<CreatorUi>()
+                val playlist = runCatching { AppleClient(pair, entry.pageCache()).playlistPage(id) }.getOrNull()
                     ?: return@withContext emptyList<CreatorUi>()
                 (listOfNotNull(playlist.owner) + playlist.collaborators)
                     .distinctBy { it.handle ?: it.name }
@@ -100,11 +101,10 @@ fun rememberAppleArtistAvatar(artistName: String?): String? {
             return@LaunchedEffect
         }
         val fetched = withContext(Dispatchers.IO) {
-            val tokens = EntryPointAccessors
+            val entry = EntryPointAccessors
                 .fromApplication(context.applicationContext, AppleCreatorsEntryPoint::class.java)
-                .appleTokens()
-            val pair = tokens.read() ?: return@withContext null
-            val client = AppleClient(pair)
+            val pair = entry.appleTokens().read() ?: return@withContext null
+            val client = AppleClient(pair, entry.pageCache())
             val id = runCatching { client.artistIdByName(name) }.getOrNull() ?: return@withContext null
             runCatching { client.artistPage(id)?.artworkUrl }.getOrNull()
                 ?.let { AppleCovers.sized(it, 300) }

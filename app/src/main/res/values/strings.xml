@@ -196,7 +196,8 @@
          not the release. Saying so is the difference between "a smaller album" and "a bug". -->
     <!-- an Apple profile: name, handle and the playlists Apple publishes for them -->
     <string name="apple_profile_loading">Loading profile</string>
-    <string name="apple_profile_failed">Apple does not publish this profile</string>
+    <string name="apple_profile_private">This profile is private.</string>
+    <string name="apple_collaborators">Collaborators</string>
     <string name="apple_profile_no_playlists">No shared playlists</string>
     <plurals name="apple_profile_playlists">
         <item quantity="one">%d shared playlist</item>

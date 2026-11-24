@@ -16,6 +16,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import com.mochyy.mochymusic.ui.component.Material3MenuGroup
+import com.mochyy.mochymusic.ui.component.Material3MenuItemData
+import com.mochyy.mochymusic.ui.component.SheetIconSize
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -202,47 +217,81 @@ fun AppleAddedByAvatar(avatarUrl: String?, onClick: (() -> Unit)? = null) {
 }
 
 /**
- * The people on a playlist, as Mochy lists a choice: one row each, a chevron, and the row opens the
- * person in this app. The faces used to hand the whole row to Apple's website, which Android resolves
- * to the Apple Music app — the choice belongs here instead.
+ * The people on a playlist, in Mochy's own menu language: the sheet's flat dark pills, its 16 dp
+ * radius and colours, a round face where a menu icon goes, and the same chevron a home row carries at
+ * its end. Shown through [com.mochyy.mochymusic.ui.component.LocalMenuState], not as a dialog.
  */
 @Composable
-fun AppleCreatorsSheet(
+fun AppleCreatorsMenu(
     people: List<CreatorUi>,
     onDismiss: () -> Unit,
-    onPersonClick: (String) -> Unit,
+    onPersonClick: (CreatorUi) -> Unit,
 ) {
-    ListDialog(onDismiss = onDismiss) {
-        items(items = people, key = { it.name }) { person ->
-            val profileId = person.appleProfileId
-            ListItem(
-                title = person.name,
-                modifier = Modifier.clickable(enabled = profileId != null) {
-                    if (profileId != null) {
-                        onDismiss()
-                        onPersonClick(profileId)
-                    }
-                },
-                thumbnailContent = {
-                    AsyncImage(
-                        model = person.avatarUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.08f)),
-                    )
-                },
-                trailingContent = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_chevron_right),
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.5f),
-                        modifier = Modifier.size(18.dp),
+    LazyColumn(
+        // the sheet sits above the player bar, so it wants more than the system bars at its foot
+        contentPadding = PaddingValues(
+            bottom = 32.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding(),
+        ),
+    ) {
+        item {
+            // the sheet's own heading style: the 16 sp bold white SheetHeader titles use
+            Text(
+                text = stringResource(R.string.apple_collaborators),
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+        }
+        item {
+            Material3MenuGroup(
+                items = people.map { person ->
+                    Material3MenuItemData(
+                        icon = {
+                            AsyncImage(
+                                model = person.avatarUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(SheetIconSize)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.12f)),
+                            )
+                        },
+                        title = { Text(text = person.name) },
+                        // the chevron a home row uses, so the row reads as something that opens
+                        trailingContent = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_chevron_right),
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.55f),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        onClick = person.appleProfileId?.let {
+                            {
+                                onDismiss()
+                                onPersonClick(person)
+                            }
+                        },
                     )
                 },
             )
         }
     }
+}
+
+/**
+ * The route to a person's page, carrying the name and face the association already knew.
+ *
+ * Apple answers 404 for a profile it keeps private, while the playlist still handed us the name and
+ * the 500 px picture — so the page can show who it is even when Apple will not describe them.
+ */
+fun appleProfileRoute(profileId: String?, name: String?, avatarUrl: String?): String? {
+    val id = profileId ?: return null
+    // Uri.encode writes a space as %20; URLEncoder writes "+", which Navigation does not decode and
+    // which showed up in the page's name as "Disha+Singh"
+    val person = android.net.Uri.encode(name.orEmpty())
+    val face = android.net.Uri.encode(avatarUrl.orEmpty())
+    return "apple_profile/$id?name=$person&art=$face"
 }

@@ -66,17 +66,49 @@ fun AppleProfileScreen(
     Box(Modifier.fillMaxSize()) {
         when {
             profile == null && failed -> Centered {
+                // Apple handed the playlist this person's name and picture, then answered 404 for
+                // their page: show what we have and say plainly why there is no more
+                val face = AppleCovers.sized(viewModel.fallbackArtworkUrl, 500)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(132.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f)),
+                ) {
+                    if (face != null) {
+                        AsyncImage(
+                            model = face,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        // Apple named this person but sent no picture: a glyph, not an empty circle
+                        Icon(
+                            painter = painterResource(R.drawable.person),
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.5f),
+                            modifier = Modifier.size(52.dp),
+                        )
+                    }
+                }
+                if (viewModel.fallbackName.isNotBlank()) {
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = viewModel.fallbackName,
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
                 Text(
-                    text = stringResource(R.string.apple_profile_failed),
-                    color = Color.White.copy(alpha = 0.7f),
+                    text = stringResource(R.string.apple_profile_private),
+                    color = Color.White.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = stringResource(R.string.retry),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.clickable { viewModel.retry() },
                 )
             }
 
@@ -98,15 +130,30 @@ fun AppleProfileScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            AsyncImage(
-                                model = AppleCovers.sized(person.artworkUrl, 500),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
+                            val face = AppleCovers.sized(person.artworkUrl, 500)
+                            Box(
+                                contentAlignment = Alignment.Center,
                                 modifier = Modifier
                                     .size(132.dp)
                                     .clip(CircleShape)
                                     .background(Color.White.copy(alpha = 0.08f)),
-                            )
+                            ) {
+                                if (face != null) {
+                                    AsyncImage(
+                                        model = face,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                } else {
+                                    Icon(
+                                        painter = painterResource(R.drawable.person),
+                                        contentDescription = null,
+                                        tint = Color.White.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(52.dp),
+                                    )
+                                }
+                            }
                             Spacer(Modifier.height(16.dp))
                             Text(
                                 text = person.name,

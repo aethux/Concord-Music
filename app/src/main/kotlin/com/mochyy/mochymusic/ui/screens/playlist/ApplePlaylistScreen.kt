@@ -49,7 +49,9 @@ import com.mochyy.mochymusic.ui.component.detail.PlaylistHeader
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackBones
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.detail.AppleAddedByAvatar
-import com.mochyy.mochymusic.ui.component.detail.AppleCreatorsSheet
+import com.mochyy.mochymusic.ui.component.detail.AppleCreatorsMenu
+import com.mochyy.mochymusic.ui.component.detail.appleProfileRoute
+import com.mochyy.mochymusic.ui.component.LocalMenuState
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.viewmodels.ApplePlaylistViewModel
 
@@ -74,14 +76,7 @@ fun ApplePlaylistScreen(
         current?.let { creatorsOf(it.owner, it.collaborators, it.curator) }.orEmpty()
     }
     // a face opens a list of everyone, not Apple's website
-    var showCreators by remember { mutableStateOf(false) }
-    if (showCreators) {
-        AppleCreatorsSheet(
-            people = creators,
-            onDismiss = { showCreators = false },
-            onPersonClick = { profileId -> navController.navigate("apple_profile/$profileId") },
-        )
-    }
+    val creatorsMenu = LocalMenuState.current
 
 
     fun play(startIndex: Int, shuffled: Boolean) {
@@ -127,7 +122,18 @@ fun ApplePlaylistScreen(
             PlaylistHeader(
                 title = current.name,
                 creators = creators,
-                onCreatorClick = { showCreators = true },
+                onCreatorClick = {
+                    creatorsMenu.show {
+                        AppleCreatorsMenu(
+                            people = creators,
+                            onDismiss = { creatorsMenu.dismiss() },
+                            onPersonClick = { person ->
+                                appleProfileRoute(person.appleProfileId, person.name, person.avatarUrl)
+                                    ?.let { route -> navController.navigate(route) }
+                            },
+                        )
+                    }
+                },
                 stats = statsLine(current.songs.size, current.totalSeconds),
                 isPlaying = isPlaying,
                 onPlayClick = { play(0, shuffled = false) },
@@ -155,7 +161,8 @@ fun ApplePlaylistScreen(
                     current?.addedBy?.get(song.id.removePrefix("AM_"))?.let { person ->
                         AppleAddedByAvatar(
                             avatarUrl = person.avatarUrl,
-                            onClick = person.id?.let { id -> { navController.navigate("apple_profile/$id") } },
+                            onClick = appleProfileRoute(person.id, person.name, person.avatarUrl)
+                                ?.let { route -> { navController.navigate(route) } },
                         )
                     }
                 },

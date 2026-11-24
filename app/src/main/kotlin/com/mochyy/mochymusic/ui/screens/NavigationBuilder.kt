@@ -289,8 +289,12 @@ fun NavGraphBuilder.navigationBuilder(
     }
 
     coverSourceComposable(
-        route = "apple_profile/{profileId}",
-        arguments = listOf(navArgument("profileId") { type = NavType.StringType }),
+        route = "apple_profile/{profileId}?name={name}&art={art}",
+        arguments = listOf(
+            navArgument("profileId") { type = NavType.StringType },
+            navArgument("name") { type = NavType.StringType; defaultValue = "" },
+            navArgument("art") { type = NavType.StringType; defaultValue = "" },
+        ),
     ) {
         com.mochyy.mochymusic.ui.screens.profile.AppleProfileScreen(navController = navController)
     }

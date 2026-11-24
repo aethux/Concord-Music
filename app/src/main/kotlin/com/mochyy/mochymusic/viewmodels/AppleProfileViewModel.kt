@@ -26,6 +26,13 @@ class AppleProfileViewModel @Inject constructor(
     /** the `sp.…` id from the route */
     private val profileId: String = savedStateHandle.get<String>("profileId")!!
 
+    /**
+     * What the playlist already knew about this person, carried through the route. Apple answers 404
+     * for a profile it keeps private, and the page still shows who it is instead of an empty screen.
+     */
+    val fallbackName: String = savedStateHandle.get<String>("name").orEmpty()
+    val fallbackArtworkUrl: String? = savedStateHandle.get<String>("art")?.takeIf { it.isNotBlank() }
+
     private val _profile = MutableStateFlow<ApplePersonProfile?>(null)
     val profile: StateFlow<ApplePersonProfile?> = _profile.asStateFlow()
 
@@ -34,11 +41,6 @@ class AppleProfileViewModel @Inject constructor(
     val failed: StateFlow<Boolean> = _failed.asStateFlow()
 
     init {
-        load()
-    }
-
-    fun retry() {
-        _failed.value = false
         load()
     }
 

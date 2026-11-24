@@ -462,54 +462,71 @@ class AppleClient(
     }
 
     /**
-     * An artist's page: the resource for its name, photo and genres, then its views — top songs,
-     * albums, singles, compilations and the artists beside it.
+     * An artist's page in one request.
+     *
+     * The six shelves are `views` on the artist resource itself, so nothing is asked per shelf. They
+     * live under `data[0].views` — *not* under `relationships`, which is where an earlier read of
+     * this payload looked and found nothing — and each one is `{data:[…]}`, the same shape a
+     * `/view/{name}` response has, so the existing readers parse them unchanged.
+     *
+     * Sizes come from `limit[<view>]`; a bare `limit` on this resource is a 400 (probed 2026-11-24).
      */
     suspend fun artistPage(id: String): AppleArtist? {
         artistCache[id]?.takeIf { it.second > System.currentTimeMillis() }?.let { return it.first }
         val storefront = storefront()
-        val base = page("/v1/catalog/$storefront/artists/$id?extend=artistBio") ?: return null
-        val artist = AppleArtistReader.artist(base) ?: return null
-        val latestRelease = artistView(id, "latest-release", 1)
-            ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
-            ?.firstOrNull()
-        val videos = artistView(id, "music-videos", 6, extend = "previews")
-            ?.let { runCatching { AppleArtistReader.videos(it) }.getOrNull() }
-            .orEmpty()
-        val topSongs = artistView(id, "top-songs", 10)
-            ?.let { runCatching { AppleLibrary.songs(it) }.getOrNull() }
-            .orEmpty()
-        val albums = artistView(id, "full-albums", 20)
-            ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
-            .orEmpty()
-        val singles = artistView(id, "singles", 20)
-            ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
-            .orEmpty()
-        val compilations = artistView(id, "compilation-albums", 12)
-            ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
-            .orEmpty()
-        val similar = artistView(id, "similar-artists", 12)
-            ?.let { runCatching { AppleArtistReader.artists(it) }.getOrNull() }
-            .orEmpty()
+        val root = page(ArtistPagePath(id, storefront)) ?: return null
+        val artist = AppleArtistReader.artist(root) ?: return null
+        val views = root["data"].array().orEmpty().firstOrNull()?.obj()?.get("views").obj()
+        fun view(name: String): JsonObject? = views?.get(name).obj()
+
         val page = artist.copy(
-            latestRelease = latestRelease,
-            videos = videos,
-            topSongs = topSongs,
-            albums = albums,
-            singles = singles,
-            compilations = compilations,
-            similar = similar,
+            latestRelease = view("latest-release")
+                ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
+                ?.firstOrNull(),
+            videos = view("music-videos")
+                ?.let { runCatching { AppleArtistReader.videos(it) }.getOrNull() }
+                .orEmpty(),
+            topSongs = view("top-songs")
+                ?.let { runCatching { AppleLibrary.songs(it) }.getOrNull() }
+                .orEmpty(),
+            albums = view("full-albums")
+                ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
+                .orEmpty(),
+            singles = view("singles")
+                ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
+                .orEmpty(),
+            compilations = view("compilation-albums")
+                ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
+                .orEmpty(),
+            similar = view("similar-artists")
+                ?.let { runCatching { AppleArtistReader.artists(it) }.getOrNull() }
+                .orEmpty(),
         )
         // the songs screens read the same artist; a short cache keeps that from being a second read
         artistCache[id] = page to (System.currentTimeMillis() + ArtistCacheMs)
         return page
     }
 
-    private suspend fun artistView(id: String, view: String, limit: Int, extend: String? = null) =
-        page(
-            "/v1/catalog/${storefront()}/artists/$id/view/$view?limit=$limit" +
-                (extend?.let { "&extend=$it" } ?: ""),
-        )
+    /**
+     * The artist resource with every shelf it can carry, and the sizes the page draws.
+     *
+     * `extend` is the full editorial list (Cider's §F): it brings the bio, the hero video, the logo
+     * and `hero` in the same response, so the banner needs no read of its own. The bracket names are
+     * percent-encoded because this travels as a plain URL string.
+     */
+    private fun ArtistPagePath(id: String, storefront: String): String = buildString {
+        append("/v1/catalog/").append(storefront).append("/artists/").append(id)
+        append("?extend=")
+        append("centeredFullscreenBackground,artistBio,bornOrFormed,editorialArtwork,editorialVideo,hero,inFavorites,isGroup,origin")
+        append("&views=music-videos,similar-artists,top-songs,full-albums,singles,compilation-albums,latest-release")
+        append("&limit%5Btop-songs%5D=10")
+        append("&limit%5Bfull-albums%5D=20")
+        append("&limit%5Bsingles%5D=20")
+        append("&limit%5Bcompilation-albums%5D=12")
+        append("&limit%5Bsimilar-artists%5D=12")
+        append("&limit%5Bmusic-videos%5D=6")
+        append("&limit%5Blatest-release%5D=1")
+    }
 
     /**
      * An artist's id from their name, for the places that only know a name — Apple's album resource

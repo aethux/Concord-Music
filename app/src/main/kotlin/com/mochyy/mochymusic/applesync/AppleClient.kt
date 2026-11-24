@@ -52,16 +52,6 @@ class AppleClient(
         )
 
     /**
-     * Who owns one playlist. The library *list* does not carry it - `include=catalog` there returns
-     * the relationship without attributes - but the single resource does, and its catalogue
-     * counterpart carries `curatorName`, the same name the web player prints.
-     */
-    suspend fun playlistCurator(playlistId: String): PlaylistCatalogue? = runCatching {
-        val page = page("/v1/me/library/playlists/$playlistId?include=catalog") ?: return null
-        AppleLibrary.playlistOwner(page)
-    }.getOrNull()
-
-    /**
      * Who this account is: its own name and picture. Concord: added — the one read that stands in for
      * the owner field Apple's playlist resources do not have.
      */

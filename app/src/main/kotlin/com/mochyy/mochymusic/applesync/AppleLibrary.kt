@@ -26,6 +26,14 @@ internal object AppleLibrary {
         val obj = item.obj() ?: return@mapNotNull null
         val id = obj.idString("id") ?: return@mapNotNull null
         val attributes = obj["attributes"].obj()
+        // The catalogue twin the list includes answers both things a per-playlist read used to be
+        // spent on: its id is the playlist's own `pl.…` id and its `curatorName` is the owner.
+        // (It arrives on every page because `all()` keeps `include=catalog`; before that was fixed,
+        // page two and after came back with a relationship but no attributes.)
+        val catalog = obj["relationships"].obj()
+            ?.get("catalog").obj()
+            ?.get("data").array()
+            ?.firstOrNull()?.obj()
         RemotePlaylist(
             id = id,
             name = attributes?.string("name") ?: "Untitled playlist",
@@ -33,13 +41,8 @@ internal object AppleLibrary {
             // Apple leaves this out for a playlist it has no artwork for; the import then falls
             // back to the first track rather than writing a null over a cover already there
             artworkUrl = attributes?.get("artwork").obj()?.string("url"),
-            // the library resource has no owner; the catalogue counterpart it includes does
-            curator = obj["relationships"].obj()
-                ?.get("catalog").obj()
-                ?.get("data").array()
-                ?.firstOrNull()?.obj()
-                ?.get("attributes").obj()
-                ?.string("curatorName"),
+            curator = catalog?.get("attributes").obj()?.string("curatorName"),
+            catalogId = catalog?.idString("id"),
             // Apple has shipped this under more than one name across revisions of the API
             collaborative = attributes?.bool("isCollaborative") == true ||
                 attributes?.bool("hasCollaboration") == true ||
@@ -57,17 +60,6 @@ internal object AppleLibrary {
             handle = attributes.string("handle")?.trim()?.takeIf { it.isNotEmpty() },
             avatarUrl = attributes.get("artwork").obj()?.string("url"),
             profileUrl = attributes.string("url")?.takeIf { it.startsWith("http") },
-        )
-    }
-
-    fun playlistOwner(page: JsonObject): PlaylistCatalogue {
-        val catalog = page["data"].array().firstOrNull()?.obj()
-            ?.get("relationships").obj()?.get("catalog").obj()
-            ?.get("data").array()?.firstOrNull()?.obj()
-        val attributes = catalog?.get("attributes").obj()
-        return PlaylistCatalogue(
-            ownerName = attributes?.string("curatorName"),
-            catalogId = catalog?.idString("id"),
         )
     }
 

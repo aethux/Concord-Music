@@ -100,22 +100,22 @@ object ApplePlaylistImport {
         // Apple stamps every playlist with a lastModifiedDate. A playlist whose stamp has not moved
         // since the last import has the same songs in the same order, so its tracks are not read at
         // all: a refresh of an unchanged account now asks Apple for nothing per playlist.
-        // The owner and the catalogue id come from one read per playlist, and the id decides where
-        // the tracks are read from - so it is learned before anything is planned, not during.
+        // The catalogue id decides where the tracks are read from, so it is recorded before anything
+        // is planned, not during.
         val before = runCatching { dao.playlistMetas() }.getOrDefault(emptyList()).associateBy { it.playlistId }
+        // The list already answered this: every row's `relationships.catalog` carries the `pl.…` id
+        // and the curator's name, so an account of playlists costs no per-playlist reads at all.
         runCatching {
             val todo = remotes.filter {
                 val meta = before[localId(it.id)]
                 meta?.ownerChecked != true || meta.catalogId == null
             }
-            todo.chunked(Reads).forEach { chunk ->
-                coroutineScope {
-                    chunk.map { remote ->
-                        async { remote.id to client.playlistCurator(remote.id) }
-                    }.awaitAll().forEach { (id, owner) ->
-                        if (owner != null) PlaylistOwner.record(dao, localId(id), owner)
-                    }
-                }
+            todo.forEach { remote ->
+                PlaylistOwner.record(
+                    dao,
+                    localId(remote.id),
+                    PlaylistCatalogue(ownerName = remote.curator, catalogId = remote.catalogId),
+                )
             }
         }
         val metas = runCatching { dao.playlistMetas() }.getOrDefault(emptyList()).associateBy { it.playlistId }

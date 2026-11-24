@@ -51,6 +51,11 @@ data class RemotePlaylist(
     val artworkUrl: String? = null,
     /** Who Apple says made it: an editorial curator, or another person on a shared playlist. */
     val curator: String? = null,
+    /**
+     * The catalogue id (`pl.…`) the list's `relationships.catalog` carries. Null for a playlist
+     * Apple has no catalogue twin for, and for an upload.
+     */
+    val catalogId: String? = null,
     /** True when the playlist is open to edits from more than its owner. */
     val collaborative: Boolean = false,
     /** Apple's lastModifiedDate: a refresh reads the tracks only when this moved. */

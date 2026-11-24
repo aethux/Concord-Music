@@ -244,6 +244,8 @@ internal fun ProviderSetupPage(
     onOpenBrowser: () -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
+    /** Concord: one more line under Mochy's own message, for the caller that has something to add */
+    extraNote: String? = null,
 ) {
     OnboardingPage(
         badge = { ProviderSquircle(service, size = 40.dp) },
@@ -268,10 +270,12 @@ internal fun ProviderSetupPage(
                 Text(state.label, color = Onb.Subtitle, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
             is AccountImportState.Failed -> Text(state.message, color = Color(0xFFFF8A80), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            // Concord: a caller with its own line gives that line instead of Mochy's, not after it
             else -> Text(
-                stringResource(R.string.onb_provider_setup_body, service.label),
+                extraNote ?: stringResource(R.string.onb_provider_setup_body, service.label),
                 color = Onb.Muted,
                 fontSize = 14.sp,
+                lineHeight = 20.sp,
             )
         }
     }

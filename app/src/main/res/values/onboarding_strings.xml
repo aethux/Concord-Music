@@ -75,7 +75,7 @@
         <item quantity="one">Import %d song</item>
         <item quantity="other">Import %d songs</item>
     </plurals>
-    <string name="onb_provider_setup_title">%1$s setup</string>
+    <string name="onb_provider_setup_title">%1$s Setup</string>
     <string name="onb_provider_setup_subtitle">You will log in to your account. We never see your password. A web page will open.</string>
     <string name="onb_sign_in_again">Sign in again</string>
     <string name="onb_try_again">Try again</string>

@@ -192,9 +192,11 @@ private fun LibraryImportFlow(startWith: AccountService? = null, onClose: () -> 
         }
     }
 
-    // the provider page opens its browser after a beat, once the user has read what's about to happen
+    // the provider page opens its browser after a beat, once the user has read what's about to happen;
+    // a sheet opened from a signed-out page waits for its own button instead
     LaunchedEffect(step, session) {
         if (step != ImportStep.ProviderSetup || session == null) return@LaunchedEffect
+        if (startWith != null) return@LaunchedEffect
         delay(900)
         val state = session.state.value
         if (state is AccountImportState.SigningIn || state is AccountImportState.NeedsYouTubeSignIn) openBrowser()
@@ -292,6 +294,8 @@ private fun LibraryImportFlow(startWith: AccountService? = null, onClose: () -> 
                     )
 
                     ImportStep.ProviderSetup -> {
+                        // Mochy's own sign-in message; the WebView only opens on its button (no auto-open
+                        // for a sheet opened from a signed-out page — see the effect above)
                         val service = session?.service ?: AccountService.SPOTIFY
                         ProviderSetupPage(
                             service = service,
@@ -304,6 +308,8 @@ private fun LibraryImportFlow(startWith: AccountService? = null, onClose: () -> 
                                 openBrowser()
                             },
                             onBack = ::back,
+                            // Concord: Mochy's own message, plus the line the Home prompt promises
+                            extraNote = if (startWith != null) stringResource(R.string.apple_sign_in_body) else null,
                         )
                     }
 

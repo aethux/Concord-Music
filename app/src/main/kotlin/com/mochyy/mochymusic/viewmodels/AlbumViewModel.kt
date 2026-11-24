@@ -93,6 +93,12 @@ constructor(
     /** YouTube couldn't be reached and nothing was saved to show instead: the page offers a retry */
     val loadFailed = MutableStateFlow(false)
 
+    /**
+     * An Apple album Apple has no catalogue twin for: the list is what the library holds from it,
+     * not the release, and the header says "N songs in your library" rather than "N songs".
+     */
+    val appleLibraryOnly = MutableStateFlow(false)
+
     init {
         if (appleRemoteId == null) load() else loadApple()
     }
@@ -119,6 +125,7 @@ constructor(
                 return@launch
             }
             val localAlbumId = albumId
+            appleLibraryOnly.value = page.libraryOnly
             val artistName = page.artistName.ifBlank { "Unknown artist" }
             // the artist row the page draws its creator line from; untappable unless the artist is
             // already in the library, because there is no Apple artist page yet

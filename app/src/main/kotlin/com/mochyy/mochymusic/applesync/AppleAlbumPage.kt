@@ -27,6 +27,11 @@ data class AppleAlbumPage(
     /** `editorialNotes.standard`, falling back to `.short`; null when Apple wrote none. */
     val description: String?,
     val songs: List<RemoteSong> = emptyList(),
+    /**
+     * True when Apple gave this library album no catalogue twin, so `songs` is only what the
+     * library holds from it — not the release. The page says so instead of looking short.
+     */
+    val libraryOnly: Boolean = false,
 )
 
 object AppleAlbumReader {

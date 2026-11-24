@@ -124,6 +124,7 @@ fun AlbumScreen(
     val moreByArtist by viewModel.moreByArtist.collectAsState()
     val description by viewModel.description.collectAsState()
     val loadFailed by viewModel.loadFailed.collectAsState()
+    val appleLibraryOnly by viewModel.appleLibraryOnly.collectAsState()
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
     val hideVideoSongs by rememberPreference(key = HideVideoSongsKey, defaultValue = false)
 
@@ -303,7 +304,13 @@ fun AlbumScreen(
                 description = description?.takeIf { it.isNotBlank() },
                 stats = albumStats(
                     year = album.album.year,
-                    songCountText = pluralStringResource(R.plurals.n_song, filteredSongs.size, filteredSongs.size),
+                    // an album Apple has no catalogue twin for lists the songs the library holds
+                    // from it, so the count says that rather than reading like a short album
+                    songCountText = pluralStringResource(
+                        if (appleLibraryOnly) R.plurals.n_song_in_library else R.plurals.n_song,
+                        filteredSongs.size,
+                        filteredSongs.size,
+                    ),
                     totalSeconds = totalSeconds,
                     explicit = album.album.explicit,
                     explicitTag = stringResource(R.string.album_explicit_tag),

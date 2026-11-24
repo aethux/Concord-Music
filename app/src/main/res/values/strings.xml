@@ -192,6 +192,12 @@
         <item quantity="one">%d song</item>
         <item quantity="other">%d songs</item>
     </plurals>
+    <!-- An Apple album with no catalogue twin: the page lists the songs the library holds from it,
+         not the release. Saying so is the difference between "a smaller album" and "a bug". -->
+    <plurals name="n_song_in_library">
+        <item quantity="one">%d song in your library</item>
+        <item quantity="other">%d songs in your library</item>
+    </plurals>
     <plurals name="n_artist">
         <item quantity="one">%d artist</item>
         <item quantity="other">%d artists</item>

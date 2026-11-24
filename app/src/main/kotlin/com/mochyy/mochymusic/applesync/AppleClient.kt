@@ -247,6 +247,9 @@ class AppleClient(
                 parse = AppleLibrary::songs,
                 keep = "limit=100",
             ),
+            // Apple keeps the album but not which catalogue release it is (`catalog` comes back
+            // empty), so this is what the library holds, not the album. The page says so.
+            libraryOnly = true,
         )
     }
 

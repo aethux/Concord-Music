@@ -373,6 +373,11 @@ class AppleClient(
         if (inLibrary && social?.collaborators.isNullOrEmpty()) {
             social = runCatching { libraryPlaylistSocial(id) }.getOrNull() ?: social
         }
+        // more than one person on the playlist: the owner Apple lists plus anyone in collaborators
+        val shared = (listOfNotNull(social?.owner ?: playlist.owner) + social?.collaborators.orEmpty())
+            .map { it.id ?: it.name }
+            .distinct()
+            .size > 1
         timber.log.Timber.tag("ApplePlaylist").d(
             "page %s library=%s twin=%s collaborators=%d",
             id, inLibrary, twin, social?.collaborators?.size ?: -1,
@@ -382,9 +387,10 @@ class AppleClient(
             url = playlist.url ?: social?.url,
             owner = social?.owner ?: playlist.owner,
             collaborators = social?.collaborators.orEmpty(),
-            // who added each song: only the catalogue representation says so, and only a playlist
-            // more than one person built can have more than one answer, so one read and only then
-            addedBy = if (twin != null && !social?.collaborators.isNullOrEmpty()) {
+            shared = shared,
+            // who added each song: only the catalogue representation says so, and only a shared
+            // playlist can have an answer worth drawing, so one read and only then
+            addedBy = if (twin != null && shared) {
                 runCatching { playlistAddedBy(twin, storefront) }.getOrNull().orEmpty()
             } else {
                 emptyMap()
@@ -408,7 +414,11 @@ class AppleClient(
         page(
             "/v1/catalog/$storefront/playlists/$playlistId?include=tracks" +
                 "&limit%5Btracks%5D=100&associate%5Bplaylists%3Atracks%5D=collaborators" +
-                "&fields%5Bsongs%5D=name",
+                "&fields%5Bsongs%5D=name" +
+                // without this the association is a bare id and href for anyone whose profile is
+                // not public; with it Apple fills in the name and the picture (probed: 23 of 23 rows
+                // on a playlist that answered nobody before)
+                "&with=lightProfiles",
         )?.let(ApplePlaylistReader::addedBy).orEmpty()
 
     private data class PlaylistSocial(
@@ -518,6 +528,24 @@ class AppleClient(
      * An artist's id from their name, for the places that only know a name — Apple's album resource
      * carries no artist id, and its artists relationship is not always included.
      */
+    /**
+     * An Apple profile and the playlists it shares, the resource Cider reads
+     * (`apple-api-reference.md` §A): `/v1/social/{sf}/social-profiles/{id}` plus
+     * `include=shared-playlists`, which is the only place another person's playlists are listed.
+     *
+     * A private profile answers 404 for this page while its name still hydrates on a playlist, so a
+     * null answer is a real state: the caller shows "Apple did not answer", not an error.
+     */
+    suspend fun socialProfile(profileId: String): ApplePersonProfile? {
+        if (!profileId.startsWith("sp.")) return null
+        val storefront = storefront()
+        return page(
+            "/v1/social/$storefront/social-profiles/$profileId?art%5Burl%5D=f" +
+                "&include=shared-playlists&limit%5Bshared-playlists%5D=50" +
+                "&fields%5Bplaylists%5D=name,artwork,trackCount,curatorName,url,playParams",
+        )?.let(AppleProfileReader::profile)
+    }
+
     suspend fun artistIdByName(name: String): String? {
         val storefront = storefront()
         val term = java.net.URLEncoder.encode(name, "UTF-8")

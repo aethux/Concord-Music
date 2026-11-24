@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -166,26 +167,25 @@ fun rememberAppleAddedBy(remoteId: String?): Map<String, AppleCollaborator> {
  * control. Each person's picture is the 500 px avatar Apple attaches to their profile.
  */
 @Composable
-fun AppleAddedByAvatar(avatarUrl: String?) {
+fun AppleAddedByAvatar(avatarUrl: String?, onClick: (() -> Unit)? = null) {
+    val base = Modifier
+        .size(18.dp)
+        .clip(CircleShape)
+        .let { if (onClick != null) it.clickable(onClick = onClick) else it }
     val sized = avatarUrl?.let { AppleCovers.sized(it, 36) }
     if (sized != null) {
         AsyncImage(
             model = sized,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(18.dp)
-                .clip(CircleShape),
+            modifier = base,
         )
         return
     }
     // a person Apple names but draws no picture for (a private profile): a glyph, not a blank row
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(18.dp)
-            .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.16f)),
+        modifier = base.background(Color.White.copy(alpha = 0.16f)),
     ) {
         Icon(
             painter = painterResource(R.drawable.person),

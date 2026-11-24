@@ -45,6 +45,8 @@ data class ApplePlaylist(
     val owner: AppleCollaborator? = null,
     /** everyone on the playlist, in Apple's order */
     val collaborators: List<AppleCollaborator> = emptyList(),
+    /** more than one person built it — the owner Apple lists, plus anyone in collaborators */
+    val shared: Boolean = false,
     /**
      * Who added each song, for a playlist more than one person built: **catalogue** song id → the
      * person Apple associates with that row. Empty for a playlist one person made, and for rows

@@ -70,11 +70,6 @@ fun ApplePlaylistScreen(
     val current = page
     val songs = current?.songs.orEmpty()
 
-    // who added what, but only when more than one person built the playlist: a column of one face
-    // repeating says nothing, and Apple's own app draws nothing there either
-    val adders = remember(current?.addedBy) {
-        current?.addedBy?.values?.map { it.name }?.distinct().orEmpty()
-    }
 
     fun play(startIndex: Int, shuffled: Boolean) {
         val list = if (shuffled) songs.shuffled() else songs
@@ -142,10 +137,12 @@ fun ApplePlaylistScreen(
                 onLongClick = {},
                 onMenuClick = { menuSong = song },
                 badge = {
-                    if (adders.size > 1) {
-                        current?.addedBy?.get(song.id.removePrefix("AM_"))?.let { person ->
-                            AppleAddedByAvatar(person.avatarUrl)
-                        }
+                    // a shared playlist credits every row; one person's own playlist draws nothing
+                    current?.addedBy?.get(song.id.removePrefix("AM_"))?.let { person ->
+                        AppleAddedByAvatar(
+                            avatarUrl = person.avatarUrl,
+                            onClick = person.id?.let { id -> { navController.navigate("apple_profile/$id") } },
+                        )
                     }
                 },
             )

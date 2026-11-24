@@ -394,7 +394,6 @@ fun LocalPlaylistScreen(
     val addedBy = rememberAppleAddedBy(
         remoteId = importedNow?.remoteId?.takeIf { it.startsWith("p.") || it.startsWith("pl.") },
     )
-    val adders = remember(addedBy) { addedBy.values.map { it.name }.distinct() }
     // while Apple's people are on their way the header waits on a placeholder: showing the imported
     // name first and swapping it a moment later reads as the wrong credit, not as a load
     val creatorsLoading = applePeople?.loading == true
@@ -729,13 +728,13 @@ fun LocalPlaylistScreen(
                             }
                         },
                         badge = {
-                            // who added it, only when more than one person built the playlist: a
-                            // column of one face repeating says nothing, and Apple's own app draws
-                            // nothing there either
-                            if (adders.size > 1) {
-                                addedBy[song.song.id.removePrefix("AM_")]?.let { person ->
-                                    AppleAddedByAvatar(person.avatarUrl)
-                                }
+                            // a shared playlist credits every row; on a playlist one person built,
+                            // `addedBy` is empty and nothing is drawn at all
+                            addedBy[song.song.id.removePrefix("AM_")]?.let { person ->
+                                AppleAddedByAvatar(
+                                    avatarUrl = person.avatarUrl,
+                                    onClick = person.id?.let { id -> { navController.navigate("apple_profile/$id") } },
+                                )
                             }
                         },
                         onMenuClick = {

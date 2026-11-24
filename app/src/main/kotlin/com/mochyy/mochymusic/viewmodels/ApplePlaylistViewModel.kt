@@ -42,8 +42,10 @@ class ApplePlaylistViewModel @Inject constructor(
         val url: String?,
         val owner: AppleCollaborator?,
         val collaborators: List<AppleCollaborator>,
-        /** who added each song, keyed by the catalogue song id; empty unless several people built it */
+        /** who added each song, keyed by the catalogue song id; empty unless the playlist is shared */
         val addedBy: Map<String, AppleCollaborator> = emptyMap(),
+        /** more than one person built the playlist, so each row has someone to credit */
+        val shared: Boolean = false,
     )
 
     private val _page = MutableStateFlow<Page?>(null)
@@ -97,6 +99,7 @@ class ApplePlaylistViewModel @Inject constructor(
                 owner = remote.owner,
                 collaborators = remote.collaborators,
                 addedBy = remote.addedBy,
+                shared = remote.shared,
             )
         }
     }

@@ -194,6 +194,15 @@
     </plurals>
     <!-- An Apple album with no catalogue twin: the page lists the songs the library holds from it,
          not the release. Saying so is the difference between "a smaller album" and "a bug". -->
+    <!-- an Apple profile: name, handle and the playlists Apple publishes for them -->
+    <string name="apple_profile_loading">Loading profile</string>
+    <string name="apple_profile_failed">Apple does not publish this profile</string>
+    <string name="apple_profile_no_playlists">No shared playlists</string>
+    <plurals name="apple_profile_playlists">
+        <item quantity="one">%d shared playlist</item>
+        <item quantity="other">%d shared playlists</item>
+    </plurals>
+    <string name="action_back">Back</string>
     <plurals name="n_song_in_library">
         <item quantity="one">%d song in your library</item>
         <item quantity="other">%d songs in your library</item>

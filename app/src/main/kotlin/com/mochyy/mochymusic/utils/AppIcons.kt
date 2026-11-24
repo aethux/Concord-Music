@@ -141,7 +141,17 @@ object AppIcons {
     /** drops the alias a switch left behind, once this task is no longer running under it */
     fun prune(context: Context, running: AppIcon?) {
         val current = current(context)
+        // the icon in use has to be one the launcher can open: a switch on another build can leave
+        // its alias disabled and then nothing on the home screen starts the app at all
+        enable(context, current)
         AppIcon.entries.filter { it != current && it != running }.forEach { disable(context, it) }
+    }
+
+    private fun enable(context: Context, icon: AppIcon) {
+        val pm = context.packageManager
+        val component = componentOf(context, icon)
+        if (pm.getComponentEnabledSetting(component) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) return
+        pm.setComponentEnabledSetting(component, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
     }
 
     private fun disable(context: Context, icon: AppIcon) {

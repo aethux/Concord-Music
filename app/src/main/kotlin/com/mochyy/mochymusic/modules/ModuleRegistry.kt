@@ -157,8 +157,10 @@ class ModuleRegistry @Inject constructor(
 
     fun all(): List<MochyModule> = modules.map { it.first }
 
-    // youtube starts on, modules start off until they're turned on (or signed in to)
-    fun isEnabled(id: String): Boolean = prefs.getBoolean("enabled_$id", id == SourceModules.YouTubeId)
+    // Concord: Apple Music starts on with the app itself — this is an Apple-only player — and every
+    // other module starts off until it's turned on (or signed in to).
+    fun isEnabled(id: String): Boolean =
+        prefs.getBoolean("enabled_$id", id == SourceModules.YouTubeId || id == AppleMusicModule.Id)
 
     fun setEnabled(id: String, on: Boolean) {
         val module = module(id)

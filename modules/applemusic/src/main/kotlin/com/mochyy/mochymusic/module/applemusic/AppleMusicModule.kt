@@ -175,14 +175,31 @@ class AppleMusicModule : SourceModule {
 
         val region = picks[ChoiceRegion]?.takeIf { it != RegionAuto } ?: storefront ?: "us"
         val quality = picks[ChoiceQuality] ?: OptionAac256
-        val key = "$region|${track.title}|${track.artists.joinToString(",")}"
+        // the id is part of the key: a miss remembered for a title must not answer a later attempt
+        // that came with the recording's own id
+        val key = "$region|${track.remoteId ?: ""}|${track.title}|${track.artists.joinToString(",")}"
         val missedAt = misses[key]
         if (missedAt != null && System.currentTimeMillis() - missedAt < MissMemoryMs) {
             report(DiagnosticStep("Find the song", false, "Not on Apple Music"))
             return ResolveResult.NotFound("Not on Apple Music")
         }
         report(DiagnosticStep("Find the song", null, "Searching Apple Music ($region)…"))
-        val ranked = matches[key]?.let { listOf(TrackMatcher.Scored(it, 1f)) } ?: match(track, region)
+        // an id we were handed is the answer: no search, and no chance of a different recording
+        val ranked = track.remoteId?.let { id ->
+            listOf(
+                TrackMatcher.Scored(
+                    CatalogTrack(
+                        id = id,
+                        title = track.title,
+                        artist = track.artists.joinToString(", "),
+                        album = track.album,
+                        durationMs = track.durationMs,
+                        isrc = track.isrc,
+                    ),
+                    1f,
+                ),
+            )
+        } ?: matches[key]?.let { listOf(TrackMatcher.Scored(it, 1f)) } ?: match(track, region)
         if (ranked.isEmpty()) {
             misses[key] = System.currentTimeMillis()
             report(DiagnosticStep("Find the song", false, "No matching recording of “${track.title}” in $region"))

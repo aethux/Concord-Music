@@ -5369,12 +5369,16 @@ class MusicService :
 
     /** the song as a module looks for it: its saved row, or the queue's own copy for a song played straight from search that isn't saved yet */
     private suspend fun trackQueryOf(mediaId: String): com.mochyy.mochymusic.module.TrackQuery? {
+        // an Apple row knows the recording's own id, so the module can skip its search: a title it
+        // cannot read (another script, a bracketed suffix) is otherwise "Not on Apple Music"
+        val appleId = mediaId.removePrefix("AM_").takeIf { it.all(Char::isDigit) }
         database.song(mediaId).first()?.let {
             return com.mochyy.mochymusic.module.TrackQuery(
                 title = it.song.title,
                 artists = it.artists.map { a -> a.name },
                 album = it.song.albumName ?: it.album?.title,
                 durationMs = it.song.duration.takeIf { d -> d > 0 }?.times(1000L),
+                remoteId = appleId,
             )
         }
         // only the youtube path saves a new song, so without this every module was passed over for it
@@ -5384,6 +5388,7 @@ class MusicService :
             artists = queued.artists.map { it.name },
             album = queued.album?.title,
             durationMs = queued.duration.takeIf { it > 0 }?.times(1000L),
+            remoteId = appleId,
         )
     }
 

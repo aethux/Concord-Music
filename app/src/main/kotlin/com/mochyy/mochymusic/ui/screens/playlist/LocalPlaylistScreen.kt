@@ -122,6 +122,7 @@ import com.mochyy.mochymusic.ui.component.removeFromPlaylistSwipeAction
 import com.mochyy.mochymusic.ui.component.detail.CreatorUi
 import com.mochyy.mochymusic.ui.component.detail.rememberApplePeople
 import com.mochyy.mochymusic.ui.component.detail.rememberAppleAddedBy
+import com.mochyy.mochymusic.ui.component.detail.AppleCreatorsSheet
 import com.mochyy.mochymusic.ui.component.detail.AppleAddedByAvatar
 import com.mochyy.mochymusic.ui.component.detail.rememberFeaturedArtists
 import com.mochyy.mochymusic.ui.component.detail.FeaturedArtistsRow
@@ -397,6 +398,8 @@ fun LocalPlaylistScreen(
     // while Apple's people are on their way the header waits on a placeholder: showing the imported
     // name first and swapping it a moment later reads as the wrong credit, not as a load
     val creatorsLoading = applePeople?.loading == true
+    // a face opens a list of everyone on the playlist, in this app; Apple's website is not the answer
+    var showAppleCreators by remember { mutableStateOf(false) }
     val creators = remember(imported, accountName, creatorAvatar, applePeople) {
         val author = imported?.authorName
         val apple = applePeople?.people.orEmpty()
@@ -410,12 +413,26 @@ fun LocalPlaylistScreen(
             }
         }
     }
-    val onCreatorClick: ((CreatorUi) -> Unit)? = imported?.authorUrl?.let { url ->
-        { _: CreatorUi ->
-            // a youtube channel opens in the app, anything else on its own site
-            val channel = YouTubeChannelRegex.find(url)?.groupValues?.get(1)
-            if (channel != null) navController.navigate("artist/$channel") else runCatching { uriHandler.openUri(url) }
+    val appleCreators = applePeople?.people.orEmpty()
+    val onCreatorClick: ((CreatorUi) -> Unit)? = if (appleCreators.isNotEmpty()) {
+        // Apple's people open a sheet of everyone, and each row is the in-app profile page
+        { _: CreatorUi -> showAppleCreators = true }
+    } else {
+        imported?.authorUrl?.let { url ->
+            { _: CreatorUi ->
+                // a youtube channel opens in the app, anything else on its own site
+                val channel = YouTubeChannelRegex.find(url)?.groupValues?.get(1)
+                if (channel != null) navController.navigate("artist/$channel") else runCatching { uriHandler.openUri(url) }
+            }
         }
+    }
+
+    if (showAppleCreators) {
+        AppleCreatorsSheet(
+            people = appleCreators,
+            onDismiss = { showAppleCreators = false },
+            onPersonClick = { profileId -> navController.navigate("apple_profile/$profileId") },
+        )
     }
 
     fun play(items: List<com.mochyy.mochymusic.db.entities.PlaylistSong>, startIndex: Int = 0) {

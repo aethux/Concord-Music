@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
@@ -28,6 +29,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.ui.component.ListDialog
+import com.mochyy.mochymusic.ui.component.ListItem
+import com.mochyy.mochymusic.ui.component.detail.CreatorUi
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleCollaborator
 import com.mochyy.mochymusic.applesync.AppleCovers
@@ -81,6 +85,7 @@ fun rememberApplePeople(remoteId: String?): ApplePeople? {
                             name = person.name,
                             avatarUrl = person.avatarUrl?.let { url -> AppleCovers.sized(url, 160) },
                             artistId = null,
+                            appleProfileId = person.id,
                         )
                     }
             }
@@ -193,5 +198,51 @@ fun AppleAddedByAvatar(avatarUrl: String?, onClick: (() -> Unit)? = null) {
             tint = Color.White.copy(alpha = 0.7f),
             modifier = Modifier.size(11.dp),
         )
+    }
+}
+
+/**
+ * The people on a playlist, as Mochy lists a choice: one row each, a chevron, and the row opens the
+ * person in this app. The faces used to hand the whole row to Apple's website, which Android resolves
+ * to the Apple Music app — the choice belongs here instead.
+ */
+@Composable
+fun AppleCreatorsSheet(
+    people: List<CreatorUi>,
+    onDismiss: () -> Unit,
+    onPersonClick: (String) -> Unit,
+) {
+    ListDialog(onDismiss = onDismiss) {
+        items(items = people, key = { it.name }) { person ->
+            val profileId = person.appleProfileId
+            ListItem(
+                title = person.name,
+                modifier = Modifier.clickable(enabled = profileId != null) {
+                    if (profileId != null) {
+                        onDismiss()
+                        onPersonClick(profileId)
+                    }
+                },
+                thumbnailContent = {
+                    AsyncImage(
+                        model = person.avatarUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.08f)),
+                    )
+                },
+                trailingContent = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_chevron_right),
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+            )
+        }
     }
 }

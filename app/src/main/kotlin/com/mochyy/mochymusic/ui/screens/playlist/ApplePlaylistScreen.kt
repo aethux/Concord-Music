@@ -49,6 +49,7 @@ import com.mochyy.mochymusic.ui.component.detail.PlaylistHeader
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackBones
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.detail.AppleAddedByAvatar
+import com.mochyy.mochymusic.ui.component.detail.AppleCreatorsSheet
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.viewmodels.ApplePlaylistViewModel
 
@@ -69,6 +70,18 @@ fun ApplePlaylistScreen(
 
     val current = page
     val songs = current?.songs.orEmpty()
+    val creators = remember(current) {
+        current?.let { creatorsOf(it.owner, it.collaborators, it.curator) }.orEmpty()
+    }
+    // a face opens a list of everyone, not Apple's website
+    var showCreators by remember { mutableStateOf(false) }
+    if (showCreators) {
+        AppleCreatorsSheet(
+            people = creators,
+            onDismiss = { showCreators = false },
+            onPersonClick = { profileId -> navController.navigate("apple_profile/$profileId") },
+        )
+    }
 
 
     fun play(startIndex: Int, shuffled: Boolean) {
@@ -113,7 +126,8 @@ fun ApplePlaylistScreen(
         item(key = "header", contentType = "header") {
             PlaylistHeader(
                 title = current.name,
-                creators = creatorsOf(current.owner, current.collaborators, current.curator),
+                creators = creators,
+                onCreatorClick = { showCreators = true },
                 stats = statsLine(current.songs.size, current.totalSeconds),
                 isPlaying = isPlaying,
                 onPlayClick = { play(0, shuffled = false) },
@@ -250,6 +264,7 @@ private fun creatorsOf(
                 name = it.name,
                 avatarUrl = it.avatarUrl?.let { url -> AppleCovers.sized(url, 160) },
                 artistId = null,
+                appleProfileId = it.id,
             )
         }
     return people.ifEmpty { listOfNotNull(curator?.let { CreatorUi(name = it, avatarUrl = null, artistId = null) }) }

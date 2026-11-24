@@ -229,6 +229,8 @@ data class CreatorUi(
     val name: String,
     val avatarUrl: String? = null,
     val artistId: String? = null,
+    /** an Apple social profile (`sp.…`): the id the in-app profile page opens */
+    val appleProfileId: String? = null,
 )
 
 data class FeaturedArtistUi(

@@ -224,6 +224,17 @@ object AppleMusicArtistBackgroundProvider {
             ),
         ) ?: return@runCatching null
         val artist = root["data"]?.jsonArray?.firstOrNull()?.jsonObject ?: return@runCatching null
+        editorialFrom(artist)
+    }.getOrNull()
+
+    /**
+     * The same editorial from an artist resource somebody else already fetched.
+     *
+     * Concord: the artist page asks for `extend=…editorialVideo,editorialArtwork,hero…` and
+     * `views=latest-release` for its own shelves, so parsing that row beats reading the same artist a
+     * second time. One parser, two callers.
+     */
+    fun editorialFrom(artist: JsonObject): AppleArtistEditorial? = runCatching {
         val attributes = artist["attributes"]?.jsonObject ?: return@runCatching null
 
         val video = attributes["editorialVideo"]?.jsonObject
@@ -271,7 +282,7 @@ object AppleMusicArtistBackgroundProvider {
             }
 
         AppleArtistEditorial(
-            appleId = artistId,
+            appleId = artist["id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             name = attributes["name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             motionVideoUrl = wideUrl,
             motionSquareUrl = squareUrl,

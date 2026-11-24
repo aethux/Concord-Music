@@ -2,6 +2,7 @@
 // Concord: Mocha's read client verbatim, catalogCover() included.
 package com.mochyy.mochymusic.applesync
 
+import com.mochyy.mochymusic.canvas.AppleMusicArtistBackgroundProvider
 import com.mochyy.mochymusic.importer.account.AccountHttp
 import com.mochyy.mochymusic.importer.account.AccountImportException
 import com.mochyy.mochymusic.importer.array
@@ -477,9 +478,13 @@ class AppleClient(
         val root = page(ArtistPagePath(id, storefront)) ?: return null
         val artist = AppleArtistReader.artist(root) ?: return null
         val views = root["data"].array().orEmpty().firstOrNull()?.obj()?.get("views").obj()
+        val row = root["data"].array().orEmpty().firstOrNull()?.obj()
         fun view(name: String): JsonObject? = views?.get(name).obj()
 
         val page = artist.copy(
+            // the same payload already carries the hero video, logo and bio, so the banner costs
+            // nothing extra; the canvas provider parses it so there is one parser, not two
+            editorial = row?.let { AppleMusicArtistBackgroundProvider.editorialFrom(it) },
             latestRelease = view("latest-release")
                 ?.let { runCatching { AppleArtistReader.albums(it) }.getOrNull() }
                 ?.firstOrNull(),

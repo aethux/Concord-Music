@@ -5,6 +5,7 @@
 // (`featured-playlists` 404s and `appears-on` is not a path Apple knows; both were checked live.)
 package com.mochyy.mochymusic.applesync
 
+import com.mochyy.mochymusic.canvas.AppleArtistEditorial
 import com.mochyy.mochymusic.importer.array
 import com.mochyy.mochymusic.importer.idString
 import com.mochyy.mochymusic.importer.long
@@ -57,6 +58,12 @@ data class AppleArtist(
     val compilations: List<AppleAlbumRef> = emptyList(),
     val videos: List<AppleMusicVideo> = emptyList(),
     val similar: List<AppleArtistRef> = emptyList(),
+    /**
+     * Concord: the hero video, logo and bio, parsed from this same payload by the canvas provider's
+     * one parser (`AppleMusicArtistBackgroundProvider.editorialFrom`). Null when Apple sent no
+     * editorial for this artist, or when the caller fetched the artist without `extend`.
+     */
+    val editorial: AppleArtistEditorial? = null,
 )
 
 object AppleArtistReader {

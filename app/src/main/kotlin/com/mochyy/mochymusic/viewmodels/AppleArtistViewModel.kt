@@ -14,7 +14,6 @@ import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.db.entities.SongEntity
 import com.mochyy.mochymusic.db.entities.SongSource
 import com.mochyy.mochymusic.canvas.AppleArtistEditorial
-import com.mochyy.mochymusic.canvas.AppleMusicArtistBackgroundProvider
 import com.mochyy.mochymusic.db.MusicDatabase
 import com.mochyy.mochymusic.playback.queues.AppleStationQueue
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -146,12 +145,8 @@ class AppleArtistViewModel @Inject constructor(
             _failed.value = false
             _page.value = Page(artist = artist, songs = songs)
             observeLibrary(artist.name)
-            // by Apple's id, not by name: the id is already known, and a name search can land on
-            // the wrong artist
-            val storefront = runCatching { AppleClient(pair).storefront() }.getOrDefault("us")
-            _editorial.value = runCatching {
-                AppleMusicArtistBackgroundProvider.getArtistEditorialById(artist.id, storefront)
-            }.getOrNull()
+            // the banner's hero video, logo and bio came with this same payload
+            _editorial.value = artist.editorial
         }
     }
 }

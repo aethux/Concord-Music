@@ -4,6 +4,8 @@
 package com.mochyy.mochymusic.ui.component
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -46,6 +48,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -92,17 +96,20 @@ fun ReorderCards(
     val reveal = animateFloatAsState(if (sorting) 1f else 0f, spring(dampingRatio = 1f, stiffness = 500f), label = "handles")
     val handlesShown by remember { derivedStateOf { reveal.value > 0f } }
 
-    // a card that has left the list is drawn once more where it stood, fading, while the rest close
-    // the gap — a card being taken out of the stack reads as leaving instead of blinking off
-    val leaving = remember { mutableStateMapOf<String, Pair<Animatable<Float, androidx.compose.animation.core.AnimationVector1D>, Int>>() }
+    // a card that has left the list is drawn once more where it stood, rising out of the stack while
+    // the rest slide up after it — a card being taken out reads as leaving instead of blinking off
+    val leaving = remember { mutableStateMapOf<String, Leaving>() }
     val previous = remember { mutableStateOf(ids) }
     LaunchedEffect(ids) {
         val gone = previous.value.withIndex().filter { (_, id) -> id !in ids }
         previous.value = ids
         gone.forEach { (index, id) ->
-            val fade = Animatable(1f)
-            leaving[id] = fade to index
-            fade.animateTo(0f, tween(180))
+            val entry = Leaving(Animatable(1f), Animatable(0f), index)
+            leaving[id] = entry
+            coroutineScope {
+                launch { entry.fade.animateTo(0f, tween(170, easing = LinearOutSlowInEasing)) }
+                launch { entry.rise.animateTo(-30f, tween(230, easing = FastOutLinearInEasing)) }
+            }
             leaving.remove(id)
         }
     }
@@ -201,19 +208,19 @@ fun ReorderCards(
             }
         }
 
-        // the cards that have just left, over the gap they vacated
+        // the cards that have just left, rising out of the gap they vacated
+        val risePx = with(LocalDensity.current) { 1.dp.toPx() }
         leaving.forEach { (id, entry) ->
-            val (fade, index) = entry
             key("leaving-$id") {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .zIndex(2f)
-                        .offset { IntOffset(0, (index * slotPx).roundToInt()) }
+                        .offset { IntOffset(0, (entry.index * slotPx + entry.rise.value * risePx).roundToInt()) }
                         .graphicsLayer {
-                            alpha = fade.value
+                            alpha = entry.fade.value
                             transformOrigin = TransformOrigin(0.5f, 0f)
-                            scaleY = 0.94f + 0.06f * fade.value
+                            scaleY = 0.96f + 0.04f * entry.fade.value
                         }
                         .fillMaxWidth()
                         .height(slotHeight),
@@ -248,3 +255,10 @@ private fun DragLines(modifier: Modifier, visibility: () -> Float) {
         }
     }
 }
+
+// where a card that has left the list is going: it keeps its old slot, rises and fades
+private class Leaving(
+    val fade: Animatable<Float, androidx.compose.animation.core.AnimationVector1D>,
+    val rise: Animatable<Float, androidx.compose.animation.core.AnimationVector1D>,
+    val index: Int,
+)

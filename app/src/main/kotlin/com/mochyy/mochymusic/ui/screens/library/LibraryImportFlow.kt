@@ -41,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
@@ -109,6 +110,7 @@ fun PopupSheetState.showLibraryImportSheet(startWith: AccountService? = null) {
 private fun LibraryImportFlow(startWith: AccountService? = null, onClose: () -> Unit) {
     val vm: OnboardingViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val history = remember { mutableStateListOf(ImportStep.Providers) }
     var forward by remember { mutableStateOf(true) }
@@ -202,9 +204,15 @@ private fun LibraryImportFlow(startWith: AccountService? = null, onClose: () -> 
         if (state is AccountImportState.SigningIn || state is AccountImportState.NeedsYouTubeSignIn) openBrowser()
     }
 
-    // signed in and the library is read: close the browser and show what can be brought in
+    // signed in: for Apple the sync engine takes the whole library, so the sheet is done here;
+    // any other service goes on to the page that asks what to bring in
     LaunchedEffect(sessionState, step) {
         if (step == ImportStep.ProviderSetup && sessionState is AccountImportState.Choosing) {
+            if (session?.service == AccountService.APPLE_MUSIC) {
+                com.mochyy.mochymusic.applesync.AppleSyncService.start(context)
+                finish()
+                return@LaunchedEffect
+            }
             closeBrowser()
             delay(250)
             go(ImportStep.WhatToSync, replaceCurrent = true)

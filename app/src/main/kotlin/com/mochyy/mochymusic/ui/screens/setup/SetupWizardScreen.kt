@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -102,6 +103,7 @@ fun SetupWizardScreen(
 ) {
     val vm: OnboardingViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val history = remember { mutableStateListOf(Step.Welcome) }
     var forward by remember { mutableStateOf(true) }
@@ -235,10 +237,17 @@ fun SetupWizardScreen(
         if (state is AccountImportState.SigningIn || state is AccountImportState.NeedsYouTubeSignIn) openBrowser()
     }
 
-    // signed in and the library is read: close the browser and show the playlists
+    // signed in: Apple's library is read by the sync engine, which takes everything, so the wizard
+    // goes straight on to the two questions it still asks; any other service asks what to bring in
     LaunchedEffect(sessionState, step) {
         if (step == Step.ProviderSetup && sessionState is AccountImportState.Choosing) {
             closeBrowser()
+            if (session?.service == AccountService.APPLE_MUSIC) {
+                com.mochyy.mochymusic.applesync.AppleSyncService.start(context)
+                delay(250)
+                go(Step.Sources, replaceCurrent = true)
+                return@LaunchedEffect
+            }
             delay(250)
             go(Step.WhatToSync, replaceCurrent = true)
         }

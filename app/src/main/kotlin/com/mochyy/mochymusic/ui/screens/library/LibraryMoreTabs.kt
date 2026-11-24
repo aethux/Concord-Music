@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.db.entities.EventWithSong
+import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.models.MediaMetadata
 import com.mochyy.mochymusic.playback.PlayerConnection
@@ -118,6 +119,57 @@ fun LazyListScope.libraryGenresTab(genres: List<LocalGenre>?, navController: Nav
             thumbnailUrl = genre.songs.firstNotNullOfOrNull { it.song.thumbnailUrl?.takeIf(String::isNotEmpty) },
             onClick = open,
             onLongClick = open,
+        )
+    }
+}
+
+
+/**
+ * Concord: the Downloads tab — the songs kept on the phone, newest download first. Rows are the same
+ * [LibraryListRow] the History tab draws; a tap plays from that song through what the tab shows.
+ */
+fun LazyListScope.libraryDownloadsTab(
+    downloads: List<Song>,
+    nowPlaying: State<MediaMetadata?>?,
+    isPlaying: State<Boolean>?,
+    player: PlayerConnection?,
+    navController: NavController,
+) {
+    if (downloads.isEmpty()) {
+        item(key = "downloads_empty") { LibraryEmptyState(text = stringResource(R.string.lib_downloads_empty)) }
+        return
+    }
+    item(key = "downloads_all") {
+        LibraryWideCard(
+            title = stringResource(R.string.library_tab_downloads),
+            count = downloads.size,
+            covers = downloads.take(4).map { it.song.thumbnailUrl },
+            onClick = {
+                player?.playQueue(ListQueue(items = downloads.map { it.toMediaItem() }, startIndex = 0))
+            },
+            modifier = Modifier.padding(horizontal = SearchHorizontalPadding),
+        )
+        Spacer(Modifier.height(8.dp))
+    }
+    items(downloads, key = { "download_${it.id}" }, contentType = { "downloadRow" }) { song ->
+        val active = song.id == nowPlaying?.value?.id
+        LibraryListRow(
+            title = song.song.title,
+            subtitle = song.artists.joinToString { it.name }.ifBlank { null },
+            thumbnailUrl = song.song.thumbnailUrl,
+            isActive = active,
+            isPlaying = active && isPlaying?.value == true,
+            songId = song.id,
+            onClick = {
+                if (active) {
+                    player?.togglePlayPause()
+                } else {
+                    player?.playQueue(
+                        ListQueue(items = downloads.map { it.toMediaItem() }, startIndex = downloads.indexOf(song).coerceAtLeast(0)),
+                    )
+                }
+            },
+            onLongClick = { navController.navigate("library/songs") },
         )
     }
 }

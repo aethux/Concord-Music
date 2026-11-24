@@ -37,7 +37,6 @@ import com.mochyy.mochymusic.ui.menu.rememberResyncAll
 import com.mochyy.mochymusic.LocalPlayerAwareWindowInsets
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.LocalPlayerConnection
-import com.mochyy.mochymusic.constants.HideLibraryImportBannerKey
 import com.mochyy.mochymusic.constants.ProfilePicUriKey
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.extensions.toMediaItem
@@ -82,6 +81,7 @@ fun LibraryHomeScreen(
     val importedAlbums by viewModel.importedAlbums.collectAsState()
     val importProgress by viewModel.importProgress.collectAsState()
     val downloads by importViewModel.downloads.collectAsState()
+    val downloadedSongs by viewModel.downloadedSongs.collectAsState()
     val localImports by importViewModel.localImports.collectAsState()
 
     var tab by rememberSaveable { mutableStateOf(LibraryTab.All) }
@@ -106,7 +106,6 @@ fun LibraryHomeScreen(
     }
 
     val profilePicStr by rememberPreference(ProfilePicUriKey, defaultValue = "")
-    val (hideImportBanner, onHideImportBannerChange) = rememberPreference(HideLibraryImportBannerKey, defaultValue = false)
 
     var query by remember { mutableStateOf(TextFieldValue()) }
     val results = remember(query.text, songs, artists, albums, playlists, tab, shelfData) {
@@ -117,10 +116,6 @@ fun LibraryHomeScreen(
             else -> searchLibrary(q, songs, artists, albums, playlists)
         }
     }
-    val services = remember(importedSources, playlists, playlistSources, importedAlbums) {
-        importedServices(importedSources, playlists, playlistSources, importedAlbums)
-    }
-
     val listState = rememberLazyListState()
     val glassState = remember { GlassState() }
     val collapse = rememberCollapseProgress(listState)
@@ -191,19 +186,8 @@ fun LibraryHomeScreen(
                         playlists = playlists.size,
                         playlistCovers = playlists.take(2).flatMap { it.thumbnails },
                         likedSongs = likedSongs,
-                        importBanner = if (!hideImportBanner || importProgress.isRunning) {
-                            {
-                                LibraryImportBanner(
-                                    progress = importProgress,
-                                    onOpenSheet = openImportSheet,
-                                    onOpenProgress = openImportProgress,
-                                    onDismiss = { onHideImportBannerChange(true) },
-                                    modifier = Modifier.padding(horizontal = SearchHorizontalPadding),
-                                )
-                            }
-                        } else {
-                            null
-                        },
+                        // Concord: no import card — the Apple sign-in sheet is how a library arrives
+                        importBanner = null,
                         onOpen = { item -> openLibraryItem(item, navController, playerConnection, songs) },
                         onUnpin = viewModel::unpin,
                         navController = navController,
@@ -257,21 +241,12 @@ fun LibraryHomeScreen(
 
                 LibraryTab.Genres -> libraryGenresTab(genres, navController)
 
-                LibraryTab.Imported -> libraryImportedTab(
-                    importProgress = importProgress,
-                    services = services,
-                    onOpenImportSheet = openImportSheet,
-                    onOpenImportProgress = openImportProgress,
-                    onOpenSongs = { navController.navigate("library/imported/${it.key}") },
-                    onOpenPlaylists = { navController.navigate("library/imported/${it.key}/playlists") },
-                    onOpenAlbums = { navController.navigate("library/imported/${it.key}/albums") },
-                    onManage = {
-                        menuState.showManageImportsSheet(
-                            sources = services.filterNot { it.isEmpty }.map { it.source },
-                            viewModel = importViewModel,
-                            onResyncAll = resyncAll,
-                        )
-                    },
+                LibraryTab.Downloads -> libraryDownloadsTab(
+                    downloads = downloadedSongs,
+                    nowPlaying = nowPlaying,
+                    isPlaying = isPlaying,
+                    player = playerConnection,
+                    navController = navController,
                 )
             }
         }

@@ -98,6 +98,10 @@ constructor(
     val likedSongs = database.likedSongs(SongSortType.CREATE_DATE, true)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    // Concord: the Library's Downloads tab — what is kept on the phone
+    val downloadedSongs = database.downloadedSongs(SongSortType.CREATE_DATE, true)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     /** The import under way, if any - the banner at the top of the Library turns into its progress bar. */
     val importProgress: StateFlow<ImportProgress> = importService.progress
 

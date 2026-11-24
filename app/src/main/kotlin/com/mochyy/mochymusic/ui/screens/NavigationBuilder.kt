@@ -380,39 +380,6 @@ fun NavGraphBuilder.navigationBuilder(
         }
     }
 
-    // Everything one service brought in, whatever playlist it went into: Imported from Spotify.
-    coverSourceComposable(
-        route = "library/imported/{source}",
-        arguments = listOf(navArgument("source") { type = NavType.StringType }),
-    ) {
-        com.mochyy.mochymusic.ui.screens.library.LibraryImportedScreen(navController = navController)
-    }
-
-    // The Imported tab's Playlists cards: the playlists one service brought in.
-    composable(
-        route = "library/imported/{source}/playlists",
-        arguments = listOf(navArgument("source") { type = NavType.StringType }),
-        exitTransition = { libraryExitTo(targetState.destination.route) },
-        popEnterTransition = { libraryReturnFrom(initialState.destination.route) },
-    ) { entry ->
-        CompositionLocalProvider(LocalNavAnimatedContentScope provides this) {
-            com.mochyy.mochymusic.ui.screens.library.LibraryPlaylistsScreen(
-                navController = navController,
-                source = com.mochyy.mochymusic.importer.ImportSource.fromKey(entry.arguments?.getString("source")),
-            )
-        }
-    }
-
-    // the Imported tab's Albums cards: the albums one service's songs come from
-    coverSourceComposable(
-        route = "library/imported/{source}/albums",
-        arguments = listOf(navArgument("source") { type = NavType.StringType }),
-    ) {
-        com.mochyy.mochymusic.ui.screens.library.LibraryAlbumsScreen(
-            navController = navController,
-            source = com.mochyy.mochymusic.importer.ImportSource.fromKey(it.arguments?.getString("source")),
-        )
-    }
 
     composable(Screens.Settings.route) {
         ProfileScreen(navController = navController)

@@ -54,8 +54,6 @@
 
     <!-- Import banner -->
     <string name="lib_import_banner_title">Import your music here!</string>
-    <string name="library_tab_downloads">Downloads</string>
-    <string name="lib_downloads_empty">Nothing downloaded yet. Downloads show up here once the app keeps them on this phone.</string>
     <string name="lib_import_checking_resync">Checking \"%1$s\" for new songs…</string>
     <string name="lib_import_adding_resync">Adding %1$d of %2$d new songs to \"%3$s\"</string>
     <string name="lib_import_getting_ready">Getting your tracks ready…</string>

@@ -81,7 +81,6 @@ fun LibraryHomeScreen(
     val importedAlbums by viewModel.importedAlbums.collectAsState()
     val importProgress by viewModel.importProgress.collectAsState()
     val downloads by importViewModel.downloads.collectAsState()
-    val downloadedSongs by viewModel.downloadedSongs.collectAsState()
     val localImports by importViewModel.localImports.collectAsState()
 
     var tab by rememberSaveable { mutableStateOf(LibraryTab.All) }
@@ -241,13 +240,6 @@ fun LibraryHomeScreen(
 
                 LibraryTab.Genres -> libraryGenresTab(genres, navController)
 
-                LibraryTab.Downloads -> libraryDownloadsTab(
-                    downloads = downloadedSongs,
-                    nowPlaying = nowPlaying,
-                    isPlaying = isPlaying,
-                    player = playerConnection,
-                    navController = navController,
-                )
             }
         }
     }

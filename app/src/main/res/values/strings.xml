@@ -192,6 +192,22 @@
         <item quantity="one">%d song</item>
         <item quantity="other">%d songs</item>
     </plurals>
+    <!-- An Apple album with no catalogue twin: the page lists the songs the library holds from it,
+         not the release. Saying so is the difference between "a smaller album" and "a bug". -->
+    <!-- an Apple profile: name, handle and the playlists Apple publishes for them -->
+    <string name="apple_profile_loading">Loading profile</string>
+    <string name="apple_profile_private">This profile is private.</string>
+    <string name="apple_collaborators">Collaborators</string>
+    <string name="apple_profile_no_playlists">No shared playlists</string>
+    <plurals name="apple_profile_playlists">
+        <item quantity="one">%d shared playlist</item>
+        <item quantity="other">%d shared playlists</item>
+    </plurals>
+    <string name="action_back">Back</string>
+    <plurals name="n_song_in_library">
+        <item quantity="one">%d song in your library</item>
+        <item quantity="other">%d songs in your library</item>
+    </plurals>
     <plurals name="n_artist">
         <item quantity="one">%d artist</item>
         <item quantity="other">%d artists</item>
@@ -315,6 +331,13 @@
     <string name="player_slider_style">Player slider style</string>
     <string name="default_">Default</string>
     <string name="apple_music">Apple Music</string>
+    <string name="apple_sign_in_title">Sign in to Apple Music</string>
+    <string name="apple_sign_in_body">Your library, playlists and Apple\'s catalogue load once you are signed in.</string>
+    <string name="apple_sign_in_action">Sign in</string>
+    <string name="playlist_load_failed">Could not load this playlist. Tap to try again.</string>
+    <string name="search_apple_coming">Apple Music search is coming. Your library is still searchable from Your Library.</string>
+    <string name="home_apple_failed">Could not load Apple Music</string>
+    <string name="home_apple_retry">Tap to try again</string>
     <string name="squiggly">Squiggly</string>
     <string name="misc">Misc</string>
     <string name="default_open_tab">Default open tab</string>
@@ -402,7 +425,7 @@
     <string name="restore_failed">Failed to restore backup</string>
 
     <string name="discord_integration">Discord Integration</string>
-    <string name="discord_information">mochy uses the KizzyRPC library to set your Discord account\'s status. This involves using the Discord Gateway connection, which may be considered a violation of Discord\'s TOS. However, there are no known cases of user accounts being suspended for this reason. Use at your own risk.\n\mochy will only extract your token, and everything else is stored locally.</string>
+    <string name="discord_information">Concord uses the KizzyRPC library to set your Discord account\'s status. This involves using the Discord Gateway connection, which may be considered a violation of Discord\'s TOS. However, there are no known cases of user accounts being suspended for this reason. Use at your own risk.\n\Concord will only extract your token, and everything else is stored locally.</string>
     <string name="dismiss">Dismiss</string>
     <string name="options">Options</string>
     <string name="preview">Preview</string>

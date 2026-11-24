@@ -1,3 +1,6 @@
+// Concord: forked from Mochy Music (https://github.com/realidkroo/Mochy-Music), GPL-3.0.
+// applicationId is Concord's (com.concord.player); the Kotlin namespace stays com.mochyy.mochymusic
+// so merges from upstream stay cheap. Full attribution: CREDITS.md at the repo root.
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import com.android.build.api.dsl.ApplicationExtension
 import java.util.Properties
@@ -24,11 +27,11 @@ extensions.configure<ApplicationExtension> {
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
-        applicationId = "com.mochyy.mochymusic"
+        applicationId = "com.concord.player"
         minSdk = 24
         targetSdk = 37
-        versionCode = 73
-        versionName = "8.4.3 build#1280"
+        versionCode = 1
+        versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

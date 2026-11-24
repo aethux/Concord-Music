@@ -157,8 +157,10 @@ class ModuleRegistry @Inject constructor(
 
     fun all(): List<MochyModule> = modules.map { it.first }
 
-    // youtube starts on, modules start off until they're turned on (or signed in to)
-    fun isEnabled(id: String): Boolean = prefs.getBoolean("enabled_$id", id == SourceModules.YouTubeId)
+    // Concord: Apple Music starts on with the app itself — this is an Apple-only player — and every
+    // other module starts off until it's turned on (or signed in to).
+    fun isEnabled(id: String): Boolean =
+        prefs.getBoolean("enabled_$id", id == SourceModules.YouTubeId || id == AppleMusicModule.Id)
 
     fun setEnabled(id: String, on: Boolean) {
         val module = module(id)
@@ -648,7 +650,7 @@ class ModuleRegistry @Inject constructor(
             val entry = service.metaData?.getString(EntryMetaKey) ?: return@mapNotNull null
             // its code runs inside mochy, so only an app signed with mochy's own key is let in
             if (pm.checkSignatures(context.packageName, pkg) != PackageManager.SIGNATURE_MATCH) {
-                Timber.tag(Tag).w("Skipping module $pkg: not signed like Mochy")
+                Timber.tag(Tag).w("Skipping module $pkg: not signed like Concord")
                 return@mapNotNull null
             }
             runCatching {
@@ -656,7 +658,7 @@ class ModuleRegistry @Inject constructor(
                 val loader = PathClassLoader(app.sourceDir, app.nativeLibraryDir, javaClass.classLoader)
                 val module = loader.loadClass(entry).getDeclaredConstructor().newInstance() as MochyModule
                 if (module.info.apiVersion != MODULE_API_VERSION) {
-                    Timber.tag(Tag).w("Skipping module $pkg: built for API ${module.info.apiVersion}, Mochy has $MODULE_API_VERSION")
+                    Timber.tag(Tag).w("Skipping module $pkg: built for API ${module.info.apiVersion}, Concord has $MODULE_API_VERSION")
                     null
                 } else module to ModuleOrigin.App(pkg)
             }.onFailure { Timber.tag(Tag).w(it, "Couldn't load module $pkg") }.getOrNull()

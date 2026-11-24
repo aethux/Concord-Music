@@ -14,7 +14,10 @@ import androidx.annotation.StringRes
 import androidx.core.content.edit
 import com.mochyy.mochymusic.R
 
-enum class AppIconFamily(@StringRes val title: Int) {
+enum class AppIconFamily(@StringRes val title: Int, val customizable: Boolean = true) {
+
+    // the Concord designs are five finished icons, each with its own background, so they take no custom colour
+    Concord(R.string.app_icon_family_concord, customizable = false),
     Mark(R.string.app_icon_family_mark),
     Outline(R.string.app_icon_family_outline),
     Anime(R.string.app_icon_family_anime),
@@ -23,6 +26,7 @@ enum class AppIconFamily(@StringRes val title: Int) {
     // the art this family wears on a custom colour: the outline goes dark on a pale one, like on white
     @DrawableRes
     fun artOn(color: AppIconColor): Int = when (this) {
+        Concord -> R.drawable.ic_concord_new_dark
         Mark -> R.drawable.ic_launcher_mark
         Outline -> if (color.pale) R.drawable.ic_launcher_outline_dark else R.drawable.ic_launcher_monochrome
         Anime -> R.drawable.ic_launcher_anime
@@ -57,11 +61,16 @@ class AppIcon private constructor(
     val color: AppIconColor? = null,
 ) {
     companion object {
-        val Default = AppIcon("Default", "IconDefault", AppIconFamily.Mark, R.drawable.ic_launcher_mark, R.color.ic_launcher_background, R.string.app_icon_default)
+        // the icon the app wears before anyone picks one: the Concord new dark design, whose @mipmap/ic_launcher is itself
+        val Default = AppIcon("Default", "IconDefault", AppIconFamily.Concord, R.drawable.ic_concord_new_dark, null, R.string.app_icon_concord_new_dark)
 
         // the ready-made ones, each family's in the order its row shows them
         val presets: List<AppIcon> = listOf(
             Default,
+            AppIcon("ConcordNewLight", "IconConcordNewLight", AppIconFamily.Concord, R.drawable.ic_concord_new_light, null, R.string.app_icon_concord_new_light),
+            AppIcon("ConcordOld", "IconConcordOld", AppIconFamily.Concord, R.drawable.ic_concord_old, null, R.string.app_icon_concord_old),
+            AppIcon("ConcordIosDark", "IconConcordIosDark", AppIconFamily.Concord, R.drawable.ic_concord_ios_dark, null, R.string.app_icon_concord_ios_dark),
+            AppIcon("ConcordWhite", "IconConcordWhite", AppIconFamily.Concord, R.drawable.ic_concord_white, null, R.string.app_icon_concord_white),
             AppIcon("MarkWhite", "IconMarkWhite", AppIconFamily.Mark, R.drawable.ic_launcher_mark, R.color.app_icon_white, R.string.app_icon_white),
             AppIcon("MarkBlack", "IconMarkBlack", AppIconFamily.Mark, R.drawable.ic_launcher_mark, R.color.app_icon_black, R.string.app_icon_black),
             AppIcon("MarkMaterial", "IconMarkMaterial", AppIconFamily.Mark, R.drawable.ic_launcher_mark, R.color.app_icon_material, R.string.app_icon_material),
@@ -78,7 +87,7 @@ class AppIcon private constructor(
         )
 
         // every family on every custom colour, named MarkRed with the alias IconMarkRed, as the manifest has them
-        private val customs: List<AppIcon> = AppIconFamily.entries.flatMap { family ->
+        private val customs: List<AppIcon> = AppIconFamily.entries.filter { it.customizable }.flatMap { family ->
             AppIconColor.entries.map { color ->
                 AppIcon(
                     name = family.name + color.name,
@@ -119,15 +128,38 @@ object AppIcons {
         runCatching { activity.splashScreen.setSplashScreenTheme(theme) }
     }
 
-    /** switches the launcher to [icon]; the launcher redraws it on its own time, a few seconds on some phones */
-    fun apply(context: Context, icon: AppIcon) {
+    /** switches the launcher to [icon]; the alias this task was opened from is left on until the next launch */
+    fun apply(context: Context, icon: AppIcon, running: AppIcon? = null) {
         val pm = context.packageManager
         // the new one first, so for a moment there are two icons rather than none
         pm.setComponentEnabledSetting(componentOf(context, icon), PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-        AppIcon.entries.filter { it != icon }.forEach {
-            pm.setComponentEnabledSetting(componentOf(context, it), PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
-        }
+        // android finishes a task whose own alias is disabled, so that one waits for the next launch (prune)
+        AppIcon.entries.filter { it != icon && it != running }.forEach { disable(context, it) }
         prefs(context).edit { putString(Key, icon.name) }
+    }
+
+    /** drops the alias a switch left behind, once this task is no longer running under it */
+    fun prune(context: Context, running: AppIcon?) {
+        val current = current(context)
+        // the icon in use has to be one the launcher can open: a switch on another build can leave
+        // its alias disabled and then nothing on the home screen starts the app at all
+        enable(context, current)
+        AppIcon.entries.filter { it != current && it != running }.forEach { disable(context, it) }
+    }
+
+    private fun enable(context: Context, icon: AppIcon) {
+        val pm = context.packageManager
+        val component = componentOf(context, icon)
+        if (pm.getComponentEnabledSetting(component) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) return
+        pm.setComponentEnabledSetting(component, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+    }
+
+    private fun disable(context: Context, icon: AppIcon) {
+        context.packageManager.setComponentEnabledSetting(
+            componentOf(context, icon),
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP,
+        )
     }
 
     // the aliases are named after the code's package, which a debug build's app id doesn't share

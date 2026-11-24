@@ -7,11 +7,11 @@ import android.provider.MediaStore
 import androidx.media3.common.MediaItem
 import java.text.Normalizer
 
-// what "hey google, play … on mochy" asked for, worked out from the words and the hints google sends beside them
+// what "hey google, play … on Concord" asked for, worked out from the words and the hints google sends beside them
 sealed interface VoiceRequest {
     val shuffle: Boolean
 
-    // "play music on mochy": nothing named, so carry on with what was playing
+    // "play music on Concord": nothing named, so carry on with what was playing
     data object Resume : VoiceRequest { override val shuffle = false }
 
     data class Liked(override val shuffle: Boolean = false) : VoiceRequest
@@ -123,7 +123,7 @@ object VoiceSearch {
         }
     }
 
-    // what was heard without a leading "play" or a trailing "on mochy", which google sometimes leaves in
+    // what was heard without a leading "play" or a trailing "on Concord", which google sometimes leaves in
     private fun clean(text: String?): String {
         val trimmed = text?.trim().orEmpty()
         if (trimmed.isEmpty()) return trimmed
@@ -150,7 +150,7 @@ object VoiceSearch {
     private val Accents = Regex("\\p{InCombiningDiacriticalMarks}+")
     private val NotWord = Regex("[^\\p{L}\\p{N}]+")
     private val Spaces = Regex("\\s+")
-    private val OnMochy = Regex("(^|\\s+)(on|in|from|with|using)\\s+mochy(\\s+music)?\\s*$", RegexOption.IGNORE_CASE)
+    private val OnMochy = Regex("(^|\\s+)(on|in|from|with|using)\\s+Concord(\\s+music)?\\s*$", RegexOption.IGNORE_CASE)
     private val PlayWord = Regex("^play\\s+", RegexOption.IGNORE_CASE)
     private val ShuffleWords = Regex("^shuffle\\b\\s*|\\s*\\bon shuffle$|\\s*\\bshuffled$", RegexOption.IGNORE_CASE)
     private val LikedWords = Regex(

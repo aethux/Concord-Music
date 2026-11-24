@@ -3,6 +3,7 @@
 package com.mochyy.mochymusic.ui.launch
 
 import android.content.Context
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
@@ -161,7 +162,17 @@ private const val IconCircleRadius = 80f / 288f * 235f
 // the system splash draws an icon with no background at 288dp, masked to a 192dp circle
 private val SplashIconSize = 288.dp
 private const val SplashViewport = 235f
-private const val SplashMaskRadius = 96f / 288f * SplashViewport
+
+// the Concord mark is authored in 1080 units; this scales it and shifts it into the box the old mark sat in,
+// the same numbers ic_splash_mark and ic_mochy_mark carry
+private const val MarkArtScale = 0.296984f
+private const val MarkStrokeWidth = 40.6849f * MarkArtScale
+
+// where that scale puts the art: the splash drawable's own 235 box, 58,48 in from its corner
+private val MarkMatrix = Matrix().apply {
+    setScale(MarkArtScale, MarkArtScale)
+    postTranslate(-44.608f, -43.317f)
+}
 
 // ic_splash_mark and ic_mochy_mark are the same shapes; the splash one sits 58,48 further in
 private val MarkOffset = Offset(58f, 48f)
@@ -170,9 +181,6 @@ private const val MarkViewportHeight = 139f
 
 // the splash viewport's centre: the point the flight scales around
 private val Pivot = Offset(SplashViewport / 2f, SplashViewport / 2f)
-
-// everything the marks draw, plus room for the blur, in splash units
-private val ArtBounds = RectF(44f, 36f, 204f, 200f)
 
 // the layer the blur runs on: the marks, and the anime icon's circle as it winds up
 private val LayerBounds = RectF(28f, 28f, 207f, 207f)
@@ -451,63 +459,42 @@ private fun Density.placementAt(state: LaunchIntroState, size: IntSize): MarkPla
     return MarkPlacement(origin = pivot - Pivot * unit, unit = unit)
 }
 
-/** the two marks, in the splash drawable's units, ready to draw at any scale */
+/** the mark, in the splash drawable's units, ready to draw at any scale */
 private class LaunchMarkArt {
-    private val triangle = path(
-        "M163.5 96.3493C180.167 105.972 180.167 130.028 163.5 139.651L108 171.694C91.3333 181.316 " +
-            "70.5 169.288 70.5 150.043V85.9569C70.5 66.7119 91.3333 54.6838 108 64.3063L163.5 96.3493Z"
+    // the Concord note and the chevron inside it, from concord-white-transparent-bg.svg
+    private val note = markPath(
+        "M513.462 567.74C519.18 598.953 557.048 659.002 635 663.5L637 664.154M637 664.154L710.137 621.929" +
+            "C771.782 586.337 771.782 497.362 710.137 461.772L504.863 343.256C443.219 307.666 " +
+            "366.164 352.154 366.164 423.334V660.365C366.164 731.545 443.219 776.032 504.863 740.444L637 664.154Z"
     )
-    // the face: the little chevron and the smile under it
-    private val face = path("M97 112L108.5 98L120 112M110.325 125C111.871 133.439 121.868 148.704 142.944 149.92")
-    private val mask = Path().apply { addCircle(Pivot.x, Pivot.y, SplashMaskRadius, Path.Direction.CW) }
+    private val chevron = markPath("M464.178 519.658L506.712 467.877L549.246 519.658")
 
-    // ic_splash_mark: a white shape with a dark outline and a dark face
-    private val fill = paint(android.graphics.Color.WHITE) { style = Paint.Style.FILL }
-    private val darkOutline = paint(0xFF212121.toInt()) {
+    // ic_splash_mark: the mark is a stroke, with no fill of its own
+    private val stroke = paint(android.graphics.Color.WHITE) {
         style = Paint.Style.STROKE
-        strokeWidth = 19f
-        strokeJoin = Paint.Join.ROUND
-    }
-    private val darkFace = paint(0xFF212121.toInt()) {
-        style = Paint.Style.STROKE
-        strokeWidth = 11f
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
-
-    // ic_mochy_mark: the same outline and face, white, nothing filled
-    private val lightOutline = paint(android.graphics.Color.WHITE) {
-        style = Paint.Style.STROKE
-        strokeWidth = 19f
-        strokeJoin = Paint.Join.ROUND
-    }
-    private val lightFace = paint(android.graphics.Color.WHITE) {
-        style = Paint.Style.STROKE
-        strokeWidth = 11f
+        strokeWidth = MarkStrokeWidth
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
 
     fun draw(canvas: android.graphics.Canvas, filledAlpha: Float, outlineAlpha: Float, filledScale: Float = 1f) {
-        // each mark is faded as a whole, so its overlapping strokes never show through each other
-        if (filledAlpha > 0.002f) {
-            canvas.saveLayerAlpha(LayerBounds, (filledAlpha * 255f).toInt())
-            canvas.scale(filledScale, filledScale, Pivot.x, Pivot.y)
-            canvas.clipPath(mask)
-            canvas.drawPath(triangle, fill)
-            canvas.drawPath(triangle, darkOutline)
-            canvas.drawPath(face, darkFace)
-            canvas.restore()
-        }
-        if (outlineAlpha > 0.002f) {
-            canvas.saveLayerAlpha(ArtBounds, (outlineAlpha * 255f).toInt())
-            canvas.drawPath(triangle, lightOutline)
-            canvas.drawPath(face, lightFace)
-            canvas.restore()
-        }
+        // the old mark crossfaded a filled version into an outlined one; this one is a single stroke, so the
+        // two alphas meet at the brighter of them rather than dimming through the middle of the flight
+        val alpha = maxOf(filledAlpha, outlineAlpha)
+        if (alpha <= 0.002f) return
+        // faded as a whole, so its overlapping strokes never show through each other
+        canvas.saveLayerAlpha(LayerBounds, (alpha * 255f).toInt())
+        canvas.scale(filledScale, filledScale, Pivot.x, Pivot.y)
+        canvas.drawPath(note, stroke)
+        canvas.drawPath(chevron, stroke)
+        canvas.restore()
     }
 
-    private fun path(data: String): Path = PathParser.createPathFromPathData(data)
+    // the art is authored in 1080 units; this puts it exactly where ic_splash_mark has it
+    private fun markPath(data: String): Path = Path().apply {
+        addPath(PathParser.createPathFromPathData(data))
+        transform(MarkMatrix)
+    }
 
     private inline fun paint(color: Int, setup: Paint.() -> Unit) =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {

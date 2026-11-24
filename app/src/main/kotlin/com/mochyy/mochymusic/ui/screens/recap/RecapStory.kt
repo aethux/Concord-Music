@@ -100,6 +100,7 @@ import coil3.compose.AsyncImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import com.mochyy.mochymusic.LocalPlayerConnection
+import androidx.compose.ui.res.stringResource
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.IdCardAspect
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.ProfileIdCard
@@ -218,7 +219,7 @@ internal class StoryGeometry(val width: Float, val height: Float, val top: Float
 
 /** Every animated value that outlives a single page. */
 @Stable
-internal class StoryState(val geo: StoryGeometry, startCard: Rect) {
+internal class StoryState(val geo: StoryGeometry, startCard: Rect, /** the giant word the story is built from: the app's own name */ val word: String) {
     val reveal = Animatable(0f)
     val backdrop = Animatable(1f)
 
@@ -236,7 +237,7 @@ internal class StoryState(val geo: StoryGeometry, startCard: Rect) {
     var paletteTo by mutableStateOf(RecapPalette.Fallback)
     val paletteMix = Animatable(1f)
 
-    val text = GiantTextState("MOCHY", half = 4, filledRows = 0..0).also { it.color = { textColor() } }
+    val text = GiantTextState(word, half = 4, filledRows = 0..0).also { it.color = { textColor() } }
     val logoSide = Animatable(0f)
 
     val cardX = Animatable(startCard.left)
@@ -450,7 +451,8 @@ private fun RecapStory(
         val startCard = remember(o) { local(anchors.expandedCard) }
         val headerCard = remember(o) { local(anchors.headerCard) }
         val headerBottom = anchors.headerHeight - o.y
-        val s = remember(geo) { StoryState(geo, startCard) }
+        val giantWord = stringResource(R.string.app_name).uppercase()
+        val s = remember(geo, giantWord) { StoryState(geo, startCard, giantWord) }
         val director = remember(s) {
             StoryDirector(s, data, gestures, snippet, haptics::performHapticFeedback, startCard, headerCard)
         }
@@ -825,7 +827,7 @@ internal class StoryDirector(
             { s.text.scale.go(0.74f, 1200, androidx.compose.animation.core.FastOutSlowInEasing) },
             {
                 for (i in listOf(-2, 2, -3, 3, -4, 4)) {
-                    launch { s.text.row(i).slideIn("MOCHY", 1000) }
+                    launch { s.text.row(i).slideIn(s.word, 1000) }
                     delay(70)
                 }
             },
@@ -1007,7 +1009,7 @@ internal class StoryDirector(
             { s.text.alpha.go(0.9f, 1200, delayMs = 300) },
             {
                 for (i in -4..4) {
-                    launch { s.text.row(i).slideIn("MOCHY", 1000) }
+                    launch { s.text.row(i).slideIn(s.word, 1000) }
                     delay(50)
                 }
             },
@@ -1031,7 +1033,7 @@ internal class StoryDirector(
             { s.text.alpha.go(1f, 600) },
             {
                 for (i in -4..4) if (i != 0) launch { s.text.row(i).slideOut(560) }
-                if (row0.word != "MOCHY" || row0.fill.value < 1f) row0.slideIn("MOCHY", 700)
+                if (row0.word != s.word || row0.fill.value < 1f) row0.slideIn(s.word, 700)
             },
             { s.text.rotation.go(90f, 1050, delayMs = 150) },
             { s.text.scale.go(1f, 1050, delayMs = 150) },

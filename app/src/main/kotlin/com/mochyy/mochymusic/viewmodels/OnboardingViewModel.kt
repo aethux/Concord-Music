@@ -2,6 +2,7 @@
 
 package com.mochyy.mochymusic.viewmodels
 
+import kotlinx.coroutines.flow.StateFlow
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.getValue
@@ -26,6 +27,9 @@ import com.mochyy.mochymusic.importer.account.AccountService
 import com.mochyy.mochymusic.importer.parseImportCsv
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.BlurCapability
 import com.mochyy.mochymusic.utils.dataStore
+import com.mochyy.mochymusic.module.monochrome.MonochromeModule
+import com.mochyy.mochymusic.modules.ModuleRegistry
+import com.mochyy.mochymusic.modules.SourceModules
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -55,6 +59,9 @@ class OnboardingViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val importService: MusicImportService,
     private val youTubeSync: YouTubeSyncManager,
+    // Concord: the wizard's last question is about these two — Monochrome and the source order
+    private val registry: ModuleRegistry,
+    private val sourceModules: SourceModules,
 ) : ViewModel() {
 
     var session by mutableStateOf<AccountImportSession?>(null)
@@ -66,6 +73,15 @@ class OnboardingViewModel @Inject constructor(
 
     val cardNumber: String = (10_000_000_000L + Random.nextLong(89_999_999_999L)).toString()
     val joinedDateText: String = LocalDate.now().format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+
+    /** Monochrome (lossless FLAC) as the wizard finds it, and switching it on from its own page. */
+    fun monochromeOn(): Boolean = registry.isEnabled(MonochromeModule.Id)
+    fun setMonochrome(on: Boolean) = registry.setEnabled(MonochromeModule.Id, on)
+
+    /** The order a song is looked for in, and its new order from the wizard's page. */
+    val sourceOrder: StateFlow<List<String>> = sourceModules.order
+    fun setSourceOrder(ids: List<String>) = sourceModules.setVisibleOrder(ids)
+    fun sourceName(id: String): String = sourceModules.nameOf(id)
 
     /** Onboarding can be run again from Settings; start each run clean. */
     fun reset() {

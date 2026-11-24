@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -293,15 +294,24 @@ private fun ProviderCaption(logo: Int?, name: String, status: String, on: Boolea
 // a provider with no logo of its own (jiosaavn, a module from a link) shows its first letter instead of a blank tile
 @Composable
 internal fun ProviderLogo(logo: Int?, size: Int, name: String? = null) {
+    // YouTube Music's art is a red disc with nothing behind it: drawn on the tile's grey it reads as
+    // a circle stuck on a square. Mochy's own app icon puts red behind it and zooms the disc inside,
+    // so the tile is one red icon — same here.
+    val redDisc = logo == R.drawable.provider_youtube_music
     Box(
-        modifier = Modifier.size(size.dp).clip(RoundedCornerShape((size * 0.26f).dp)).background(Color(0xFFD9D9D9)),
+        modifier = Modifier
+            .size(size.dp)
+            .clip(RoundedCornerShape((size * 0.26f).dp))
+            .background(if (redDisc) Color(0xFFFF0000) else Color(0xFFD9D9D9)),
         contentAlignment = Alignment.Center,
     ) {
         if (logo != null) {
             androidx.compose.foundation.Image(
                 painterResource(logo), null,
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.size(size.dp),
+                modifier = Modifier
+                    .size(size.dp)
+                    .then(if (redDisc) Modifier.scale(1.06f) else Modifier),
             )
         } else if (name != null) {
             Text(name.take(1).uppercase(), fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = (size * 0.44f).sp, color = Color.Black.copy(alpha = 0.7f))

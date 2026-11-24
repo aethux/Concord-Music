@@ -271,16 +271,44 @@ fun NavGraphBuilder.navigationBuilder(
         ComingSoonScreen(navController = navController, sectionTitle = sectionTitle)
     }
 
+    coverSourceComposable(
+        route = "apple_artist_songs/{artistId}/{source}",
+        arguments = listOf(
+            navArgument("artistId") { type = NavType.StringType },
+            navArgument("source") { type = NavType.StringType },
+        ),
+    ) {
+        com.mochyy.mochymusic.ui.screens.artist.AppleArtistSongsScreen(navController = navController)
+    }
+
+    coverSourceComposable(
+        route = "apple_artist/{artistId}",
+        arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
+    ) {
+        com.mochyy.mochymusic.ui.screens.artist.AppleArtistScreen(navController = navController)
+    }
+
+    coverSourceComposable(
+        route = "apple_profile/{profileId}?name={name}&art={art}",
+        arguments = listOf(
+            navArgument("profileId") { type = NavType.StringType },
+            navArgument("name") { type = NavType.StringType; defaultValue = "" },
+            navArgument("art") { type = NavType.StringType; defaultValue = "" },
+        ),
+    ) {
+        com.mochyy.mochymusic.ui.screens.profile.AppleProfileScreen(navController = navController)
+    }
+
+    coverSourceComposable(
+        route = "apple_playlist/{playlistId}",
+        arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
+    ) {
+        com.mochyy.mochymusic.ui.screens.playlist.ApplePlaylistScreen(navController = navController)
+    }
+
     coverSourceComposable(Screens.Search.route) {
-        val pureBlackEnabled by rememberPreference(PureBlackKey, defaultValue = false)
-        val useDarkTheme = ForceDarkTheme
-        val pureBlack = remember(pureBlackEnabled, useDarkTheme) {
-            pureBlackEnabled && useDarkTheme
-        }
-        SearchScreen(
-            navController = navController,
-            pureBlack = pureBlack
-        )
+        // YouTube's browse and suggestions were this whole page; hidden, so the tab says so
+        com.mochyy.mochymusic.ui.screens.search.AppleSearchPlaceholder(navController = navController)
     }
 
     composable(
@@ -352,39 +380,6 @@ fun NavGraphBuilder.navigationBuilder(
         }
     }
 
-    // Everything one service brought in, whatever playlist it went into: Imported from Spotify.
-    coverSourceComposable(
-        route = "library/imported/{source}",
-        arguments = listOf(navArgument("source") { type = NavType.StringType }),
-    ) {
-        com.mochyy.mochymusic.ui.screens.library.LibraryImportedScreen(navController = navController)
-    }
-
-    // The Imported tab's Playlists cards: the playlists one service brought in.
-    composable(
-        route = "library/imported/{source}/playlists",
-        arguments = listOf(navArgument("source") { type = NavType.StringType }),
-        exitTransition = { libraryExitTo(targetState.destination.route) },
-        popEnterTransition = { libraryReturnFrom(initialState.destination.route) },
-    ) { entry ->
-        CompositionLocalProvider(LocalNavAnimatedContentScope provides this) {
-            com.mochyy.mochymusic.ui.screens.library.LibraryPlaylistsScreen(
-                navController = navController,
-                source = com.mochyy.mochymusic.importer.ImportSource.fromKey(entry.arguments?.getString("source")),
-            )
-        }
-    }
-
-    // the Imported tab's Albums cards: the albums one service's songs come from
-    coverSourceComposable(
-        route = "library/imported/{source}/albums",
-        arguments = listOf(navArgument("source") { type = NavType.StringType }),
-    ) {
-        com.mochyy.mochymusic.ui.screens.library.LibraryAlbumsScreen(
-            navController = navController,
-            source = com.mochyy.mochymusic.importer.ImportSource.fromKey(it.arguments?.getString("source")),
-        )
-    }
 
     composable(Screens.Settings.route) {
         ProfileScreen(navController = navController)
@@ -665,8 +660,14 @@ fun NavGraphBuilder.navigationBuilder(
                 type = NavType.StringType
             },
         ),
-    ) {
-        ArtistScreen(navController, scrollBehavior)
+    ) { entry ->
+        // a numeric id is Apple's, and every other road an artist can be opened from lands here too:
+        // the route decides which artist page can answer for the id
+        com.mochyy.mochymusic.ui.screens.artist.ArtistRoute(
+            rawId = entry.arguments?.getString("artistId").orEmpty(),
+            navController = navController,
+            scrollBehavior = scrollBehavior,
+        )
     }
 
     coverSourceComposable(
@@ -838,21 +839,6 @@ fun NavGraphBuilder.navigationBuilder(
         )
     }
 
-    composable(
-        route = "youtube_browse/{browseId}?params={params}",
-        arguments = listOf(
-            navArgument("browseId") {
-                type = NavType.StringType
-                nullable = true
-            },
-            navArgument("params") {
-                type = NavType.StringType
-                nullable = true
-            },
-        ),
-    ) {
-        YouTubeBrowseScreen(navController)
-    }
 
     coverSourceComposable("library/albums") {
         com.mochyy.mochymusic.ui.screens.library.LibraryAlbumsScreen(navController = navController)

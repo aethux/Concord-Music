@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- launcher icon: the Concord art, full bleed in the foreground; the themed layer is the same mark -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <foreground android:drawable="@drawable/ic_concord_white" />
+    <monochrome android:drawable="@drawable/ic_concord_monochrome" />
+</adaptive-icon>

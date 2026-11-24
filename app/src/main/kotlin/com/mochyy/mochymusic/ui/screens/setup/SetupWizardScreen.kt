@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -66,6 +67,7 @@ import com.mochyy.mochymusic.ui.screens.setup.onboarding.ImportAskPage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.ImportModePage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.LastOnePage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.Onb
+import com.mochyy.mochymusic.ui.screens.setup.onboarding.ImportSignInWeb
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.OnboardingBrowserSheet
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.ProfilePage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.ProviderListPage
@@ -87,7 +89,7 @@ import com.mochyy.mochymusic.ui.component.backdropClick
 
 private enum class Step {
     Welcome, ImportAsk, ImportMode, Restoring, Providers, ProviderSetup, WhatToSync, SyncOptions,
-    Profile, Hello, BlurWarning, LastOne, Done,
+    Sources, Profile, Hello, BlurWarning, LastOne, Done,
 }
 
 /** pages that play once and move on by themselves, back never returns to them */
@@ -102,6 +104,7 @@ fun SetupWizardScreen(
 ) {
     val vm: OnboardingViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val history = remember { mutableStateListOf(Step.Welcome) }
     var forward by remember { mutableStateOf(true) }
@@ -199,6 +202,8 @@ fun SetupWizardScreen(
     val browserPresence = remember { Animatable(0f) }
     var browserShown by remember { mutableStateOf(false) }
     var browserWanted by remember { mutableStateOf(false) }
+    // Concord: the bar's address line, for the sign-in drawn in the module sign-in's shape
+    var browserUrl by remember { mutableStateOf("https://") }
 
     fun openBrowser() {
         if (session == null || browserWanted) return
@@ -227,18 +232,27 @@ fun SetupWizardScreen(
         }
     }
 
-    // the provider page opens its browser after a beat, once the user has read what's about to happen
+    // the provider page opens its browser after a beat, once the user has read what's about to happen;
+    // Apple's sign-in waits for its own button, the way the import sheet's does
     LaunchedEffect(step, session) {
         if (step != Step.ProviderSetup || session == null) return@LaunchedEffect
+        if (session.service == AccountService.APPLE_MUSIC) return@LaunchedEffect
         delay(900)
         val state = session.state.value
         if (state is AccountImportState.SigningIn || state is AccountImportState.NeedsYouTubeSignIn) openBrowser()
     }
 
-    // signed in and the library is read: close the browser and show the playlists
+    // signed in: Apple's library is read by the sync engine, which takes everything, so the wizard
+    // goes straight on to the two questions it still asks; any other service asks what to bring in
     LaunchedEffect(sessionState, step) {
         if (step == Step.ProviderSetup && sessionState is AccountImportState.Choosing) {
             closeBrowser()
+            if (session?.service == AccountService.APPLE_MUSIC) {
+                com.mochyy.mochymusic.applesync.AppleSyncService.start(context)
+                delay(250)
+                go(Step.Sources, replaceCurrent = true)
+                return@LaunchedEffect
+            }
             delay(250)
             go(Step.WhatToSync, replaceCurrent = true)
         }
@@ -249,7 +263,8 @@ fun SetupWizardScreen(
         val parsed = readyImport ?: return@LaunchedEffect
         vm.startImport(parsed)
         session?.consumeReady()
-        go(Step.Profile)
+        // Concord: one question about Monochrome and the source order before the profile
+        go(Step.Sources)
     }
 
     // the account's own name and picture start the profile, once
@@ -332,7 +347,10 @@ fun SetupWizardScreen(
                                     isLeavingWelcome = true
                                     scope.launch {
                                         delay(400)
-                                        go(Step.ImportAsk)
+                                        // Concord: the wizard signs in to Apple Music first. The import
+                                        // pages stay in the tree but no longer open the flow.
+                                        vm.startProvider(AccountService.APPLE_MUSIC)
+                                        go(Step.ProviderSetup)
                                         isLeavingWelcome = false
                                     }
                                 }
@@ -359,6 +377,23 @@ fun SetupWizardScreen(
                         )
 
                         Step.Restoring -> RestoringPage(step = importStep, manifest = transferManifest)
+
+                        Step.Sources -> {
+                            var monochromeOn by remember { mutableStateOf(vm.monochromeOn()) }
+                            val order by vm.sourceOrder.collectAsState()
+                            com.mochyy.mochymusic.ui.screens.setup.onboarding.SourcesPage(
+                                monochromeOn = monochromeOn,
+                                order = order,
+                                nameOf = vm::sourceName,
+                                onToggleMonochrome = { on ->
+                                    monochromeOn = on
+                                    vm.setMonochrome(on)
+                                },
+                                onReorder = vm::setSourceOrder,
+                                onContinue = { go(Step.Profile) },
+                                onBack = ::back,
+                            )
+                        }
 
                         Step.Providers -> ProviderListPage(
                             onPick = { service ->
@@ -461,48 +496,63 @@ fun SetupWizardScreen(
             }
 
             if (browserShown && session != null) {
-                // dims the page behind, and a tap on that strip closes the browser
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = browserPresence.value }
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .backdropClick(::closeBrowser),
-                )
-                OnboardingBrowserSheet(
-                    service = session.service,
-                    presence = browserPresence,
-                    onClose = ::closeBrowser,
-                ) { onUrlChange, onLoadingChange, modifier ->
-                    if (session.service == AccountService.YOUTUBE_MUSIC) {
-                        YouTubeLoginWebContent(
-                            onSignedIn = {
-                                closeBrowser()
-                                session.refreshYouTube()
-                            },
-                            onExit = ::closeBrowser,
-                            onUrlChange = onUrlChange,
-                            onLoadingChange = onLoadingChange,
-                            modifier = modifier,
-                        )
-                    } else {
-                        CaptureWebContent(
-                            startUrl = session.service.loginUrl.orEmpty(),
-                            playerOrigins = session.service.playerOrigins,
-                            desktopSite = session.service.desktopSite,
-                            onHeader = session::onHeader,
-                            onTick = { view -> session.service.onSignInTick(view, session::onApplePageProbe, session::onCookies) },
-                            onExit = ::closeBrowser,
-                            onUrlChange = onUrlChange,
-                            onLoadingChange = onLoadingChange,
-                            modifier = modifier,
-                        )
+                // Concord: Apple's sign-in is the module sign-in's shape — one bar over the page, no
+                // handle of its own, nothing of the wizard behind it. Mochy's own provider flow keeps
+                // its browser for the services it still signs into.
+                if (session.service == AccountService.APPLE_MUSIC) {
+                    ImportSignInWeb(
+                        service = session.service,
+                        session = session,
+                        presence = browserPresence.value,
+                        url = browserUrl,
+                        onUrlChange = { browserUrl = it },
+                        onClose = ::closeBrowser,
+                    )
+                } else {
+                    // dims the page behind, and a tap on that strip closes the browser
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = browserPresence.value }
+                            .background(Color.Black.copy(alpha = 0.45f))
+                            .backdropClick(::closeBrowser),
+                    )
+                    OnboardingBrowserSheet(
+                        service = session.service,
+                        presence = browserPresence,
+                        onClose = ::closeBrowser,
+                    ) { onUrlChange, onLoadingChange, modifier ->
+                        if (session.service == AccountService.YOUTUBE_MUSIC) {
+                            YouTubeLoginWebContent(
+                                onSignedIn = {
+                                    closeBrowser()
+                                    session.refreshYouTube()
+                                },
+                                onExit = ::closeBrowser,
+                                onUrlChange = onUrlChange,
+                                onLoadingChange = onLoadingChange,
+                                modifier = modifier,
+                            )
+                        } else {
+                            CaptureWebContent(
+                                startUrl = session.service.loginUrl.orEmpty(),
+                                playerOrigins = session.service.playerOrigins,
+                                desktopSite = session.service.desktopSite,
+                                onHeader = session::onHeader,
+                                onTick = { view -> session.service.onSignInTick(view, session::onApplePageProbe, session::onCookies) },
+                                onExit = ::closeBrowser,
+                                onUrlChange = onUrlChange,
+                                onLoadingChange = onLoadingChange,
+                                modifier = modifier,
+                            )
+                        }
                     }
                 }
             }
 
-            // the onboarding sheet's own handle; dragging it rubber-bands the whole sheet
-            Box(
+            // the onboarding sheet's own handle; dragging it rubber-bands the whole sheet. Not while
+            // Apple's sign-in is up: that is its own surface, with its own bar and nothing above it
+            if (!(browserShown && session?.service == AccountService.APPLE_MUSIC)) Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(40.dp)

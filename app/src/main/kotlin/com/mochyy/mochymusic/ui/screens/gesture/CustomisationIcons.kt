@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.ui.component.pressBounce
 import com.mochyy.mochymusic.ui.component.rememberResourcePainter
+import com.mochyy.mochymusic.ui.component.TopToaster
 import com.mochyy.mochymusic.ui.player.findActivity
 import com.mochyy.mochymusic.ui.screens.audiolab.LabColors
 import com.mochyy.mochymusic.utils.AppIcon
@@ -95,6 +96,7 @@ internal fun IconsSection() {
     // each family's custom tile keeps the colour last picked for it, starting from the one in use
     val customColors = remember { mutableStateMapOf<AppIconFamily, AppIconColor>().apply { picked.color?.let { put(picked.family, it) } } }
     val art = rememberIconArt()
+    val changeOnRelaunch = stringResource(R.string.app_icon_change_on_relaunch)
 
     fun pick(icon: AppIcon) {
         icon.color?.let { customColors[icon.family] = it }
@@ -103,8 +105,14 @@ internal fun IconsSection() {
         picked = icon
         // the next launch's splash goes with it: the icon itself for an anime one, the bare mark for the rest
         context.findActivity()?.let { AppIcons.syncSplash(it, icon) }
+        // the icon this task was opened from is an alias of its own, and android finishes a task whose alias is
+        // disabled, so it stays until the next launch and the launcher shows the new one beside it meanwhile
+        val running = AppIcons.launchedFrom(context.findActivity()?.intent)
+        if (running != null && running != icon) {
+            TopToaster.show(changeOnRelaunch, iconRes = R.drawable.ic_concord_monochrome)
+        }
         // the package manager is a call to the system, kept off the main thread
-        scope.launch(Dispatchers.IO) { AppIcons.apply(context.applicationContext, icon) }
+        scope.launch(Dispatchers.IO) { AppIcons.apply(context.applicationContext, icon, running) }
     }
 
     Column(
@@ -238,17 +246,21 @@ private fun FamilyIcons(
                 TileLabel(text = stringResource(icon.label), picked = icon == picked)
             }
         }
-        val custom = AppIcon.custom(family, customColor)
-        IconTile(icon = custom, art = art, picked = custom == picked, onClick = { onPick(custom) }) {
-            CustomizeButton(open = customizing, onClick = onCustomize)
+        val custom = if (family.customizable) AppIcon.custom(family, customColor) else null
+        if (custom != null) {
+            IconTile(icon = custom, art = art, picked = custom == picked, onClick = { onPick(custom) }) {
+                CustomizeButton(open = customizing, onClick = onCustomize)
+            }
         }
     }
-    AnimatedVisibility(
-        visible = customizing,
-        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
-    ) {
-        ColorSwatches(selected = customColor, onPick = { color -> onPick(AppIcon.custom(family, color)) })
+    if (family.customizable) {
+        AnimatedVisibility(
+            visible = customizing,
+            enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+        ) {
+            ColorSwatches(selected = customColor, onPick = { color -> onPick(AppIcon.custom(family, color)) })
+        }
     }
 }
 

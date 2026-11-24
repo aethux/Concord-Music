@@ -29,6 +29,7 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +64,7 @@ import com.mochyy.mochymusic.constants.HideExplicitKey
 import com.mochyy.mochymusic.constants.HideVideoSongsKey
 import com.mochyy.mochymusic.db.entities.Album
 import com.mochyy.mochymusic.extensions.toMediaItem
+import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.playback.queues.LocalAlbumRadio
 import com.mochyy.mochymusic.ui.component.HomeCardHighlight
 import com.mochyy.mochymusic.ui.component.HomeCardSpacing
@@ -112,6 +114,7 @@ fun AlbumScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
 
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
+    val creatorScope = androidx.compose.runtime.rememberCoroutineScope()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
 
     val playlistId by viewModel.playlistId.collectAsState()
@@ -121,6 +124,7 @@ fun AlbumScreen(
     val moreByArtist by viewModel.moreByArtist.collectAsState()
     val description by viewModel.description.collectAsState()
     val loadFailed by viewModel.loadFailed.collectAsState()
+    val appleLibraryOnly by viewModel.appleLibraryOnly.collectAsState()
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
     val hideVideoSongs by rememberPreference(key = HideVideoSongsKey, defaultValue = false)
 
@@ -197,6 +201,19 @@ fun AlbumScreen(
 
     fun play(startIndex: Int = 0, shuffled: Boolean = false) {
         val current = album ?: return
+        // An Apple album is its own queue. LocalAlbumRadio continues by asking YouTube for the
+        // album's playlist id, which cannot answer an Apple album and must not be asked at all.
+        if (viewModel.isAppleAlbum) {
+            val songs = if (shuffled) current.songs.shuffled() else current.songs
+            playerConnection.playQueue(
+                ListQueue(
+                    title = current.album.title,
+                    items = songs.map { it.toMediaItem() },
+                    startIndex = if (shuffled) 0 else startIndex.coerceIn(0, (songs.size - 1).coerceAtLeast(0)),
+                )
+            )
+            return
+        }
         playerConnection.service.getAutomix(playlistId)
         playerConnection.playQueue(
             if (shuffled) {
@@ -274,12 +291,26 @@ fun AlbumScreen(
             PlaylistHeader(
                 onSearchClick = { isSearching = true },
                 title = album.album.title,
-                creators = album.artists.map { CreatorUi(name = it.name, avatarUrl = it.thumbnailUrl, artistId = it.id) },
+                // an Apple album's creator opens Apple's artist page; Mochy's artist screen asks
+                // YouTube, which cannot answer an Apple id
+                creators = album.artists.map {
+                    CreatorUi(
+                        name = it.name,
+                        avatarUrl = it.thumbnailUrl,
+                        artistId = if (viewModel.isAppleAlbum) viewModel.appleArtistId else it.id,
+                    )
+                },
                 // the description takes the stats' place, and the stats move under it
                 description = description?.takeIf { it.isNotBlank() },
                 stats = albumStats(
                     year = album.album.year,
-                    songCountText = pluralStringResource(R.plurals.n_song, filteredSongs.size, filteredSongs.size),
+                    // an album Apple has no catalogue twin for lists the songs the library holds
+                    // from it, so the count says that rather than reading like a short album
+                    songCountText = pluralStringResource(
+                        if (appleLibraryOnly) R.plurals.n_song_in_library else R.plurals.n_song,
+                        filteredSongs.size,
+                        filteredSongs.size,
+                    ),
                     totalSeconds = totalSeconds,
                     explicit = album.album.explicit,
                     explicitTag = stringResource(R.string.album_explicit_tag),
@@ -299,7 +330,19 @@ fun AlbumScreen(
                 onShuffleClick = { play(shuffled = true) },
                 isSaved = album.album.bookmarkedAt != null,
                 onSaveClick = { database.query { update(album.album.toggleLike()) } },
-                onCreatorClick = { creator -> creator.artistId?.let { navController.navigate("artist/$it") } },
+                onCreatorClick = { creator ->
+                    val id = creator.artistId
+                    when {
+                        viewModel.isAppleAlbum -> creatorScope.launch {
+                            // the album's resource does not always carry the artist id; a name
+                            // search answers it so the creator is never a dead tap
+                            viewModel.appleArtistIdFor(creator.name)?.let { artistId ->
+                                navController.navigate("apple_artist/$artistId")
+                            }
+                        }
+                        id != null -> navController.navigate("artist/$id")
+                    }
+                },
             )
         }
 
@@ -378,7 +421,9 @@ fun AlbumScreen(
             PlaylistEndOfLine(songCount = filteredSongs.size, totalSeconds = totalSeconds)
         }
 
-        if (featuredArtists.isNotEmpty()) {
+        // Apple's album already names its artist on the header line; Mochy's featured-artist row
+        // would draw the same person again with no picture and nowhere to go
+        if (featuredArtists.isNotEmpty() && !viewModel.isAppleAlbum) {
             item(key = "featured_artists") {
                 FeaturedArtistsRow(
                     artists = featuredArtists,

@@ -21,6 +21,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -228,6 +229,8 @@ data class CreatorUi(
     val name: String,
     val avatarUrl: String? = null,
     val artistId: String? = null,
+    /** an Apple social profile (`sp.…`): the id the in-app profile page opens */
+    val appleProfileId: String? = null,
 )
 
 data class FeaturedArtistUi(
@@ -970,6 +973,8 @@ fun PlaylistHeader(
     title: String,
     creators: List<CreatorUi>,
     stats: String,
+    /** the people are still being read: draw their line as a placeholder, not as someone's name */
+    creatorsLoading: Boolean = false,
     isPlaying: Boolean,
     onPlayClick: () -> Unit,
     onShuffleClick: () -> Unit,
@@ -1026,7 +1031,10 @@ fun PlaylistHeader(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (creators.isNotEmpty()) {
+            if (creatorsLoading) {
+                Spacer(Modifier.height(3.dp))
+                CreatorRowLoading()
+            } else if (creators.isNotEmpty()) {
                 Spacer(Modifier.height(3.dp))
                 CreatorRow(creators, onCreatorClick)
             }
@@ -1260,6 +1268,36 @@ private fun <S> AnimatedContentTransitionScope<S>.labelSwap(): ContentTransform 
         .using(SizeTransform(clip = false))
 
 /** creator avatars side by side, overlapping when there's more than one */
+/** the creator line while Apple's people are on their way: same footprint, no name */
+@Composable
+private fun CreatorRowLoading() {
+    val pulse = androidx.compose.animation.core.rememberInfiniteTransition(label = "creators")
+    val alpha by pulse.animateFloat(
+        initialValue = 0.22f,
+        targetValue = 0.42f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(900),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "creatorsAlpha",
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(16.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = alpha)),
+        )
+        Spacer(Modifier.width(6.dp))
+        Box(
+            modifier = Modifier
+                .size(width = 92.dp, height = 9.dp)
+                .clip(RoundedCornerShape(5.dp))
+                .background(Color.White.copy(alpha = alpha)),
+        )
+    }
+}
+
 @Composable
 private fun CreatorRow(creators: List<CreatorUi>, onClick: ((CreatorUi) -> Unit)? = null) {
     val shown = creators.take(3)
@@ -1419,6 +1457,8 @@ fun PlaylistTrackRow(
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
+    /** drawn just before the menu, for a mark that must not replace it (who added the row) */
+    badge: (@Composable () -> Unit)? = null,
     /** an artist's row: a round photo instead of the rounded square */
     coverShape: androidx.compose.ui.graphics.Shape = TrackShape,
     /** applied to the cover itself, e.g. to open an album growing out of it */
@@ -1497,6 +1537,9 @@ fun PlaylistTrackRow(
                     modifier = Modifier.size(20.dp),
                 )
             }
+        }
+        if (badge != null) {
+            badge()
         }
         if (trailing != null) {
             trailing()

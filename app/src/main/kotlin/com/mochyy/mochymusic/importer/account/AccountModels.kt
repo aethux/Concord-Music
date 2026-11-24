@@ -31,7 +31,9 @@ enum class AccountService(
     APPLE_MUSIC(
         route = "apple_music",
         label = "Apple Music",
-        loginUrl = "https://music.apple.com/us/library/playlists",
+        // Concord: the library page 404s when signed out; the web player's home is the page that
+        // offers Apple's sign-in button
+        loginUrl = "https://music.apple.com/",
         webOrigins = listOf("https://music.apple.com", "https://idmsa.apple.com", "https://authorize.music.apple.com", "https://www.apple.com"),
         playerOrigins = setOf("https://music.apple.com"),
     ),
@@ -106,7 +108,7 @@ internal const val DESKTOP_USER_AGENT =
  * The pseudo header under which the sign-in page reports a query Spotify's web player made, as JSON
  * {name, hash, variables, url, post}, so the app can send the same query for the rest of a list.
  */
-const val WEB_PLAYER_QUERY_HEADER = "mochy-web-player-query"
+const val WEB_PLAYER_QUERY_HEADER = "Concord-web-player-query"
 
 /** One query the web player was seen making, ready to be sent again with other variables. */
 class WebPlayerQuery(

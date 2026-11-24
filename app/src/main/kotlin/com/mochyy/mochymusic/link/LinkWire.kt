@@ -41,7 +41,7 @@ object LinkWire {
     const val ProtocolVersion = 2
 
     // the header the old protocol carried the key itself in; only looked for, so an un-updated device hears "update" instead of "unpaired"
-    const val OldKeyHeader = "X-Mochy-Key"
+    const val OldKeyHeader = "X-Concord-Key"
 
     const val AttrId = "id"
     const val AttrName = "n"

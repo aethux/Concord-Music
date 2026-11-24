@@ -120,6 +120,12 @@ import com.mochyy.mochymusic.ui.component.librarySwipeAction
 import com.mochyy.mochymusic.ui.component.queueSwipeAction
 import com.mochyy.mochymusic.ui.component.removeFromPlaylistSwipeAction
 import com.mochyy.mochymusic.ui.component.detail.CreatorUi
+import com.mochyy.mochymusic.ui.component.detail.rememberApplePeople
+import com.mochyy.mochymusic.ui.component.detail.rememberAppleAddedBy
+import com.mochyy.mochymusic.ui.component.detail.AppleCreatorsMenu
+import com.mochyy.mochymusic.ui.component.detail.appleProfileRoute
+import com.mochyy.mochymusic.ui.component.LocalMenuState
+import com.mochyy.mochymusic.ui.component.detail.AppleAddedByAvatar
 import com.mochyy.mochymusic.ui.component.detail.rememberFeaturedArtists
 import com.mochyy.mochymusic.ui.component.detail.FeaturedArtistsRow
 import com.mochyy.mochymusic.ui.component.detail.PlaylistDetailScaffold
@@ -378,19 +384,59 @@ fun LocalPlaylistScreen(
     val creatorAvatar = profilePicUri.takeIf { it.isNotBlank() }?.let { if (it.contains("://")) it else "file://$it" }
     val uriHandler = LocalUriHandler.current
     // a playlist imported from a service credits whoever made it there, the rest are the user's own
-    val creators = remember(imported, accountName, creatorAvatar) {
+    // Apple knows the people on its playlists — the owner's profile and anyone it is shared with —
+    // and their faces are better than the single name the import recorded. Anything else keeps the
+    // credit it had.
+    val importedNow = imported
+    val applePeople = rememberApplePeople(
+        remoteId = importedNow?.remoteId?.takeIf {
+            importedNow.source == com.mochyy.mochymusic.importer.ImportSource.APPLE_MUSIC.key
+        },
+    )
+    // who added which row: one cached read, and Apple answers it only for a shared playlist
+    val addedBy = rememberAppleAddedBy(
+        remoteId = importedNow?.remoteId?.takeIf { it.startsWith("p.") || it.startsWith("pl.") },
+    )
+    // while Apple's people are on their way the header waits on a placeholder: showing the imported
+    // name first and swapping it a moment later reads as the wrong credit, not as a load
+    val creatorsLoading = applePeople?.loading == true
+    // a face opens a list of everyone on the playlist, in this app; Apple's website is not the answer
+    val creatorsMenu = LocalMenuState.current
+    val creators = remember(imported, accountName, creatorAvatar, applePeople) {
         val author = imported?.authorName
-        when {
-            author != null -> listOf(CreatorUi(name = author, avatarUrl = imported?.authorAvatarUrl))
-            accountName.isNotBlank() -> listOf(CreatorUi(name = accountName, avatarUrl = creatorAvatar))
-            else -> emptyList()
+        val apple = applePeople?.people.orEmpty()
+        apple.ifEmpty {
+            when {
+                // an Apple playlist credits nobody until its people have been read
+                applePeople != null -> emptyList()
+                author != null -> listOf(CreatorUi(name = author, avatarUrl = imported?.authorAvatarUrl))
+                accountName.isNotBlank() -> listOf(CreatorUi(name = accountName, avatarUrl = creatorAvatar))
+                else -> emptyList()
+            }
         }
     }
-    val onCreatorClick: ((CreatorUi) -> Unit)? = imported?.authorUrl?.let { url ->
+    val appleCreators = applePeople?.people.orEmpty()
+    val onCreatorClick: ((CreatorUi) -> Unit)? = if (appleCreators.isNotEmpty()) {
+        // Apple's people open a sheet of everyone, and each row is the in-app profile page
         { _: CreatorUi ->
-            // a youtube channel opens in the app, anything else on its own site
-            val channel = YouTubeChannelRegex.find(url)?.groupValues?.get(1)
-            if (channel != null) navController.navigate("artist/$channel") else runCatching { uriHandler.openUri(url) }
+            creatorsMenu.show {
+                AppleCreatorsMenu(
+                    people = appleCreators,
+                    onDismiss = { creatorsMenu.dismiss() },
+                    onPersonClick = { person ->
+                        appleProfileRoute(person.appleProfileId, person.name, person.avatarUrl)
+                            ?.let { route -> navController.navigate(route) }
+                    },
+                )
+            }
+        }
+    } else {
+        imported?.authorUrl?.let { url ->
+            { _: CreatorUi ->
+                // a youtube channel opens in the app, anything else on its own site
+                val channel = YouTubeChannelRegex.find(url)?.groupValues?.get(1)
+                if (channel != null) navController.navigate("artist/$channel") else runCatching { uriHandler.openUri(url) }
+            }
         }
     }
 
@@ -586,6 +632,7 @@ fun LocalPlaylistScreen(
                     onSearchClick = { isSearching = true },
                     title = currentPlaylist.playlist.name,
                     creators = creators,
+                    creatorsLoading = creatorsLoading,
                     onCreatorClick = onCreatorClick,
                     stats = playlistStats(
                         context.resources.getQuantityString(R.plurals.n_song, songs.size, songs.size),
@@ -700,6 +747,17 @@ fun LocalPlaylistScreen(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 inSelectMode = true
                                 onCheckedChange(true)
+                            }
+                        },
+                        badge = {
+                            // a shared playlist credits every row; on a playlist one person built,
+                            // `addedBy` is empty and nothing is drawn at all
+                            addedBy[song.song.id.removePrefix("AM_")]?.let { person ->
+                                AppleAddedByAvatar(
+                                    avatarUrl = person.avatarUrl,
+                                    onClick = appleProfileRoute(person.id, person.name, person.avatarUrl)
+                                        ?.let { route -> { navController.navigate(route) } },
+                                )
                             }
                         },
                         onMenuClick = {

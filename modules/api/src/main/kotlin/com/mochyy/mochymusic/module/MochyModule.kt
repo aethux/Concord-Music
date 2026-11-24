@@ -92,6 +92,13 @@ data class TrackQuery(
     val album: String? = null,
     val durationMs: Long? = null,
     val isrc: String? = null,
+    /**
+     * The service's own id for this recording, when the caller already knows it. A module that can
+     * address a recording directly may skip its search — the only way a title the search does not
+     * read (another script, a bracketed suffix) still plays, and the only way to be certain the
+     * recording is the one that was asked for.
+     */
+    val remoteId: String? = null,
 )
 
 /**

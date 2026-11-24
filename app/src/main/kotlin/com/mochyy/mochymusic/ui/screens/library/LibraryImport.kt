@@ -125,76 +125,9 @@ internal fun ImportSourceIcon(source: ImportSource, size: Dp, modifier: Modifier
  * icons flowing past, "Import your music here!" - and opens the import sheet. While an import runs
  * it is replaced by its progress.
  */
-@Composable
-fun LibraryImportBanner(
-    progress: ImportProgress,
-    onOpenSheet: () -> Unit,
-    onOpenProgress: () -> Unit,
-    modifier: Modifier = Modifier,
-    onDismiss: (() -> Unit)? = null,
-) {
-    Crossfade(
-        targetState = progress.isRunning,
-        label = "libraryImportBanner",
-        modifier = modifier
-            .fillMaxWidth()
-            .animateContentSize(),
-    ) { running ->
-        if (running) {
-            ImportProgressBanner(progress = progress, onClick = onOpenProgress)
-        } else {
-            ImportPromoBanner(onClick = onOpenSheet, onDismiss = onDismiss)
-        }
-    }
-}
 
-@Composable
-private fun ImportPromoBanner(onClick: () -> Unit, onDismiss: (() -> Unit)? = null) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(BannerShape)
-            .background(SearchColors.Tile)
-            .clickable(role = Role.Button, onClick = onClick),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 22.dp),
-        ) {
-            ProviderMarquee()
-            Spacer(Modifier.height(20.dp))
-            Text(
-                text = stringResource(R.string.lib_import_banner_title),
-                color = SearchColors.Primary,
-                fontSize = 21.sp,
-                lineHeight = 25.sp,
-                letterSpacing = (-0.4).sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 22.dp),
-            )
-        }
-        if (onDismiss != null) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(10.dp)
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .clickable(role = Role.Button, onClick = onDismiss),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.close),
-                    contentDescription = stringResource(R.string.close),
-                    tint = SearchColors.Primary,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-    }
-}
+
+
 
 /**
  * The services' icons in a row that carries on past both edges of the card, moving left for ever.

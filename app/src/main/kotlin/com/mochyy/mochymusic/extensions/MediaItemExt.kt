@@ -75,7 +75,7 @@ private fun MediaMetadata.buildMediaItem() = MediaItem.Builder()
  * opposed to one the user queued. Kept in the media metadata extras so it travels with the item
  * through the player's timeline.
  */
-private const val AutoplayExtra = "mochy.autoplay"
+private const val AutoplayExtra = "Concord.autoplay"
 
 val MediaItem.isAutoplay: Boolean
     get() = mediaMetadata.extras?.getBoolean(AutoplayExtra, false) == true
@@ -93,7 +93,7 @@ fun MediaItem.withAutoplay(autoplay: Boolean): MediaItem {
  * came with the queue they started or one Autoplay lined up. These are the queue's "Next in Queue"
  * songs: they play ahead of everything else, and starting another song doesn't drop them.
  */
-private const val ManualQueueExtra = "mochy.manualqueue"
+private const val ManualQueueExtra = "Concord.manualqueue"
 
 val MediaItem.isManualQueued: Boolean
     get() = mediaMetadata.extras?.getBoolean(ManualQueueExtra, false) == true

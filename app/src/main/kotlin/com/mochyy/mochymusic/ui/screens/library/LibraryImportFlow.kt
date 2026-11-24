@@ -37,8 +37,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
@@ -56,6 +57,7 @@ import com.mochyy.mochymusic.ui.screens.settings.importsync.clearWebSession
 import com.mochyy.mochymusic.ui.screens.settings.importsync.onSignInTick
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.BehindScale
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.BrowserSpring
+import com.mochyy.mochymusic.ui.screens.setup.onboarding.ImportSignInWeb
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.LinkImportPage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.Onb
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.OnboardingBrowserSheet
@@ -82,22 +84,36 @@ private enum class ImportStep { Providers, ProviderSetup, WhatToSync, SyncOption
  */
 private val SheetHandleRow = 32.dp
 
-/** Opens the import sheet over whatever is showing: the onboarding's import pages, in one sheet. */
-fun PopupSheetState.showLibraryImportSheet() {
+/**
+ * Opens the import sheet over whatever is showing: the onboarding's import pages, in one sheet.
+ *
+ * [startWith] opens straight on that service's sign-in instead of the provider list — the signed-out
+ * Home, artist and playlist pages know the account they need is Apple's.
+ */
+fun PopupSheetState.showLibraryImportSheet(startWith: AccountService? = null) {
     var sheet: PopupSheetHandle? = null
     sheet = showWithHandle(fullBleed = true, surface = Onb.Page) {
-        LibraryImportFlow(onClose = { sheet?.dismiss() })
+        LibraryImportFlow(startWith = startWith, onClose = { sheet?.dismiss() })
     }
 }
 
 @Composable
-private fun LibraryImportFlow(onClose: () -> Unit) {
+private fun LibraryImportFlow(startWith: AccountService? = null, onClose: () -> Unit) {
     val vm: OnboardingViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val history = remember { mutableStateListOf(ImportStep.Providers) }
     var forward by remember { mutableStateOf(true) }
     val step = history.last()
+
+    // Concord: a caller that already knows the service opens on its sign-in; back then closes the sheet
+    LaunchedEffect(Unit) {
+        if (startWith != null && vm.session == null) {
+            vm.startProvider(startWith)
+            history[history.lastIndex] = ImportStep.ProviderSetup
+        }
+    }
 
     fun go(next: ImportStep, replaceCurrent: Boolean = false) {
         forward = true
@@ -122,6 +138,8 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
     val browserPresence = remember { Animatable(0f) }
     var browserShown by remember { mutableStateOf(false) }
     var browserWanted by remember { mutableStateOf(false) }
+    // Concord: the bar's address line, for the sheet that opens straight onto a sign-in
+    var browserUrl by remember { mutableStateOf("https://") }
 
     fun openBrowser() {
         if (session == null || browserWanted) return
@@ -167,17 +185,25 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
         }
     }
 
-    // the provider page opens its browser after a beat, once the user has read what's about to happen
+    // the provider page opens its browser after a beat, once the user has read what's about to happen;
+    // a sheet opened from a signed-out page waits for its own button instead
     LaunchedEffect(step, session) {
         if (step != ImportStep.ProviderSetup || session == null) return@LaunchedEffect
+        if (startWith != null) return@LaunchedEffect
         delay(900)
         val state = session.state.value
         if (state is AccountImportState.SigningIn || state is AccountImportState.NeedsYouTubeSignIn) openBrowser()
     }
 
-    // signed in and the library is read: close the browser and show what can be brought in
+    // signed in: for Apple the sync engine takes the whole library, so the sheet is done here;
+    // any other service goes on to the page that asks what to bring in
     LaunchedEffect(sessionState, step) {
         if (step == ImportStep.ProviderSetup && sessionState is AccountImportState.Choosing) {
+            if (session?.service == AccountService.APPLE_MUSIC) {
+                com.mochyy.mochymusic.applesync.AppleSyncService.start(context)
+                finish()
+                return@LaunchedEffect
+            }
             closeBrowser()
             delay(250)
             go(ImportStep.WhatToSync, replaceCurrent = true)
@@ -209,8 +235,9 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
                 }
             },
     ) {
-        // the page, receding like a covered sheet while the browser is open over it
-        Box(
+        // the page, receding like a covered sheet while the browser is open over it; when the sheet
+        // was opened straight onto a sign-in there is no page to recede (see below)
+        if (startWith == null || !browserShown) Box(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
@@ -266,6 +293,8 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
                     )
 
                     ImportStep.ProviderSetup -> {
+                        // Mochy's own sign-in message; the WebView only opens on its button (no auto-open
+                        // for a sheet opened from a signed-out page — see the effect above)
                         val service = session?.service ?: AccountService.SPOTIFY
                         ProviderSetupPage(
                             service = service,
@@ -278,6 +307,8 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
                                 openBrowser()
                             },
                             onBack = ::back,
+                            // Concord: Mochy's own message, plus the line the Home prompt promises
+                            extraNote = if (startWith != null) stringResource(R.string.apple_sign_in_body) else null,
                         )
                     }
 
@@ -313,6 +344,19 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
         }
 
         if (browserShown && session != null) {
+            if (startWith != null) {
+                // Concord: opened straight onto sign-in, so this is the module sign-in's shape —
+                // one bar over the page, no second handle, nothing behind it
+                ImportSignInWeb(
+                    service = session.service,
+                    session = session,
+                    presence = browserPresence.value,
+                    url = browserUrl,
+                    onUrlChange = { browserUrl = it },
+                    onClose = ::finish,
+                    topInset = SheetHandleRow,
+                )
+            } else {
             // dims the page behind, and a tap on that strip closes the browser
             Box(
                 modifier = Modifier
@@ -350,6 +394,7 @@ private fun LibraryImportFlow(onClose: () -> Unit) {
                         modifier = modifier,
                     )
                 }
+            }
             }
         }
     }

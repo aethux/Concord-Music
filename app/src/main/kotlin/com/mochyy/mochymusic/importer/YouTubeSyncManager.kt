@@ -108,7 +108,11 @@ class YouTubeSyncManager @Inject constructor(
         requireSignedIn()
         val keepOffYouTube = context.dataStore.get(YtExcludeImportsKey, false)
         val locals = database.playlistsByNameAsc().first().filter {
-            it.playlist.browseId == null && it.playlist.isEditable && !it.playlist.isLocal &&
+            // Concord: an Apple playlist is not a local one to copy up. Its songs are AM_ ids, which
+            // createPlaylist + addVideos cannot take, so the attempt leaves an empty YouTube playlist
+            // behind under the Apple name. Skipped whatever the "keep imports off YouTube" switch says.
+            database.getImportedPlaylist(it.playlist.id)?.source != ImportSource.APPLE_MUSIC.key &&
+                it.playlist.browseId == null && it.playlist.isEditable && !it.playlist.isLocal &&
                 it.playlist.id != PlaylistEntity.LIKED_PLAYLIST_ID && it.playlist.id != PlaylistEntity.DOWNLOADED_PLAYLIST_ID &&
                 !(keepOffYouTube && database.getImportedPlaylist(it.playlist.id)?.source?.let { s -> s != ImportSource.YOUTUBE_MUSIC.key } == true)
         }

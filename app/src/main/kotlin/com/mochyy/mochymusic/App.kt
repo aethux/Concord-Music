@@ -1,4 +1,8 @@
 // App.kt
+//
+// Concord: forked from Mochy Music (realidkroo/Mochy-Music, GPL-3.0), itself a fork of ViviMusic
+// built on Metrolist. applicationId is com.concord.player; the Kotlin namespace stays
+// com.mochyy.mochymusic. Full attribution: CREDITS.md at the repo root.
 
 package com.mochyy.mochymusic
 
@@ -74,6 +78,10 @@ class App : Application(), SingletonImageLoader.Factory {
         // the folders a move to another drive left behind, cleared once nothing has them open
         com.mochyy.mochymusic.playback.StoragePlaces.cleanUpLeftovers(this)
         super.onCreate()
+
+        // debug only: lets `adb forward` + the DevTools protocol reach the content WebView, which is
+        // how the Apple page's own surface gets enumerated. Release builds keep this off.
+        if (BuildConfig.DEBUG) android.webkit.WebView.setWebContentsDebuggingEnabled(true)
 
         AppLanguage.initialize(this)
         CrashHandler.install(this)

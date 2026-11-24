@@ -214,8 +214,9 @@ fun HomeCoverCard(
     sharedElementKey: String? = null,
     badges: @Composable RowScope.() -> Unit = {},
     cover: (@Composable (Dp) -> Unit)? = null,
+    size: Dp = homeCardSize(),
 ) = HomeCoverCard(
-    title, subtitle, thumbnailUrl, modifier, circular, isActive, { isPlaying }, sharedElementKey, badges, cover,
+    title, subtitle, thumbnailUrl, modifier, circular, isActive, { isPlaying }, sharedElementKey, badges, cover, size,
 )
 
 // isPlaying is read only inside the cover's indicator, so a play or pause doesn't recompose every card
@@ -231,8 +232,8 @@ fun HomeCoverCard(
     sharedElementKey: String? = null,
     badges: @Composable RowScope.() -> Unit = {},
     cover: (@Composable (Dp) -> Unit)? = null,
+    size: Dp = homeCardSize(),
 ) {
-    val size = homeCardSize()
     val shape = if (circular) CircleShape else RoundedCornerShape(HomeCardCornerRadius)
 
     Column(modifier = modifier.width(size)) {

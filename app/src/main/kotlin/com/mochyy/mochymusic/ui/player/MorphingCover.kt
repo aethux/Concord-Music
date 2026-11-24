@@ -1413,9 +1413,9 @@ private fun MiniSongLines(title: String, artist: String, album: String, modifier
             maxLines = 1,
             softWrap = false,
         )
-        val subtitle = listOf(artist, album)
-            .filter { it.isNotBlank() }
-            .joinToString(" — ")
+        // the mini player carries the song and who made it; the album is one tap away and does not
+        // belong on a 64dp bar
+        val subtitle = artist
         if (subtitle.isNotBlank()) {
             Text(
                 text = subtitle,

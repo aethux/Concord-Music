@@ -2,10 +2,13 @@
 
 package com.mochyy.mochymusic.ui.screens
 
+import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
+import com.mochyy.mochymusic.ui.screens.library.showLibraryImportSheet
 import com.mochyy.mochymusic.ui.utils.stableSystemBars
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -58,6 +61,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.em
 import com.mochyy.mochymusic.ui.component.BlurEffectCache
@@ -74,6 +78,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -101,6 +108,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import android.net.Uri
+import com.mochyy.mochymusic.applesync.AppleCovers
+import com.mochyy.mochymusic.applesync.AppleHomeItem
+import com.mochyy.mochymusic.importer.ImportSource
+import com.mochyy.mochymusic.viewmodels.AppleHomeViewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
@@ -130,7 +142,9 @@ import com.mochyy.mochymusic.models.toMediaMetadata
 import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.playback.queues.YouTubeQueue
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.ui.component.AppleSignInPrompt
 import com.mochyy.mochymusic.ui.component.ArtistListCard
+import com.mochyy.mochymusic.importer.account.AccountService
 import com.mochyy.mochymusic.ui.component.BonesHost
 import com.mochyy.mochymusic.ui.component.coverTintBackground
 import com.mochyy.mochymusic.ui.component.HeroCarousel
@@ -142,6 +156,7 @@ import com.mochyy.mochymusic.ui.component.HomeContentInset
 import com.mochyy.mochymusic.ui.component.HomeCardHighlight
 import com.mochyy.mochymusic.ui.component.HomeCompactTopBones
 import com.mochyy.mochymusic.ui.component.HomeCoverCard
+import com.mochyy.mochymusic.ui.component.homeCardSize
 import com.mochyy.mochymusic.ui.component.HomeHopInCard
 import com.mochyy.mochymusic.ui.component.HomeTopGlow
 import com.mochyy.mochymusic.ui.component.homeRowHeight
@@ -190,6 +205,11 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.mochyy.mochymusic.ui.component.navigateToTab
+
+private const val FansLikeSuffix = " Fans Like"
+private const val MoreFromPrefix = "More from "
+private const val RecentlyPlayedTitle = "Recently Played"
+private const val StationsTitle = "Stations for You"
 
 sealed class HomeSection(val id: String) {
     data object RecentlyPlayed : HomeSection("recently_played")
@@ -243,14 +263,42 @@ private fun <T> HomeCardRow(
     key: (T) -> Any,
     content: @Composable (T) -> Unit,
 ) {
+    val rowState = rememberCardRowState()
+    // A swipe settles on a card boundary, leaving a thin sliver of the card before it on show the
+    // way Apple's rows do, and the settle overshoots a touch instead of easing flat.
+    //
+    // The sliver is the row's leading padding minus the gap between cards, so the padding starts
+    // RowSnapPeek short of the inset and only the first card carries that peek back — at rest the
+    // row looks exactly as it did, and a settled card sits where Apple's does.
+    val snapFling = remember(rowState) {
+        androidx.compose.foundation.gestures.snapping.snapFlingBehavior(
+            snapLayoutInfoProvider = androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider(
+                rowState,
+                androidx.compose.foundation.gestures.snapping.SnapPosition.Start,
+            ),
+            decayAnimationSpec = androidx.compose.animation.core.exponentialDecay(),
+            // a softer, less damped spring: it overshoots and settles back, which reads as a snap
+            // rather than a stop. Lower damping is what buys the overshoot; a higher one would
+            // flatten it.
+            // a plain ease for the settle, no overshoot — the back-ease is parked until the feel
+            // of the row is otherwise right
+            snapAnimationSpec = androidx.compose.animation.core.tween(
+                durationMillis = 320,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing,
+            ),
+        )
+    }
     LazyRow(
-        state = rememberCardRowState(),
-        contentPadding = PaddingValues(horizontal = HomeContentInset),
+        state = rowState,
+        flingBehavior = snapFling,
+        contentPadding = PaddingValues(start = HomeContentInset - RowSnapPeek, end = HomeContentInset),
         horizontalArrangement = Arrangement.spacedBy(HomeCardSpacing),
     ) {
         itemsIndexed(items = items, key = { _, item -> key(item) }) { index, item ->
             Box(
-                modifier = Modifier.revealOnAppear(
+                modifier = Modifier
+                    .then(if (index == 0) Modifier.padding(start = RowSnapPeek) else Modifier)
+                    .revealOnAppear(
                     key = "$rowKey/${key(item)}",
                     seenState = revealSeen,
                     delayMillis = min(index, 4) * 60,
@@ -486,6 +534,10 @@ private val HomeMarkWidth = 31.dp
 private val HomeMarkHeight = 34.dp
 private val HomeTopBarRise = 16.dp
 
+/** how far short of the row's inset a settled card stops, leaving a sliver of the card before it */
+private val RowSnapPeek = 15.dp
+
+
 /**
  * Home before the player service is up: the top bar, hero and bones the real Home shows while it
  * loads, in exactly the same places, so the swap to the real thing can't be seen. On a launch the
@@ -532,7 +584,7 @@ private fun HomeShell() {
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_mochy_mark),
-                contentDescription = "Mochy",
+                contentDescription = "Concord",
                 tint = Color.White,
                 modifier = Modifier
                     .launchMarkTarget()
@@ -581,6 +633,7 @@ fun HomeScreen(
     navController: NavController,
     snackbarHostState: SnackbarHostState,
     viewModel: HomeViewModel = hiltViewModel(),
+    appleHomeViewModel: AppleHomeViewModel = hiltViewModel(),
 ) {
     val menuState = LocalMenuState.current
     val bottomSheetPageState = LocalBottomSheetPageState.current
@@ -706,6 +759,7 @@ fun HomeScreen(
             keepListening?.filterIsInstance<Song>()?.forEach { add(it.toMediaMetadata()) }
         }
             .filter { !it.thumbnailUrl.isNullOrEmpty() }
+            .filter { it.id.startsWith("AM_") }
             .distinctBy { it.id }
     }
 
@@ -757,6 +811,101 @@ fun HomeScreen(
 
 
     val scope = rememberCoroutineScope()
+
+    val appleGroups by appleHomeViewModel.groups.collectAsState()
+    val appleFailed by appleHomeViewModel.failed.collectAsState()
+    val appleSignedOut by appleHomeViewModel.signedOut.collectAsState()
+
+    // Concord: signing in is Mochy's own import sheet, opened on Apple's sign-in
+    val sheets = LocalZoomOutOverlayState.current
+// Concord: no Apple session means no Home to draw — one line of copy and one action
+    if (appleSignedOut) {
+        AppleSignInPrompt(onSignIn = { sheets.showLibraryImportSheet(AccountService.APPLE_MUSIC) })
+        return
+    }
+
+    val openAppleItem: (AppleHomeItem) -> Unit = { item ->
+        // routed by the id, not the shelf kind: a mood shelf can arrive typed as a station, and the
+        // id is what Apple actually promises
+        when {
+            item.id.startsWith("pl.") || item.id.startsWith("p.") -> scope.launch(Dispatchers.IO) {
+                val local = runCatching {
+                    viewModel.database.importedPlaylistByRemoteId(ImportSource.APPLE_MUSIC.key, item.id)
+                }.getOrNull()
+                withContext(Dispatchers.Main) {
+                    if (local != null) {
+                        navController.navigate("local_playlist/${local.playlistId}")
+                    } else {
+                        navController.navigate("apple_playlist/${item.id}")
+                    }
+                }
+            }
+            // a station has no page to open: tapping it starts it, the way Apple's does
+            item.id.startsWith("ra.") || item.id.startsWith("AM_STN") -> scope.launch {
+                appleHomeViewModel.stationQueue(item.id)?.let { queue ->
+                    playerConnection.playQueue(queue)
+                }
+            }
+            else -> navController.navigate("album/${item.id}")
+        }
+    }
+
+    // Apple draws its hero shelves (Top Picks, Playlists Made for You) big; every other shelf keeps
+    // Mochy's card size
+    val appleHeroSize = 186.dp
+
+    // "<Artist> Fans Like" shelves, as Mochy's artist cards. The content is the next feature: a card
+    // carries the artist's name and a picture today, and no items.
+    // the speed-dial hero card's covers, from Apple art so the card is not blank
+    val speedDialAppleCovers = remember(appleGroups) {
+        appleGroups.orEmpty()
+            .flatMap { it.items }
+            .mapNotNull { it.artworkUrl?.let { url -> AppleCovers.sized(url, 300) } }
+            .distinct()
+            .take(16)
+    }
+
+    val appleArtistGroups = remember(appleGroups) {
+        appleGroups.orEmpty()
+            .filter { it.title.endsWith(FansLikeSuffix) }
+            .map { group ->
+                ArtistGroup(
+                    artistName = group.title.removeSuffix(FansLikeSuffix),
+                    artistId = null,
+                    artistThumbnailUrl = group.items.firstOrNull()?.artworkUrl?.let { AppleCovers.sized(it) },
+                    // ArtistListCard draws its cover strip from YTItems. This row is a placeholder
+                    // until the artist content is decided, so only the covers are carried over, in
+                    // the shape the card already reads — no YouTube call is made for them.
+                    items = group.items.mapNotNull { item ->
+                        val art = AppleCovers.sized(item.artworkUrl, 300) ?: return@mapNotNull null
+                        com.music.innertube.models.AlbumItem(
+                            browseId = item.id,
+                            playlistId = "",
+                            title = item.title,
+                            artists = null,
+                            thumbnail = art,
+                        )
+                    },
+                )
+            }
+    }
+
+    val appleCard: @Composable (AppleHomeItem, Dp) -> Unit = { item, size ->
+        HomeCoverCard(
+            title = item.title,
+            subtitle = item.subtitle,
+            thumbnailUrl = AppleCovers.sized(item.artworkUrl, (size.value * 2).toInt()),
+            isPlaying = isPlayingNow,
+            size = size,
+            sharedElementKey = if (item.kind == AppleHomeItem.Kind.Album) "album-${item.id}" else null,
+            modifier = Modifier.combinedClickable(
+                interactionSource = null,
+                indication = HomeCardHighlight,
+                onClick = { openAppleItem(item) },
+                onLongClick = {},
+            ),
+        )
+    }
 
     val lazylistState = rememberLazyListState()
 
@@ -1156,57 +1305,6 @@ fun HomeScreen(
         )
     }
 
-    val homeSections by remember {
-        derivedStateOf {
-            val list = mutableListOf<HomeSection>()
-
-            // the recommendation rows are dealt out between Home's own rows, the way Apple Music
-            // and Spotify mix "because you like" shelves in with your history
-            val categories = homeCategories.orEmpty()
-            var nextCategory = 0
-            fun addCategories(count: Int = 1) = repeat(count) {
-                categories.getOrNull(nextCategory)?.let {
-                    list.add(HomeSection.Category(it.id))
-                    nextCategory++
-                }
-            }
-
-            if (recentlyPlayed?.isNotEmpty() == true) list.add(HomeSection.RecentlyPlayed)
-            if (pinnedItems.isNotEmpty()) list.add(HomeSection.Pinned)
-            if (mostPlayedSongsForHome?.isNotEmpty() == true) list.add(HomeSection.MostPlayed)
-            addCategories()
-            if (communityPlaylists?.isNotEmpty() == true) list.add(HomeSection.FromTheCommunity)
-            if (recentHistorySongs?.isNotEmpty() == true) list.add(HomeSection.History)
-            addCategories()
-            // the two video banners sit apart, so the big frames break the feed up instead of piling up
-            if (liveRow?.isNotEmpty() == true) list.add(HomeSection.LiveShows)
-            addCategories()
-            if (artistListItems?.isNotEmpty() == true) list.add(HomeSection.ArtistList)
-            addCategories()
-            if (accountPlaylists?.isNotEmpty() == true || localPlaylists?.isNotEmpty() == true) list.add(HomeSection.AccountPlaylists)
-            addCategories()
-            if (forgottenFavorites?.isNotEmpty() == true) list.add(HomeSection.DontForgetTheseSongs)
-            addCategories()
-            if (musicVideoRow?.isNotEmpty() == true) list.add(HomeSection.MusicVideos)
-            addCategories(categories.size)
-
-            // youtube's live and video shelves sit in the rows above, and its speed dial behind the hero when there is one
-            val homePageSections = homePage?.sections.orEmpty()
-                .mapIndexed { index, section -> index to section }
-                .filter { (index, section) ->
-                    feedVideoKinds[index] != FeedVideoKind.Live && feedVideoKinds[index] != FeedVideoKind.MusicVideos &&
-                        !(section.isSpeedDial && homeStyle == HomeStyle.MOCHYY)
-                }
-            homePageSections.firstOrNull()?.let { (index, section) -> list.add(HomeSection.HomePageSection(index, section.title)) }
-            if (allTimeHits?.isNotEmpty() == true) list.add(HomeSection.AllTimeHits)
-            homePageSections.drop(1).forEach { (index, section) ->
-                list.add(HomeSection.HomePageSection(index, section.title))
-            }
-
-            list
-        }
-    }
-
     LaunchedEffect(mostPlayedSongsForHome) {
         quickPicksLazyGridState.scrollToItem(0)
     }
@@ -1344,13 +1442,22 @@ fun HomeScreen(
                             bottom = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()
                         )
                     ) {
+                // Apple's home: Mochy's hero on top, then Apple's own shelves in Apple's order
                 when (homeStyle) {
                     HomeStyle.MOCHYY -> {
                         item(key = "hero", contentType = "hero") {
-                            HeroCarousel(
-                                keepListening = keepListening,
-                                lastPlayedSong = mediaMetadataState.value ?: lastPlayedSong,
-                                dailyDiscover = dailyDiscover,
+                            // the hero's blurred art ends on a hard edge a shade above pure black,
+                            // which reads as a coloured band across the page. A fade drawn over its
+                            // last 28dp blends that edge into the background; the shared hero
+                            // component itself is untouched.
+                            Box {
+                                HeroCarousel(
+                                // Apple content only: the hero's YouTube pools (daily discover, similar,
+                                // the trailer-style recent items) would put YouTube back on this page
+                                keepListening = keepListening?.filter { it.id.startsWith("AM_") },
+                                lastPlayedSong = mediaMetadataState.value
+                                    ?: lastPlayedSong?.takeIf { it.id.startsWith("AM_") },
+                                dailyDiscover = emptyList(),
                                 playerConnection = playerConnection,
                                 navController = navController,
                                 heroScrollProgressProvider = heroScrollProgressProvider,
@@ -1359,13 +1466,27 @@ fun HomeScreen(
                                 gachaPool = gachaPool,
                                 starterItems = starterItems,
                                 playlistPicks = playlistPicks,
-                                similarRecommendations = similarRecommendations,
-                                onRepeat = mostPlayedSongsForHome,
-                                forgottenFavorites = forgottenFavorites,
-                                speedDialCovers = speedDialCovers,
-                                onSummonSpeedDial = openSpeedDial,
+                                similarRecommendations = emptyList(),
+                                onRepeat = mostPlayedSongsForHome?.filter { it.song.source == "APPLE" },
+                                forgottenFavorites = forgottenFavorites?.filter { it.song.source == "APPLE" },
+                                // the speed dial is wanted back; its covers come from Apple artwork
+                                // and the sheet behind it is still Mochy's, to be fed later
+                                speedDialCovers = speedDialAppleCovers,
                                 modifier = Modifier.launchRise(order = 1),
                             )
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                        .height(28.dp)
+                                        .background(
+                                            Brush.verticalGradient(
+                                                0f to Color.Transparent,
+                                                1f to Color.Black,
+                                            )
+                                        )
+                                )
+                            }
                         }
                     }
                     HomeStyle.LISTEN_NOW -> {
@@ -1435,309 +1556,7 @@ fun HomeScreen(
                     }
                 }
 
-                // nothing but bones while the launch intro plays; the rows reveal once it lands
-                if (!launchHold) homeSections.forEach { section ->
-                    when (section) {
-                        HomeSection.Pinned -> {
-                            pinnedItems.takeIf { it.isNotEmpty() }?.let { items ->
-                                homeItem("pinned_title", revealSeen, "title") {
-                                    HomeSectionTitle(title = stringResource(R.string.library_pinned))
-                                }
-                                homeItem("pinned_list", revealSeen, "cardRow") {
-                                    HomeCardRow("pinned", items, revealSeen, key = { it.id }, content = ytItemCard)
-                                }
-                            }
-                        }
-                        HomeSection.RecentlyPlayed -> {
-                            recentlyPlayed?.takeIf { it.isNotEmpty() }?.let { items ->
-                                homeItem("recently_played_title", revealSeen, "title") {
-                                    HomeSectionTitle(
-                                        title = stringResource(R.string.recently_played),
-                                        onClick = { navController.navigate("section_detail/recently_played") }
-                                    )
-                                }
-                                homeItem("recently_played_list", revealSeen, "cardRow") {
-                                    HomeCardRow("recently_played", items, revealSeen, key = { it.id }, content = localItemCard)
-                                }
-                            }
-                        }
-                        HomeSection.MostPlayed -> {
-                            mostPlayedSongsForHome?.takeIf { it.isNotEmpty() }?.let { mostPlayed ->
-                                homeItem("most_played_title", revealSeen, "title") {
-                                    HomeSectionTitle(
-                                        title = stringResource(R.string.home_most_played),
-                                        onClick = { navController.navigate("section_detail/most_played") },
-                                    )
-                                }
-                                homeItem("most_played_list", revealSeen, "trackGrid") {
-                                    HomeTrackGrid(
-                                        items = mostPlayed,
-                                        state = quickPicksLazyGridState,
-                                        rowSpacing = 6.dp,
-                                        columnWidth = trackColumnWidth,
-                                        key = { _, song -> song.id },
-                                        content = rankedTrackRow,
-                                    )
-                                }
-                            }
-                        }
-                        HomeSection.History -> {
-                            recentHistorySongs?.takeIf { it.isNotEmpty() }?.let { history ->
-                                homeItem("history_title", revealSeen, "title") {
-                                    HomeSectionTitle(
-                                        title = stringResource(R.string.home_history),
-                                        onClick = { navController.navigate("history") }
-                                    )
-                                }
-                                homeItem("history_list", revealSeen, "trackGrid") {
-                                    HomeTrackGrid(
-                                        items = history,
-                                        state = rememberTrackGridState(),
-                                        rowSpacing = 6.dp,
-                                        columnWidth = trackColumnWidth,
-                                        key = { index, song -> "history_${index}_${song.id}" },
-                                        content = trackRow,
-                                    )
-                                }
-                            }
-                        }
-                        HomeSection.FromTheCommunity -> {
-                            communityPlaylists?.takeIf { it.isNotEmpty() }?.let { playlists ->
-                                homeItem("community_playlists_title", revealSeen, "title") {
-                                    HomeSectionTitle(
-                                        title = stringResource(R.string.from_the_community),
-                                        onClick = { navController.navigate("section_detail/from_the_community") }
-                                    )
-                                }
-                                homeItem("community_playlists_content", revealSeen, "cardRow") {
-                                    HomeCardRow("community_playlists", playlists, revealSeen, key = { it.playlist.id }, content = communityCard)
-                                }
-                            }
-                        }
-                        HomeSection.ArtistList -> {
-                            artistListItems?.takeIf { it.isNotEmpty() }?.let { items ->
-                                homeItem("artist_list_title", revealSeen, "title") {
-                                    // just a title: each box below is its own artist's page
-                                    HomeSectionTitle(title = stringResource(R.string.artist_list))
-                                }
-                                homeItem("artist_list_content", revealSeen, "cardRow") {
-                                    HomeCardRow("artist_list", items, revealSeen, key = { "${it.artistId}_${it.artistName}" }, content = artistGroupCard)
-                                }
-                            }
-                        }
-                        HomeSection.AllTimeHits -> {
-                            allTimeHits?.takeIf { it.isNotEmpty() }?.let { hits ->
-                                homeItem("all_time_hits_title", revealSeen, "title") {
-                                    HomeSectionTitle(
-                                        title = stringResource(R.string.all_time_hits),
-                                        onClick = { navController.navigate("section_detail/all_time_hits") }
-                                    )
-                                }
-                                homeItem("all_time_hits_list", revealSeen, "cardRow") {
-                                    HomeCardRow("all_time_hits", hits, revealSeen, key = { it.id }, content = hitsCard)
-                                }
-                            }
-                        }
-                        HomeSection.LiveShows, HomeSection.MusicVideos -> {
-                            val isLive = section == HomeSection.LiveShows
-                            (if (isLive) liveRow else musicVideoRow)?.takeIf { it.isNotEmpty() }?.let { videos ->
-                                homeItem("${section.id}_title", revealSeen, "title") {
-                                    HomeSectionTitle(
-                                        title = stringResource(if (isLive) R.string.live_shows else R.string.music_videos_for_you),
-                                        onClick = { navController.navigate("section_detail/${section.id}") }
-                                    )
-                                }
-                                homeItem("${section.id}_list", revealSeen, "cardRow") {
-                                    HomeCardRow(section.id, videos, revealSeen, key = { it.item.id }, content = videoRowCard)
-                                }
-                            }
-                        }
-                        is HomeSection.Category -> {
-                            homeCategories?.firstOrNull { it.id == section.categoryId }?.let { category ->
-                                homeItem("${section.id}_title", revealSeen, "title") {
-                                    val title = when (category.kind) {
-                                        HomeCategory.Kind.NewFromArtists -> stringResource(R.string.home_new_from_your_artists)
-                                        else -> category.title
-                                    }
-                                    HomeSectionTitle(
-                                        label = when (category.kind) {
-                                            HomeCategory.Kind.BecauseYouLike -> stringResource(R.string.home_because_you_like)
-                                            HomeCategory.Kind.MoreLikeArtist -> stringResource(R.string.home_more_like)
-                                            HomeCategory.Kind.YourGenre -> stringResource(R.string.home_because_you_listen_to)
-                                            HomeCategory.Kind.NewGenre -> stringResource(R.string.home_try_something_new)
-                                            HomeCategory.Kind.NewFromArtists -> null
-                                        },
-                                        title = title,
-                                        thumbnail = category.thumbnailUrl?.let { thumbnailUrl ->
-                                            {
-                                                AsyncImage(
-                                                    model = thumbnailUrl.resize(90, 90),
-                                                    contentDescription = null,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier
-                                                        .size(30.dp)
-                                                        .clip(
-                                                            if (category.kind == HomeCategory.Kind.MoreLikeArtist) {
-                                                                CircleShape
-                                                            } else {
-                                                                RoundedCornerShape(ThumbnailCornerRadius)
-                                                            }
-                                                        )
-                                                )
-                                            }
-                                        },
-                                        onClick = category.endpoint?.let { endpoint ->
-                                            {
-                                                if (category.kind == HomeCategory.Kind.MoreLikeArtist) {
-                                                    navController.navigate("artist/${endpoint.browseId}")
-                                                } else {
-                                                    navController.navigate("genre/${endpoint.browseId}?params=${endpoint.params}")
-                                                }
-                                            }
-                                        },
-                                    )
-                                }
-                                homeItem("${section.id}_list", revealSeen, "cardRow") {
-                                    HomeCardRow(section.id, category.items, revealSeen, key = { it.id }, content = ytItemCard)
-                                }
-                            }
-                        }
-                        HomeSection.AccountPlaylists -> {
-                            if (!localPlaylists.isNullOrEmpty() || !accountPlaylists.isNullOrEmpty()) {
-                                homeItem("account_playlists_title", revealSeen, "title") {
-                                    Box {
-                                        HomeSectionTitle(
-                                            label = stringResource(R.string.home_your_playlists),
-                                            title = accountName,
-                                            thumbnail = {
-                                                if (profileImageUrl != null) {
-                                                    AsyncImage(
-                                                        model = profileImageRequest,
-                                                        placeholder = painterResource(id = R.drawable.person),
-                                                        error = painterResource(id = R.drawable.person),
-                                                        contentDescription = null,
-                                                        contentScale = ContentScale.Crop,
-                                                        modifier = Modifier
-                                                            .size(30.dp)
-                                                            .clip(CircleShape)
-                                                    )
-                                                } else {
-                                                    Icon(
-                                                        painter = painterResource(id = R.drawable.person),
-                                                        contentDescription = null,
-                                                        tint = Color.White.copy(alpha = 0.69f),
-                                                        modifier = Modifier.size(30.dp)
-                                                    )
-                                                }
-                                            },
-                                        )
 
-                                    }
-                                }
-
-                                homeItem("account_playlists_list", revealSeen, "cardRow") {
-                                    LazyRow(
-                                        state = rememberCardRowState(),
-                                        contentPadding = PaddingValues(horizontal = HomeContentInset),
-                                        horizontalArrangement = Arrangement.spacedBy(HomeCardSpacing)
-                                    ) {
-                                        localPlaylists?.let { items ->
-                                            items(items = items, key = { it.id }) { item ->
-                                                localItemCard(item)
-                                            }
-                                        }
-                                        accountPlaylists?.let { items ->
-                                            items(items = items, key = { it.id }) { item ->
-                                                ytItemCard(item)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        HomeSection.DontForgetTheseSongs -> {
-                            forgottenFavorites?.takeIf { it.isNotEmpty() }?.let { forgottenFavorites ->
-                                homeItem("forgotten_favorites_title", revealSeen, "title") {
-                                    HomeSectionTitle(
-                                        title = stringResource(R.string.dont_forget_these_songs),
-                                        onClick = { navController.navigate("section_detail/forgotten_favorites") },
-                                    )
-                                }
-                                homeItem("forgotten_favorites_list", revealSeen, "trackGrid") {
-                                    HomeTrackGrid(
-                                        items = forgottenFavorites,
-                                        state = forgottenFavoritesLazyGridState,
-                                        rowSpacing = 6.dp,
-                                        columnWidth = trackColumnWidth,
-                                        key = { _, song -> song.id },
-                                        content = trackRow,
-                                    )
-                                }
-                            }
-                        }
-                        is HomeSection.HomePageSection -> {
-                            val sectionData = homePage?.sections?.getOrNull(section.index)
-                            sectionData?.let {
-                                homeItem("home_section_title_${section.id}", revealSeen, "title") {
-                                    HomeSectionTitle(
-                                        title = sectionData.title,
-                                        label = sectionData.label,
-                                        thumbnail = sectionData.thumbnail?.let { thumbnailUrl ->
-                                            {
-                                                val shape = if (sectionData.endpoint?.isArtistEndpoint == true) {
-                                                    CircleShape
-                                                } else {
-                                                    RoundedCornerShape(ThumbnailCornerRadius)
-                                                }
-                                                AsyncImage(
-                                                    model = thumbnailUrl,
-                                                    contentDescription = null,
-                                                    modifier = Modifier
-                                                        .size(30.dp)
-                                                        .clip(shape)
-                                                )
-                                            }
-                                        },
-                                        onClick = sectionData.endpoint?.let { endpoint ->
-                                            {
-                                                when {
-                                                    endpoint.browseId == "FEmusic_moods_and_genres" ->
-                                                        navController.navigate("mood_and_genres")
-                                                    endpoint.params != null ->
-                                                        navController.navigate("youtube_browse/${endpoint.browseId}?params=${endpoint.params}")
-                                                    else ->
-                                                        navController.navigate("browse/${endpoint.browseId}")
-                                                }
-                                            }
-                                        },
-                                    )
-                                }
-
-                                homeItem("home_section_list_${section.id}", revealSeen, "cardRow") {
-                                    val videos = feedVideoRows[section.index]
-                                    if (videos != null) {
-                                        HomeCardRow(
-                                            "home_section_${section.id}",
-                                            videos,
-                                            revealSeen,
-                                            key = { it.item.id },
-                                            content = videoRowCard,
-                                        )
-                                    } else {
-                                        HomeCardRow("home_section_${section.id}", sectionData.items, revealSeen, key = { it.id }, content = ytItemCard)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    item(key = "section_spacer_${section.id}", contentType = "spacer") {
-                        Spacer(modifier = Modifier.height(34.dp))
-                    }
-                }
-
-                // only while something is really on its way; a page token alone used to leave
-                // these bones up forever when the next page couldn't load
                 if (launchHold || (isFirstLoad && speedDialItems.isEmpty() && keepListening.isNullOrEmpty()) || isLoadingMore) {
                     item(key = "loading_bones", contentType = "bones") {
                         BonesHost(
@@ -1752,6 +1571,159 @@ fun HomeScreen(
                             repeat(2) {
                                 HomeSectionBones()
                                 Spacer(modifier = Modifier.height(34.dp))
+                            }
+                        }
+                    }
+                }
+
+                item(key = "apple_home_top", contentType = "gap") {
+                    // the hero's bottom fade ends a hair above pure black, which shows as a thin
+                    // album-coloured seam at its edge; a black band under it hides the seam
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(20.dp)
+                            .background(Color.Black)
+                    )
+                }
+
+                when {
+                    appleFailed -> item(key = "apple_home_failed") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = HomeContentInset, vertical = 24.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.home_apple_failed),
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = stringResource(R.string.home_apple_retry),
+                                color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.clickable { appleHomeViewModel.retry() },
+                            )
+                        }
+                    }
+                    appleGroups == null -> item(key = "apple_home_bones") {
+                        BonesHost {
+                            repeat(2) {
+                                HomeSectionBones()
+                                Spacer(Modifier.height(34.dp))
+                            }
+                        }
+                    }
+                    else -> appleGroups.orEmpty().forEachIndexed { index, group ->
+                        // "<Artist> Fans Like" is drawn with Mochy's "More like <artist>" title row.
+                        // The cards under it are Apple's, unchanged.
+                        // "<Artist> Fans Like" and "More from <artist>" are the same shelf in
+                        // Apple's feed and get Mochy's "More like <artist>" title row
+                        val fansArtist = when {
+                            group.title.endsWith(FansLikeSuffix) -> group.title.removeSuffix(FansLikeSuffix)
+                            group.title.startsWith(MoreFromPrefix) -> group.title.removePrefix(MoreFromPrefix)
+                            else -> null
+                        }
+                        item(key = "apple_group_title_$index", contentType = "title") {
+                            if (fansArtist != null) {
+                                // Mochy's row has an artist picture here; Apple sends none for a
+                                // "Fans Like" shelf, so the first card's artwork stands in and a
+                                // person mark is drawn when even that is missing
+                                val art = group.items.firstOrNull()?.artworkUrl?.let { AppleCovers.sized(it, 180) }
+                                HomeSectionTitle(
+                                    label = stringResource(R.string.home_more_like),
+                                    title = fansArtist,
+                                    onClick = { navController.navigate("coming_soon/${Uri.encode(group.title)}") },
+                                    thumbnail = {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(30.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.White.copy(alpha = 0.12f)),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            if (art != null) {
+                                                AsyncImage(
+                                                    model = art,
+                                                    contentDescription = null,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                )
+                                            } else {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.person),
+                                                    contentDescription = null,
+                                                    tint = Color.White.copy(alpha = 0.6f),
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                            }
+                                        }
+                                    },
+                                )
+                            } else {
+                                HomeSectionTitle(
+                                    title = group.title,
+                                    // every Apple shelf opens a page of its own; that page is not
+                                    // built yet, so the chevron leads to Mochy's coming-soon screen
+                                    onClick = { navController.navigate("coming_soon/${Uri.encode(group.title)}") },
+                                )
+                            }
+                        }
+                        item(key = "apple_group_row_$index", contentType = "cardRow") {
+                            HomeCardRow(
+                                rowKey = "apple_group_$index",
+                                items = group.items,
+                                revealSeen = revealSeen,
+                                key = { it.id },
+                            ) { item -> appleCard(item, if (group.isHero) appleHeroSize else homeCardSize()) }
+                        }
+                        item(key = "apple_group_gap_$index", contentType = "gap") {
+                            Spacer(Modifier.height(26.dp))
+                        }
+
+                        // Mochy's Most Played sits right under what Apple says you played last
+                        if (group.title.equals(RecentlyPlayedTitle, ignoreCase = true)) {
+                            mostPlayedSongsForHome?.takeIf { it.isNotEmpty() }?.let { mostPlayed ->
+                                item(key = "apple_most_played_title", contentType = "title") {
+                                    HomeSectionTitle(
+                                        title = stringResource(R.string.home_most_played),
+                                        onClick = { navController.navigate("section_detail/most_played") },
+                                    )
+                                }
+                                item(key = "apple_most_played_list", contentType = "trackGrid") {
+                                    HomeTrackGrid(
+                                        items = mostPlayed,
+                                        state = quickPicksLazyGridState,
+                                        rowSpacing = 6.dp,
+                                        columnWidth = trackColumnWidth,
+                                        key = { _, song -> song.id },
+                                        content = rankedTrackRow,
+                                    )
+                                }
+                                item(key = "apple_most_played_gap", contentType = "gap") {
+                                    Spacer(Modifier.height(26.dp))
+                                }
+                            }
+                        }
+
+                        // Mochy's artist cards, under the stations. The content is still to come:
+                        // each card carries the artist name and a picture, no items yet.
+                        if (group.title.equals(StationsTitle, ignoreCase = true) && appleArtistGroups.isNotEmpty()) {
+                            item(key = "apple_artist_list_title", contentType = "title") {
+                                HomeSectionTitle(title = stringResource(R.string.artist_list))
+                            }
+                            item(key = "apple_artist_list_row", contentType = "cardRow") {
+                                HomeCardRow(
+                                    rowKey = "apple_artist_list",
+                                    items = appleArtistGroups,
+                                    revealSeen = revealSeen,
+                                    key = { it.artistName },
+                                ) { artist -> artistGroupCard(artist) }
+                            }
+                            item(key = "apple_artist_list_gap", contentType = "gap") {
+                                Spacer(Modifier.height(26.dp))
                             }
                         }
                     }
@@ -1831,11 +1803,32 @@ fun HomeScreen(
                     )
 
                     // the brand mark over the hero, swapped for a bold "Home" once the hero scrolls away.
-                    // it's also where the launch intro lands the splash mark
-                    Box(contentAlignment = Alignment.CenterStart) {
+                    // it's also where the launch intro lands the splash mark.
+                    // The slot animates between the mark's 31dp and the title's measured width, so the
+                    // tabs beside it slide with the swap instead of jumping when the text appears.
+                    val homeTitle = stringResource(R.string.home)
+                    val homeTitleStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 32.sp,
+                        letterSpacing = (-0.06).em,
+                    )
+                    val measurer = rememberTextMeasurer()
+                    val homeTitleWidth = with(LocalDensity.current) {
+                        remember(measurer, homeTitle) {
+                            measurer.measure(homeTitle, homeTitleStyle).size.width.toDp()
+                        }
+                    }
+                    val brandWidth by animateDpAsState(
+                        targetValue = if (isScrolled) homeTitleWidth else HomeMarkWidth,
+                        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+                        label = "brandWidth",
+                    )
+
+                    Box(modifier = Modifier.width(brandWidth), contentAlignment = Alignment.CenterStart) {
                         Icon(
                             painter = painterResource(R.drawable.ic_mochy_mark),
-                            contentDescription = "Mochy",
+                            contentDescription = "Concord",
                             tint = Color.White,
                             modifier = Modifier
                                 .launchMarkTarget()
@@ -1851,13 +1844,8 @@ fun HomeScreen(
                         )
 
                         Text(
-                            text = stringResource(R.string.home),
-                            style = TextStyle(
-                                fontFamily = InterFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 32.sp,
-                                letterSpacing = (-0.06).em,
-                            ),
+                            text = homeTitle,
+                            style = homeTitleStyle,
                             color = Color.White,
                             maxLines = 1,
                             modifier = Modifier.graphicsLayer {

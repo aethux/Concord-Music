@@ -224,6 +224,71 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity-alias>
+        <!-- the Concord designs, the new dark one above as the default; these four are picked from settings -->
+        <activity-alias
+            android:name=".IconConcordNewLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/app_icon_concord_new_light"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/app_icon_concord_new_light"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity-alias>
+        <activity-alias
+            android:name=".IconConcordOld"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/app_icon_concord_old"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/app_icon_concord_old"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity-alias>
+        <activity-alias
+            android:name=".IconConcordIosDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/app_icon_concord_ios_dark"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/app_icon_concord_ios_dark"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity-alias>
+        <activity-alias
+            android:name=".IconConcordWhite"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/app_icon_concord_white"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/app_icon_concord_white"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity-alias>
         <activity-alias
             android:name=".IconMarkWhite"
             android:enabled="false"
@@ -1094,6 +1159,11 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:exported="false"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
+        <service
+            android:name=".applesync.AppleSyncService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <service
             android:name=".playback.MusicService"

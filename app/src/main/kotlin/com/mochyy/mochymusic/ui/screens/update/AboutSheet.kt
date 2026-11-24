@@ -101,16 +101,23 @@ private data class ContributorEntry(
 
 private val LeadDevs =
     listOf(
+        // CONCORD: the fork's own dev, first — this app is Aeth's fork of Mochy
+        LeadDevEntry(
+            name = "Aeth",
+            githubUser = "aethux",
+            devSpaceIndex = 0,
+            fallbackAvatar = R.drawable.frame_51_3,
+        ),
         LeadDevEntry(
             name = "Roo",
             githubUser = "realidkroo",
-            devSpaceIndex = 0,
+            devSpaceIndex = 1,
             fallbackAvatar = R.drawable.frame_51_3,
         ),
         LeadDevEntry(
             name = "key",
             githubUser = "realkeichi",
-            devSpaceIndex = 1,
+            devSpaceIndex = 2,
             fallbackAvatar = R.drawable.dev_keycii,
         ),
     )
@@ -187,7 +194,7 @@ private val Licenses =
     listOf(
         LicenseEntry(
             tag = "GPL-3.0",
-            title = "Mochy Music · GNU General Public License v3.0",
+            title = "Concord · GNU General Public License v3.0",
             subtitle = "Free and open source software, source code on GitHub",
             url = "$GithubRepoUrl/blob/main/LICENSE",
         ),
@@ -341,7 +348,7 @@ private fun ColumnScope.AboutSheetContent(
     Box(Modifier.fillMaxWidth()) {
         // zero-size layout places the spinning ring behind the top icon without pushing the column down
         VersionRing(
-            text = "MOCHY $installed",
+            text = "CONCORD $installed",
             scrollProgress = { scrollState.value / ringScrollRangePx },
             modifier =
                 Modifier

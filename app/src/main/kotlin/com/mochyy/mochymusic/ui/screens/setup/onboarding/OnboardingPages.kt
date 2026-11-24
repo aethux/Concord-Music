@@ -2,6 +2,12 @@
 
 package com.mochyy.mochymusic.ui.screens.setup.onboarding
 
+import com.mochyy.mochymusic.ui.component.AppSwitch
+import com.mochyy.mochymusic.ui.screens.audiolab.ProviderOrder
+import com.mochyy.mochymusic.ui.screens.audiolab.providerLogo
+import com.mochyy.mochymusic.module.applemusic.AppleMusicModule
+import com.mochyy.mochymusic.module.monochrome.MonochromeModule
+import com.mochyy.mochymusic.modules.SourceModules
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.mochyy.mochymusic.ui.component.rememberDeviceTilt
@@ -64,6 +70,15 @@ import com.mochyy.mochymusic.importer.account.RemotePlaylist
 import com.mochyy.mochymusic.importer.transfer.TransferManifest
 import com.mochyy.mochymusic.viewmodels.TransferStep
 import com.mochyy.mochymusic.viewmodels.YouTubeSyncChoices
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import com.mochyy.mochymusic.ui.component.ReorderCards
+import com.mochyy.mochymusic.ui.player.StreamFormatBadge
+import com.mochyy.mochymusic.ui.screens.audiolab.ProviderLogo
+import com.mochyy.mochymusic.ui.theme.InterFontFamily
 
 // ---- 1. import? ----
 
@@ -244,6 +259,8 @@ internal fun ProviderSetupPage(
     onOpenBrowser: () -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
+    /** Concord: one more line under Mochy's own message, for the caller that has something to add */
+    extraNote: String? = null,
 ) {
     OnboardingPage(
         badge = { ProviderSquircle(service, size = 40.dp) },
@@ -268,13 +285,129 @@ internal fun ProviderSetupPage(
                 Text(state.label, color = Onb.Subtitle, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
             is AccountImportState.Failed -> Text(state.message, color = Color(0xFFFF8A80), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            // Concord: a caller with its own line gives that line instead of Mochy's, not after it
             else -> Text(
-                stringResource(R.string.onb_provider_setup_body, service.label),
+                extraNote ?: stringResource(R.string.onb_provider_setup_body, service.label),
                 color = Onb.Muted,
                 fontSize = 14.sp,
+                lineHeight = 20.sp,
             )
         }
     }
+}
+
+// ---- 4b. Monochrome and the source order ----
+
+/**
+ * Concord: the wizard's last question, after the library is in. Mochy's own switch for Monochrome
+ * (lossless FLAC) and Mochy's own provider list for the order a song is looked for in.
+ */
+@Composable
+internal fun SourcesPage(
+    monochromeOn: Boolean,
+    order: List<String>,
+    nameOf: (String) -> String,
+    onToggleMonochrome: (Boolean) -> Unit,
+    onReorder: (List<String>) -> Unit,
+    onContinue: () -> Unit,
+    onBack: () -> Unit,
+) {
+    OnboardingPage(
+        badge = { PageBadge(painterResource(R.drawable.library_music)) },
+        title = stringResource(R.string.onb_sources_title),
+        subtitle = stringResource(R.string.onb_sources_subtitle),
+        footer = {
+            OnbButton(stringResource(R.string.onb_continue), onClick = onContinue)
+            OnbButton(stringResource(R.string.onb_go_back), onClick = onBack, style = OnbButtonStyle.Secondary)
+        },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.onb_sources_monochrome), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.onb_sources_monochrome_desc), color = Onb.Muted, fontSize = 13.sp)
+            }
+            AppSwitch(checked = monochromeOn, onCheckedChange = onToggleMonochrome)
+        }
+        Spacer(Modifier.height(18.dp))
+        // the heading the page has always used, with the hint the module page gives under its list
+        var sorting by remember { mutableStateOf(false) }
+        Text(stringResource(R.string.onb_sources_playback_preference), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(
+            stringResource(R.string.onb_sources_reorder_hint), color = Onb.Muted, fontSize = 13.sp,
+            lineHeight = 15.sp,
+        )
+        Spacer(Modifier.height(10.dp))
+        // Monochrome is only a source once it is switched on: off, the list is the two services
+        val shown = if (monochromeOn) order else order.filter { it != MonochromeModule.Id }
+        ReorderCards(
+            ids = shown,
+            rowHeight = 104.dp,
+            // a hidden source keeps its place in the saved order: put it back where it was
+            onReorder = { visible ->
+                val next = visible.iterator()
+                onReorder(order.map { if (it == MonochromeModule.Id) it else next.next() })
+            },
+            // the lines come out with the hold and go when it is dropped
+            sorting = sorting,
+            onStartSorting = { sorting = true },
+            onDragEnd = { sorting = false },
+        ) { id, lifted, hold ->
+            // the card takes what is left of the row, so the lines take their width from it rather
+            // than drawing over its edge
+            SourceCard(
+                id = id, name = nameOf(id), tag = sourceFormat(id), lifted = lifted, hold = hold,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+    }
+}
+
+/**
+ * One source as the module page draws its cards — the same height, icon size and type — without the
+ * parts that only a module has: no sign-in line, no song count, no version. The format it plays
+ * wears the player's own tag under its name.
+ */
+@Composable
+private fun SourceCard(id: String, name: String, tag: String?, lifted: Boolean, hold: Modifier, modifier: Modifier = Modifier) {
+    // the module card's own measurements: 18/16/14/12 of padding, the name at the top of the column,
+    // its second line right under it where a module puts its status
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clip(RoundedCornerShape(26.dp))
+            .background(if (lifted) Onb.CardPressed else Onb.Card)
+            .then(hold)
+            .padding(start = 18.dp, top = 14.dp, end = 16.dp, bottom = 12.dp),
+    ) {
+        ProviderLogo(providerLogo(id), size = 56)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f).fillMaxHeight()) {
+            Text(
+                name, fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = 21.sp,
+                letterSpacing = (-0.6).sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            tag?.let {
+                Spacer(Modifier.height(4.dp))
+                StreamFormatBadge(text = it, height = 18.dp, color = Color.White.copy(alpha = 0.55f))
+            }
+        }
+    }
+}
+
+/**
+ * What a source actually plays, under its name: the design's own tag, the same one the player wears
+ * once a song is running. Codec names, so they are not translated — `StreamFacts.codecOf` writes the
+ * same words.
+ */
+private fun sourceFormat(id: String): String? = when (id) {
+    MonochromeModule.Id -> "FLAC"
+    AppleMusicModule.Id -> "AAC"
+    SourceModules.YouTubeId -> "OPUS"
+    else -> null
 }
 
 // ---- 5. what to sync or import ----

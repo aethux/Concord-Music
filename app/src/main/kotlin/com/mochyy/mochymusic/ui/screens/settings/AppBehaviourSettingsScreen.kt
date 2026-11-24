@@ -253,16 +253,6 @@ private fun libraryItems(): List<SettingsItem> {
             checked = pauseSearchHistory,
             onCheckedChange = onPauseSearchHistoryChange,
         ),
-        // the same switch as sync's youtube history one, signed out it still counts the play
-        switchItem(
-            key = "Count plays on YouTube views",
-            title = stringResource(R.string.settings_youtube_plays),
-            description = stringResource(R.string.settings_youtube_plays_desc),
-            detail = stringResource(R.string.settings_youtube_plays_detail),
-            icon = painterResource(R.drawable.trending_up),
-            checked = reportPlays,
-            onCheckedChange = onReportPlaysChange,
-        ),
     )
 }
 

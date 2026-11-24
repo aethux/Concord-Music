@@ -1159,13 +1159,31 @@ fun ItemThumbnail(
             .clip(shape)
     ) {
         if (albumIndex == null) {
-            // the box above already clips to the shape, a second clip here was just one more layer per cover
-            AsyncImage(
-                model = thumbnailUrl?.resize(544, 544),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+            // Concord: a row Apple never gave artwork for (an upload with no embedded art) draws
+            // the standard note instead of an empty square, so it reads as a song and not a fault
+            if (thumbnailUrl == null) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.music_note),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxSize(0.42f)
+                    )
+                }
+            } else {
+                // the box above already clips to the shape, a second clip here was just one more layer per cover
+                AsyncImage(
+                    model = thumbnailUrl.resize(544, 544),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         if (albumIndex != null) {

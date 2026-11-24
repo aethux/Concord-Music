@@ -73,20 +73,22 @@ import java.util.Locale
 
 @Dao
 interface DatabaseDao {
+    // Concord: the library is Apple's — a YouTube row is filtered out at the query, not on the screen,
+    // so every list and the counts on Library home agree. Apple and local rows stay.
     @Transaction
-    @Query("SELECT * FROM song WHERE inLibrary IS NOT NULL ORDER BY rowId")
+    @Query("SELECT * FROM song WHERE inLibrary IS NOT NULL AND source != 'YOUTUBE' ORDER BY rowId")
     fun songsByRowIdAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE inLibrary IS NOT NULL ORDER BY inLibrary")
+    @Query("SELECT * FROM song WHERE inLibrary IS NOT NULL AND source != 'YOUTUBE' ORDER BY inLibrary")
     fun songsByCreateDateAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE inLibrary IS NOT NULL ORDER BY title")
+    @Query("SELECT * FROM song WHERE inLibrary IS NOT NULL AND source != 'YOUTUBE' ORDER BY title")
     fun songsByNameAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE inLibrary IS NOT NULL ORDER BY totalPlayTime")
+    @Query("SELECT * FROM song WHERE inLibrary IS NOT NULL AND source != 'YOUTUBE' ORDER BY totalPlayTime")
     fun songsByPlayTimeAsc(): Flow<List<Song>>
 
     fun songs(
@@ -174,19 +176,19 @@ interface DatabaseDao {
     }.map { it.reversed(descending) }
 
     @Transaction
-    @Query("SELECT * FROM song WHERE liked ORDER BY rowId")
+    @Query("SELECT * FROM song WHERE liked AND source != 'YOUTUBE' ORDER BY rowId")
     fun likedSongsByRowIdAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE liked ORDER BY likedDate")
+    @Query("SELECT * FROM song WHERE liked AND source != 'YOUTUBE' ORDER BY likedDate")
     fun likedSongsByCreateDateAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE liked ORDER BY title")
+    @Query("SELECT * FROM song WHERE liked AND source != 'YOUTUBE' ORDER BY title")
     fun likedSongsByNameAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE liked ORDER BY totalPlayTime")
+    @Query("SELECT * FROM song WHERE liked AND source != 'YOUTUBE' ORDER BY totalPlayTime")
     fun likedSongsByPlayTimeAsc(): Flow<List<Song>>
 
     fun likedSongs(
@@ -312,7 +314,7 @@ interface DatabaseDao {
 
     @Transaction
     @Query(
-        "SELECT song.* FROM song_artist_map JOIN song ON song_artist_map.songId = song.id WHERE artistId = :artistId AND inLibrary IS NOT NULL LIMIT :previewSize",
+        "SELECT song.* FROM song_artist_map JOIN song ON song_artist_map.songId = song.id WHERE artistId = :artistId AND inLibrary IS NOT NULL AND source != 'YOUTUBE' LIMIT :previewSize",
     )
     fun artistSongsPreview(
         artistId: String,
@@ -896,27 +898,27 @@ interface DatabaseDao {
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL) ORDER BY rowId")
+    @Query("SELECT * FROM album WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL AND song.source != 'YOUTUBE') ORDER BY rowId")
     fun albumsByCreateDateAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL) ORDER BY title")
+    @Query("SELECT * FROM album WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL AND song.source != 'YOUTUBE') ORDER BY title")
     fun albumsByNameAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL) ORDER BY year")
+    @Query("SELECT * FROM album WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL AND song.source != 'YOUTUBE') ORDER BY year")
     fun albumsByYearAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL) ORDER BY songCount")
+    @Query("SELECT * FROM album WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL AND song.source != 'YOUTUBE') ORDER BY songCount")
     fun albumsBySongCountAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL) ORDER BY duration")
+    @Query("SELECT * FROM album WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL AND song.source != 'YOUTUBE') ORDER BY duration")
     fun albumsByLengthAsc(): Flow<List<Album>>
 
     @Transaction
@@ -927,7 +929,7 @@ interface DatabaseDao {
         FROM album
                  JOIN song
                       ON song.albumId = album.id
-        WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL)
+        WHERE EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL AND song.source != 'YOUTUBE')
         GROUP BY album.id
         ORDER BY SUM(song.totalPlayTime)
     """,
@@ -936,27 +938,27 @@ interface DatabaseDao {
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL ORDER BY rowId")
+    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL AND EXISTS(SELECT 1 FROM song WHERE song.albumId = album.id AND song.source != 'YOUTUBE') ORDER BY rowId")
     fun albumsLikedByCreateDateAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL ORDER BY title")
+    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL AND EXISTS(SELECT 1 FROM song WHERE song.albumId = album.id AND song.source != 'YOUTUBE') ORDER BY title")
     fun albumsLikedByNameAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL ORDER BY year")
+    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL AND EXISTS(SELECT 1 FROM song WHERE song.albumId = album.id AND song.source != 'YOUTUBE') ORDER BY year")
     fun albumsLikedByYearAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL ORDER BY songCount")
+    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL AND EXISTS(SELECT 1 FROM song WHERE song.albumId = album.id AND song.source != 'YOUTUBE') ORDER BY songCount")
     fun albumsLikedBySongCountAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL ORDER BY duration")
+    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL AND EXISTS(SELECT 1 FROM song WHERE song.albumId = album.id AND song.source != 'YOUTUBE') ORDER BY duration")
     fun albumsLikedByLengthAsc(): Flow<List<Album>>
 
     @Transaction
@@ -981,22 +983,22 @@ interface DatabaseDao {
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL ORDER BY title")
+    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL AND EXISTS(SELECT 1 FROM song WHERE song.albumId = album.id AND song.source != 'YOUTUBE') ORDER BY title")
     fun albumsUploadedByNameAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL ORDER BY year")
+    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL AND EXISTS(SELECT 1 FROM song WHERE song.albumId = album.id AND song.source != 'YOUTUBE') ORDER BY year")
     fun albumsUploadedByYearAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL ORDER BY songCount")
+    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL AND EXISTS(SELECT 1 FROM song WHERE song.albumId = album.id AND song.source != 'YOUTUBE') ORDER BY songCount")
     fun albumsUploadedBySongCountAsc(): Flow<List<Album>>
 
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
-    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL ORDER BY duration")
+    @Query("SELECT * FROM album WHERE bookmarkedAt IS NOT NULL AND EXISTS(SELECT 1 FROM song WHERE song.albumId = album.id AND song.source != 'YOUTUBE') ORDER BY duration")
     fun albumsUploadedByLengthAsc(): Flow<List<Album>>
 
     @Transaction
@@ -1188,25 +1190,25 @@ interface DatabaseDao {
     fun songsForGenres(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE bookmarkedAt IS NOT NULL ORDER BY rowId")
+    @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE bookmarkedAt IS NOT NULL AND browseId IS NULL ORDER BY rowId")
     fun playlistsByCreateDateAsc(): Flow<List<Playlist>>
 
     @Transaction
     @Query(
-        "SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE bookmarkedAt IS NOT NULL ORDER BY lastUpdateTime",
+        "SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE bookmarkedAt IS NOT NULL AND browseId IS NULL ORDER BY lastUpdateTime",
     )
     fun playlistsByUpdatedDateAsc(): Flow<List<Playlist>>
 
     @Transaction
-    @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE bookmarkedAt IS NOT NULL ORDER BY name")
+    @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE bookmarkedAt IS NOT NULL AND browseId IS NULL ORDER BY name")
     fun playlistsByNameAsc(): Flow<List<Playlist>>
 
     @Transaction
-    @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE isEditable AND bookmarkedAt IS NOT NULL ORDER BY name")
+    @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE isEditable AND bookmarkedAt IS NOT NULL AND browseId IS NULL ORDER BY name")
     fun editablePlaylistsByNameAsc(): Flow<List<Playlist>>
 
     @Transaction
-    @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE bookmarkedAt IS NOT NULL ORDER BY songCount")
+    @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE bookmarkedAt IS NOT NULL AND browseId IS NULL ORDER BY songCount")
     fun playlistsBySongCountAsc(): Flow<List<Playlist>>
 
     fun playlists(
@@ -1249,7 +1251,7 @@ interface DatabaseDao {
     fun replacePlaylistCover(playlistId: String, expected: String?, thumbnailUrl: String): Int
 
     @Transaction
-    @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE isEditable AND bookmarkedAt IS NOT NULL ORDER BY rowId")
+    @Query("SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE isEditable AND bookmarkedAt IS NOT NULL AND browseId IS NULL ORDER BY rowId")
     fun editablePlaylistsByCreateDateAsc(): Flow<List<Playlist>>
 
     @Transaction
@@ -1326,34 +1328,34 @@ interface DatabaseDao {
     }.map { it.reversed(descending) }
 
     @Transaction
-    @Query("SELECT * FROM song WHERE isDownloaded = 1 ORDER BY dateDownload")
+    @Query("SELECT * FROM song WHERE isDownloaded = 1 AND source != 'YOUTUBE' ORDER BY dateDownload")
     fun downloadedSongsByCreateDateAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE isDownloaded = 1 ORDER BY title")
+    @Query("SELECT * FROM song WHERE isDownloaded = 1 AND source != 'YOUTUBE' ORDER BY title")
     fun downloadedSongsByNameAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE isDownloaded = 1 ORDER BY totalPlayTime")
+    @Query("SELECT * FROM song WHERE isDownloaded = 1 AND source != 'YOUTUBE' ORDER BY totalPlayTime")
     fun downloadedSongsByPlayTimeAsc(): Flow<List<Song>>
 
     @Query("UPDATE song SET isDownloaded = :downloaded, dateDownload = :date WHERE id = :songId")
     fun updateDownloadedInfo(songId: String, downloaded: Boolean, date: LocalDateTime?)
 
     @Transaction
-    @Query("SELECT * FROM song WHERE isUploaded = 1 ORDER BY dateDownload")
+    @Query("SELECT * FROM song WHERE isUploaded = 1 AND source != 'YOUTUBE' ORDER BY dateDownload")
     fun uploadedSongsByCreateDateAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE isUploaded = 1 ORDER BY title")
+    @Query("SELECT * FROM song WHERE isUploaded = 1 AND source != 'YOUTUBE' ORDER BY title")
     fun uploadedSongsByNameAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE isUploaded = 1 ORDER BY totalPlayTime")
+    @Query("SELECT * FROM song WHERE isUploaded = 1 AND source != 'YOUTUBE' ORDER BY totalPlayTime")
     fun uploadedSongsByPlayTimeAsc(): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE isUploaded = 1 ORDER BY rowId")
+    @Query("SELECT * FROM song WHERE isUploaded = 1 AND source != 'YOUTUBE' ORDER BY rowId")
     fun uploadedSongsByRowIdAsc(): Flow<List<Song>>
 
     fun uploadedSongs(
@@ -1391,7 +1393,7 @@ interface DatabaseDao {
     }.map { it.reversed(descending) }
 
     @Transaction
-    @Query("SELECT * FROM song WHERE title LIKE '%' || :query || '%' AND inLibrary IS NOT NULL LIMIT :previewSize")
+    @Query("SELECT * FROM song WHERE title LIKE '%' || :query || '%' AND inLibrary IS NOT NULL AND source != 'YOUTUBE' LIMIT :previewSize")
     fun searchSongs(
         query: String,
         previewSize: Int = Int.MAX_VALUE,
@@ -1400,7 +1402,7 @@ interface DatabaseDao {
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
     @Query(
-        "SELECT *, (SELECT COUNT(1) FROM song_artist_map JOIN song ON song_artist_map.songId = song.id WHERE artistId = artist.id AND song.inLibrary IS NOT NULL) AS songCount FROM artist WHERE name LIKE '%' || :query || '%' AND songCount > 0 LIMIT :previewSize",
+        "SELECT *, (SELECT COUNT(1) FROM song_artist_map JOIN song ON song_artist_map.songId = song.id WHERE artistId = artist.id AND song.inLibrary IS NOT NULL AND song.source != 'YOUTUBE') AS songCount FROM artist WHERE name LIKE '%' || :query || '%' AND songCount > 0 LIMIT :previewSize",
     )
     fun searchArtists(
         query: String,
@@ -1410,7 +1412,7 @@ interface DatabaseDao {
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
     @Query(
-        "SELECT * FROM album WHERE title LIKE '%' || :query || '%' AND EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL) LIMIT :previewSize",
+        "SELECT * FROM album WHERE title LIKE '%' || :query || '%' AND EXISTS(SELECT * FROM song WHERE song.albumId = album.id AND song.inLibrary IS NOT NULL AND song.source != 'YOUTUBE') LIMIT :previewSize",
     )
     fun searchAlbums(
         query: String,
@@ -1419,7 +1421,7 @@ interface DatabaseDao {
 
     @Transaction
     @Query(
-        "SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE name LIKE '%' || :query || '%' LIMIT :previewSize",
+        "SELECT *, (SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = playlist.id) AS songCount FROM playlist WHERE browseId IS NULL AND name LIKE '%' || :query || '%' LIMIT :previewSize",
     )
     fun searchPlaylists(
         query: String,

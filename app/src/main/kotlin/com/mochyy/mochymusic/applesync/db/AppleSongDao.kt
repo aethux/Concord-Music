@@ -21,6 +21,14 @@ interface AppleSongDao {
     @Query("UPDATE song SET thumbnailUrl = :url WHERE id = :songId AND (thumbnailUrl LIKE '%blobstore%' OR thumbnailUrl LIKE '%X-Amz%')")
     suspend fun setSongThumbnailWhenExpired(songId: String, url: String)
 
+    /**
+     * The rows whose artwork came from a signed Apple URL — an upload's cover is on the blobstore and
+     * its signature lives a day, so each read has to hand over a fresh one. Read up front, like the
+     * other sets in this dao, so a refresh touches only the rows that can go stale.
+     */
+    @Query("SELECT id FROM song WHERE id LIKE 'AM_%' AND (thumbnailUrl LIKE '%blobstore%' OR thumbnailUrl LIKE '%X-Amz%')")
+    suspend fun appleSongsWithSignedArtwork(): List<String>
+
     // the ids this fork imports, so a repeat import skips what it already added without one query per song
     @Query("SELECT id FROM song WHERE id GLOB 'AM_*'")
     suspend fun appleSongIds(): List<String>

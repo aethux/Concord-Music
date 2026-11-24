@@ -332,7 +332,10 @@ fun SetupWizardScreen(
                                     isLeavingWelcome = true
                                     scope.launch {
                                         delay(400)
-                                        go(Step.ImportAsk)
+                                        // Concord: the wizard signs in to Apple Music first. The import
+                                        // pages stay in the tree but no longer open the flow.
+                                        vm.startProvider(AccountService.APPLE_MUSIC)
+                                        go(Step.ProviderSetup)
                                         isLeavingWelcome = false
                                     }
                                 }

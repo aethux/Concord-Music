@@ -2,6 +2,9 @@
 
 package com.mochyy.mochymusic.ui.screens.setup.onboarding
 
+import com.mochyy.mochymusic.ui.component.AppSwitch
+import com.mochyy.mochymusic.ui.screens.audiolab.ProviderOrder
+import com.mochyy.mochymusic.ui.screens.audiolab.providerLogo
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.mochyy.mochymusic.ui.component.rememberDeviceTilt
@@ -278,6 +281,52 @@ internal fun ProviderSetupPage(
                 lineHeight = 20.sp,
             )
         }
+    }
+}
+
+// ---- 4b. Monochrome and the source order ----
+
+/**
+ * Concord: the wizard's last question, after the library is in. Mochy's own switch for Monochrome
+ * (lossless FLAC) and Mochy's own provider list for the order a song is looked for in.
+ */
+@Composable
+internal fun SourcesPage(
+    monochromeOn: Boolean,
+    order: List<String>,
+    nameOf: (String) -> String,
+    onToggleMonochrome: (Boolean) -> Unit,
+    onReorder: (List<String>) -> Unit,
+    onContinue: () -> Unit,
+    onBack: () -> Unit,
+) {
+    OnboardingPage(
+        badge = { PageBadge(painterResource(R.drawable.library_music)) },
+        title = stringResource(R.string.onb_sources_title),
+        subtitle = stringResource(R.string.onb_sources_subtitle),
+        footer = {
+            OnbButton(stringResource(R.string.onb_continue), onClick = onContinue)
+            OnbButton(stringResource(R.string.onb_go_back), onClick = onBack, style = OnbButtonStyle.Secondary)
+        },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.onb_sources_monochrome), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.onb_sources_monochrome_desc), color = Onb.Muted, fontSize = 13.sp)
+            }
+            AppSwitch(checked = monochromeOn, onCheckedChange = onToggleMonochrome)
+        }
+        Spacer(Modifier.height(14.dp))
+        ProviderOrder(
+            order = order,
+            name = nameOf,
+            logo = ::providerLogo,
+            usable = { true },
+            onReorder = onReorder,
+        )
     }
 }
 

@@ -87,7 +87,7 @@ import com.mochyy.mochymusic.ui.component.backdropClick
 
 private enum class Step {
     Welcome, ImportAsk, ImportMode, Restoring, Providers, ProviderSetup, WhatToSync, SyncOptions,
-    Profile, Hello, BlurWarning, LastOne, Done,
+    Sources, Profile, Hello, BlurWarning, LastOne, Done,
 }
 
 /** pages that play once and move on by themselves, back never returns to them */
@@ -249,7 +249,8 @@ fun SetupWizardScreen(
         val parsed = readyImport ?: return@LaunchedEffect
         vm.startImport(parsed)
         session?.consumeReady()
-        go(Step.Profile)
+        // Concord: one question about Monochrome and the source order before the profile
+        go(Step.Sources)
     }
 
     // the account's own name and picture start the profile, once
@@ -362,6 +363,23 @@ fun SetupWizardScreen(
                         )
 
                         Step.Restoring -> RestoringPage(step = importStep, manifest = transferManifest)
+
+                        Step.Sources -> {
+                            var monochromeOn by remember { mutableStateOf(vm.monochromeOn()) }
+                            val order by vm.sourceOrder.collectAsState()
+                            com.mochyy.mochymusic.ui.screens.setup.onboarding.SourcesPage(
+                                monochromeOn = monochromeOn,
+                                order = order,
+                                nameOf = vm::sourceName,
+                                onToggleMonochrome = { on ->
+                                    monochromeOn = on
+                                    vm.setMonochrome(on)
+                                },
+                                onReorder = vm::setSourceOrder,
+                                onContinue = { go(Step.Profile) },
+                                onBack = ::back,
+                            )
+                        }
 
                         Step.Providers -> ProviderListPage(
                             onPick = { service ->

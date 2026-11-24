@@ -103,6 +103,12 @@ class AppleImport(
             ?: HashSet()
         val withoutArtwork = runCatching { database.appleSongDao.appleSongsWithoutArtwork().toSet() }
             .getOrDefault(emptySet())
+        // an upload's cover is a signed blobstore URL that lives a day: the read that just happened
+        // is what hands over the next one, the way Cider's artwork store takes it from the same
+        // payload. Without this the URL written at import is never asked for again and dies
+        // silently, leaving the row a blank square.
+        val signedArtwork = runCatching { database.appleSongDao.appleSongsWithSignedArtwork().toSet() }
+            .getOrDefault(emptySet())
         // rows that came in with a playlist and are not in the library yet: if Apple's library has
         // them now, this import is where they get their place in it
         val outsideLibrary = runCatching { database.appleSongDao.appleSongsOutsideTheLibrary().toSet() }
@@ -165,6 +171,24 @@ class AppleImport(
             cachedCovers += songId
         }
 
+        /**
+         * The row's picture, from the read that just happened: a missing one is filled, and one that
+         * came from a signed Apple URL is replaced by this read's. Both are the same answer to the
+         * same question — a cover must come from the newest library payload — and both leave a
+         * permanent `is1-ssl.mzstatic.com` template exactly as it is.
+         */
+        suspend fun noteArtwork(songId: String, song: RemoteSong) {
+            if (songId !in withoutArtwork && songId !in signedArtwork) return
+            val url = artwork(song.artworkUrl) ?: return
+            runCatching {
+                if (songId in withoutArtwork) {
+                    database.appleSongDao.setSongThumbnailIfMissing(songId, url)
+                } else {
+                    database.appleSongDao.setSongThumbnailWhenExpired(songId, url)
+                }
+            }
+        }
+
         songs.forEachIndexed { index, song ->
             // Concord: an upload has no catalogue id. The pull already keyed it on its library id,
             // and this is the only place an Apple row is created, so the same key is used here or
@@ -189,11 +213,7 @@ class AppleImport(
             // catalogue id and nothing new is inserted
             manual[catalogId]?.let { mapped ->
                 noteTrack(mapped.songId, catalogId, song, AppleTrackEntity.STATE_MANUAL)
-                if (mapped.songId in withoutArtwork) {
-                    runCatching {
-                        artwork(song.artworkUrl)?.let { database.appleSongDao.setSongThumbnailIfMissing(mapped.songId, it) }
-                    }
-                }
+                noteArtwork(mapped.songId, song)
                 // it came back from Apple: the chosen recording goes back into the library
                 runCatching {
                     val row = database.getSongById(mapped.songId)?.song
@@ -221,13 +241,9 @@ class AppleImport(
                 // its red dot forever, which is exactly backwards
                 noteTrack(songId, catalogId, song, AppleTrackEntity.STATE_AUTO)
                 skipped++
-                // an import from before the covers existed still gets its artwork, without the row
-                // being touched in any other way
-                if (songId in withoutArtwork) {
-                    runCatching {
-                        artwork(song.artworkUrl)?.let { database.appleSongDao.setSongThumbnailIfMissing(songId, it) }
-                    }
-                }
+                // an import from before the covers existed still gets its artwork, and an upload's
+                // signed one is renewed instead of being left to expire
+                noteArtwork(songId, song)
                 applyFavourite(songId, favourite, songId in likedNow)
                 return@forEachIndexed
             }

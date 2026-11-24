@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the Concord mark as a themed icon layer, from concord-white-transparent-bg.svg; android reads only its alpha -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1080"
+    android:viewportHeight="1080">
+    <path
+        android:pathData="M513.462 567.74C519.18 598.953 557.048 659.002 635 663.5L637 664.154M637 664.154L710.137 621.929C771.782 586.337 771.782 497.362 710.137 461.772L504.863 343.256C443.219 307.666 366.164 352.154 366.164 423.334V660.365C366.164 731.545 443.219 776.032 504.863 740.444L637 664.154Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="40.6849"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M464.178 519.658L506.712 467.877L549.246 519.658"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="40.6849"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

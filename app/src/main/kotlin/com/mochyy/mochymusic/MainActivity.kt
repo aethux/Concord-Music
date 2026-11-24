@@ -430,6 +430,12 @@ class MainActivity : ComponentActivity() {
         if (introRequested) LaunchGate.begin() else LaunchGate.skip()
         // kept in step with the icon in use, in case it was switched some way other than customisation
         com.mochyy.mochymusic.utils.AppIcons.syncSplash(this)
+        // an icon switched while the app was running left its old alias on, since disabling it would have finished
+        // that task; this one isn't running under it any more, so it can go now
+        val launchedFrom = com.mochyy.mochymusic.utils.AppIcons.launchedFrom(intent)
+        lifecycleScope.launch(Dispatchers.IO) {
+            com.mochyy.mochymusic.utils.AppIcons.prune(this@MainActivity, launchedFrom)
+        }
         // the first start after an import says so once the intro is out of the way
         com.mochyy.mochymusic.importer.transfer.TransferRestore.takeRestoredNote(this)?.let { note ->
             lifecycleScope.launch {

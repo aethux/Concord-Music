@@ -45,8 +45,9 @@ class AppleClient(
             maxPages = maxPages,
             parse = AppleLibrary::playlists,
             onPage = onPage,
-            // the next page is a bare offset: without this every page after the first has no owner
-            keep = "&include=catalog",
+            // the next page is a bare offset: without these every page after the first has no owner
+            // and answers 25 rows instead of 100
+            keep = "include=catalog&limit=100",
         )
 
     /**
@@ -74,6 +75,7 @@ class AppleClient(
             first = "/v1/catalog/$storefront/playlists/$catalogId/tracks?limit=100",
             maxPages = maxPages,
             parse = { page -> AppleLibrary.catalogTracks(page) },
+            keep = "limit=100",
         )
 
     /**
@@ -128,9 +130,9 @@ class AppleClient(
         maxPages = maxPages,
         parse = AppleLibrary::songs,
         onPage = onPage,
-        // Apple's next page is an offset URL without the include: without this only the first
-        // hundred songs come back with their album
-        keep = "&include=albums",
+        // Apple's next page is an offset URL without the include: without these only the first
+        // hundred songs come back with their album, and every page after it answers 25 rows
+        keep = "include=albums&limit=100",
     )
 
     /**
@@ -545,7 +547,7 @@ class AppleClient(
 
     /** One linked playlist's entries, in order, with each entry's library id. */
     suspend fun playlistTracks(playlistId: String, maxPages: Int = 400): List<RemoteSong> =
-        all("/v1/me/library/playlists/$playlistId/tracks?limit=100", maxPages, AppleLibrary::songs)
+        all("/v1/me/library/playlists/$playlistId/tracks?limit=100", maxPages, AppleLibrary::songs, keep = "limit=100")
 
     private suspend fun <T> all(
         first: String,
@@ -553,17 +555,19 @@ class AppleClient(
         parse: (JsonObject) -> List<T>,
         onPage: (Int) -> Unit = {},
         /**
-         * A query parameter the first page asked for and every page after it must keep. Apple's
-         * `next` is a bare offset URL: without this, page two of the library read comes back with
-         * no `relationships`, and 1,300 songs arrive with no album.
+         * Query parameters the first page asked for and every page after it must keep.
+         *
+         * Apple's `next` is a bare offset URL, and it drops everything else. Without `include`
+         * page two of the library read comes back with no `relationships`, so 1,300 songs arrive
+         * with no album — and without `limit` it answers 25 rows where the first page answered 100,
+         * which is why a 1,489-song library cost ~60 requests instead of 15.
          */
         keep: String = "",
     ): List<T> {
         val out = mutableListOf<T>()
         var url = first
         var pages = 0
-        val kept = keep.removePrefix("&").removePrefix("?").substringBefore("&")
-        val key = kept.substringBefore('=')
+        val kept = keep.split('&')
         while (pages++ < maxPages) {
             val page = page(url) ?: break
             out += parse(page)
@@ -571,7 +575,7 @@ class AppleClient(
             // counter stuck on zero for half a minute
             onPage(out.size)
             val next = AppleLibrary.nextPage(page) ?: break
-            url = Host + next + if (key.isNotEmpty() && "?$key=" !in next && "&$key=" !in next) keep else ""
+            url = Host + withKeptParams(next, kept)
         }
         return out
     }
@@ -599,4 +603,21 @@ class AppleClient(
         val artistCache = java.util.concurrent.ConcurrentHashMap<String, Pair<AppleArtist, Long>>()
         const val ArtistCacheMs = 1000L * 60 * 10
     }
+}
+
+/**
+ * Apple's `next` is a bare offset URL: it carries `offset` and nothing else the first request asked
+ * for. Re-attach only the parameters it is missing, so a page keeps `limit` (100 rows, not 25) and
+ * `include` (the album on every song) without duplicating what `next` already has.
+ */
+internal fun withKeptParams(next: String, kept: List<String>): String {
+    val missing = kept
+        .map { it.trim().removePrefix("?").removePrefix("&") }
+        .filter { '=' in it }
+        .filter { pair ->
+            val key = pair.substringBefore('=')
+            "?$key=" !in next && "&$key=" !in next
+        }
+    if (missing.isEmpty()) return next
+    return next + (if ('?' in next) "&" else "?") + missing.joinToString("&")
 }

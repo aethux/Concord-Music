@@ -22,10 +22,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,10 +37,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
@@ -61,9 +56,8 @@ import com.mochyy.mochymusic.ui.screens.settings.importsync.YouTubeLoginWebConte
 import com.mochyy.mochymusic.ui.screens.settings.importsync.clearWebSession
 import com.mochyy.mochymusic.ui.screens.settings.importsync.onSignInTick
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.BehindScale
-import com.mochyy.mochymusic.ui.screens.setup.onboarding.BrowserSheetBar
-import com.mochyy.mochymusic.ui.screens.setup.onboarding.ProviderSquircle
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.BrowserSpring
+import com.mochyy.mochymusic.ui.screens.setup.onboarding.ImportSignInWeb
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.LinkImportPage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.Onb
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.OnboardingBrowserSheet
@@ -89,9 +83,6 @@ private enum class ImportStep { Providers, ProviderSetup, WhatToSync, SyncOption
  * gap below it.
  */
 private val SheetHandleRow = 32.dp
-
-/** the import browser's own grey, so the sign-in sheet matches the module sign-in's */
-private val BrowserSurface = Color(0xFF1C1C1C)
 
 /**
  * Opens the import sheet over whatever is showing: the onboarding's import pages, in one sheet.
@@ -354,35 +345,17 @@ private fun LibraryImportFlow(startWith: AccountService? = null, onClose: () -> 
 
         if (browserShown && session != null) {
             if (startWith != null) {
-                // Concord: opened straight onto sign-in, so this is the Apple Music module sign-in's
-                // shape — one bar over the web view, no second handle, no page behind it
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = browserPresence.value }
-                        .background(BrowserSurface)
-                        .padding(top = SheetHandleRow),
-                ) {
-                    BrowserSheetBar(
-                        icon = { ProviderSquircle(session.service, size = 38.dp) },
-                        title = stringResource(R.string.onb_sign_in_to, session.service.label),
-                        url = browserUrl,
-                        onClose = ::finish,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    CaptureWebContent(
-                        startUrl = session.service.loginUrl.orEmpty(),
-                        playerOrigins = session.service.playerOrigins,
-                        desktopSite = session.service.desktopSite,
-                        onHeader = session::onHeader,
-                        onTick = { view -> session.service.onSignInTick(view, session::onApplePageProbe, session::onCookies) },
-                        onExit = ::finish,
-                        onUrlChange = { browserUrl = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height((LocalConfiguration.current.screenHeightDp * 0.78f).dp),
-                    )
-                }
+                // Concord: opened straight onto sign-in, so this is the module sign-in's shape —
+                // one bar over the page, no second handle, nothing behind it
+                ImportSignInWeb(
+                    service = session.service,
+                    session = session,
+                    presence = browserPresence.value,
+                    url = browserUrl,
+                    onUrlChange = { browserUrl = it },
+                    onClose = ::finish,
+                    topInset = SheetHandleRow,
+                )
             } else {
             // dims the page behind, and a tap on that strip closes the browser
             Box(

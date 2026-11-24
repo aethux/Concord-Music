@@ -67,6 +67,7 @@ import com.mochyy.mochymusic.ui.screens.setup.onboarding.ImportAskPage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.ImportModePage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.LastOnePage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.Onb
+import com.mochyy.mochymusic.ui.screens.setup.onboarding.ImportSignInWeb
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.OnboardingBrowserSheet
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.ProfilePage
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.ProviderListPage
@@ -201,6 +202,8 @@ fun SetupWizardScreen(
     val browserPresence = remember { Animatable(0f) }
     var browserShown by remember { mutableStateOf(false) }
     var browserWanted by remember { mutableStateOf(false) }
+    // Concord: the bar's address line, for the sign-in drawn in the module sign-in's shape
+    var browserUrl by remember { mutableStateOf("https://") }
 
     fun openBrowser() {
         if (session == null || browserWanted) return
@@ -229,9 +232,11 @@ fun SetupWizardScreen(
         }
     }
 
-    // the provider page opens its browser after a beat, once the user has read what's about to happen
+    // the provider page opens its browser after a beat, once the user has read what's about to happen;
+    // Apple's sign-in waits for its own button, the way the import sheet's does
     LaunchedEffect(step, session) {
         if (step != Step.ProviderSetup || session == null) return@LaunchedEffect
+        if (session.service == AccountService.APPLE_MUSIC) return@LaunchedEffect
         delay(900)
         val state = session.state.value
         if (state is AccountImportState.SigningIn || state is AccountImportState.NeedsYouTubeSignIn) openBrowser()
@@ -491,48 +496,63 @@ fun SetupWizardScreen(
             }
 
             if (browserShown && session != null) {
-                // dims the page behind, and a tap on that strip closes the browser
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = browserPresence.value }
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .backdropClick(::closeBrowser),
-                )
-                OnboardingBrowserSheet(
-                    service = session.service,
-                    presence = browserPresence,
-                    onClose = ::closeBrowser,
-                ) { onUrlChange, onLoadingChange, modifier ->
-                    if (session.service == AccountService.YOUTUBE_MUSIC) {
-                        YouTubeLoginWebContent(
-                            onSignedIn = {
-                                closeBrowser()
-                                session.refreshYouTube()
-                            },
-                            onExit = ::closeBrowser,
-                            onUrlChange = onUrlChange,
-                            onLoadingChange = onLoadingChange,
-                            modifier = modifier,
-                        )
-                    } else {
-                        CaptureWebContent(
-                            startUrl = session.service.loginUrl.orEmpty(),
-                            playerOrigins = session.service.playerOrigins,
-                            desktopSite = session.service.desktopSite,
-                            onHeader = session::onHeader,
-                            onTick = { view -> session.service.onSignInTick(view, session::onApplePageProbe, session::onCookies) },
-                            onExit = ::closeBrowser,
-                            onUrlChange = onUrlChange,
-                            onLoadingChange = onLoadingChange,
-                            modifier = modifier,
-                        )
+                // Concord: Apple's sign-in is the module sign-in's shape — one bar over the page, no
+                // handle of its own, nothing of the wizard behind it. Mochy's own provider flow keeps
+                // its browser for the services it still signs into.
+                if (session.service == AccountService.APPLE_MUSIC) {
+                    ImportSignInWeb(
+                        service = session.service,
+                        session = session,
+                        presence = browserPresence.value,
+                        url = browserUrl,
+                        onUrlChange = { browserUrl = it },
+                        onClose = ::closeBrowser,
+                    )
+                } else {
+                    // dims the page behind, and a tap on that strip closes the browser
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = browserPresence.value }
+                            .background(Color.Black.copy(alpha = 0.45f))
+                            .backdropClick(::closeBrowser),
+                    )
+                    OnboardingBrowserSheet(
+                        service = session.service,
+                        presence = browserPresence,
+                        onClose = ::closeBrowser,
+                    ) { onUrlChange, onLoadingChange, modifier ->
+                        if (session.service == AccountService.YOUTUBE_MUSIC) {
+                            YouTubeLoginWebContent(
+                                onSignedIn = {
+                                    closeBrowser()
+                                    session.refreshYouTube()
+                                },
+                                onExit = ::closeBrowser,
+                                onUrlChange = onUrlChange,
+                                onLoadingChange = onLoadingChange,
+                                modifier = modifier,
+                            )
+                        } else {
+                            CaptureWebContent(
+                                startUrl = session.service.loginUrl.orEmpty(),
+                                playerOrigins = session.service.playerOrigins,
+                                desktopSite = session.service.desktopSite,
+                                onHeader = session::onHeader,
+                                onTick = { view -> session.service.onSignInTick(view, session::onApplePageProbe, session::onCookies) },
+                                onExit = ::closeBrowser,
+                                onUrlChange = onUrlChange,
+                                onLoadingChange = onLoadingChange,
+                                modifier = modifier,
+                            )
+                        }
                     }
                 }
             }
 
-            // the onboarding sheet's own handle; dragging it rubber-bands the whole sheet
-            Box(
+            // the onboarding sheet's own handle; dragging it rubber-bands the whole sheet. Not while
+            // Apple's sign-in is up: that is its own surface, with its own bar and nothing above it
+            if (!(browserShown && session?.service == AccountService.APPLE_MUSIC)) Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(40.dp)

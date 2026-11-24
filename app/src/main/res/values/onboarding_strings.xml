@@ -5,10 +5,12 @@
     <string name="onb_next_lower">next</string>
     <string name="onb_done">Done</string>
     <string name="onb_close">Close</string>
-    <string name="onb_sources_title">Your sources</string>
-    <string name="onb_sources_subtitle">Concord looks for a song in this order. Monochrome plays it lossless when your own files have it.</string>
-    <string name="onb_sources_monochrome">Monochrome</string>
-    <string name="onb_sources_monochrome_desc">Lossless playback from a folder you add</string>
+    <string name="onb_sources_title">Module and Sources</string>
+    <string name="onb_sources_subtitle">Select the song sources and playback preference</string>
+    <string name="onb_sources_monochrome">Enable Monochrome</string>
+    <string name="onb_sources_monochrome_desc">Lossless playback through monochrome</string>
+    <string name="onb_sources_playback_preference">Playback preference</string>
+    <string name="onb_sources_reorder_hint">Long press to reorder</string>
     <string name="onb_go_back">hell nah, go back</string>
     <string name="onb_yes">Yes!</string>
     <string name="onb_skip">Skip</string>

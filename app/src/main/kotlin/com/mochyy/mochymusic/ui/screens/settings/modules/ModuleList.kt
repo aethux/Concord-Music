@@ -63,6 +63,7 @@ import com.mochyy.mochymusic.ui.component.SwipeRemoveColor
 import com.mochyy.mochymusic.ui.screens.audiolab.LabColors
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import kotlin.math.roundToInt
+import com.mochyy.mochymusic.ui.component.ReorderCards
 
 private val RowGap = 12.dp
 private val HandleWidth = 44.dp
@@ -80,137 +81,31 @@ internal fun ModuleList(
     sorting: Boolean = false,
     onStartSorting: () -> Unit = {},
 ) {
-    val haptic = LocalHapticFeedback.current
-    val density = LocalDensity.current
-    // rows sit on fixed slots so they can slide; a big system font makes the slots taller
-    val rowHeight = 104.dp + 28.dp * (density.fontScale - 1f).coerceAtLeast(0f)
-    val slotPx = with(density) { (rowHeight + RowGap).toPx() }
     val byId = entries.associateBy { it.id }
-    var order by remember { mutableStateOf(entries.map { it.id }) }
-    var dragging by remember { mutableStateOf<String?>(null) }
-    // a saved order or a new module coming in mustn't yank the list while a row is held
-    LaunchedEffect(entries.map { it.id }) { if (dragging == null) order = entries.map { it.id } }
-    var dragOffset by remember { mutableFloatStateOf(0f) }
-    val currentOrder by rememberUpdatedState(order)
-    val currentOnReorder by rememberUpdatedState(onReorder)
-    val currentOnStartSorting by rememberUpdatedState(onStartSorting)
-    // read in layout and draw only, so the lines sliding in don't recompose every row each frame
-    val reveal = animateFloatAsState(if (sorting) 1f else 0f, spring(dampingRatio = 1f, stiffness = 500f), label = "handles")
-    val handlesShown by remember { derivedStateOf { reveal.value > 0f } }
-    val shown = order.filter { it in byId }
-
-    Box(Modifier.fillMaxWidth().height(rowHeight * shown.size + RowGap * (shown.size - 1).coerceAtLeast(0))) {
-        shown.forEachIndexed { index, id ->
-            val entry = byId.getValue(id)
-            key(id) {
-                val isDragged = dragging == id
-                // one position per row: follows the finger while held, springs to its slot after
-                val y = remember { Animatable(index * slotPx) }
-                val held = remember { floatArrayOf(index * slotPx) }
-                LaunchedEffect(isDragged, index) {
-                    if (!isDragged) {
-                        y.snapTo(held[0])
-                        y.animateTo(index * slotPx, spring(dampingRatio = 0.8f, stiffness = 500f))
-                    }
-                }
-                val lift by animateFloatAsState(if (isDragged) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 600f), label = "lift")
-                // the same pick-up, move and drop whether the card was held or its lines were grabbed
-                fun startDrag() {
-                    dragging = id
-                    dragOffset = 0f
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                }
-                fun dragBy(amount: Float) {
-                    dragOffset += amount
-                    val list = currentOrder
-                    val from = list.indexOf(id)
-                    val to = (from + (dragOffset / slotPx).roundToInt()).coerceIn(0, list.size - 1)
-                    if (to != from) {
-                        order = list.toMutableList().apply { add(to, removeAt(from)) }
-                        dragOffset -= (to - from) * slotPx
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    }
-                }
-                fun endDrag() {
-                    dragging = null
-                    dragOffset = 0f
-                    currentOnReorder(currentOrder)
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .zIndex(if (isDragged) 1f else 0f)
-                        .offset {
-                            if (isDragged) held[0] = index * slotPx + dragOffset
-                            IntOffset(0, (if (isDragged) held[0] else y.value).roundToInt())
-                        }
-                        .graphicsLayer {
-                            scaleX = 1f + 0.025f * lift
-                            scaleY = 1f + 0.025f * lift
-                        }
-                        .fillMaxWidth()
-                        .height(rowHeight),
-                ) {
-                    val removeLabel = stringResource(R.string.module_remove_short)
-                    SwipeActionsBox(
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                        end = if (entry.removable) {
-                            { SwipeAction(R.drawable.delete, SwipeRemoveColor, removeLabel) { onRemove(entry) } }
-                        } else null,
-                        enabled = !isDragged,
-                        slab = false,
-                    ) {
-                        ModuleCard(
-                            entry, lifted = isDragged, updating = updating == id, onUpdate = { onUpdate(entry) }, onClick = { onOpen(entry) },
-                            hold = Modifier.pointerInput(id) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = {
-                                        currentOnStartSorting()
-                                        startDrag()
-                                    },
-                                    onDrag = { change, amount ->
-                                        change.consume()
-                                        dragBy(amount.y)
-                                    },
-                                    onDragEnd = { endDrag() },
-                                    onDragCancel = { endDrag() },
-                                )
-                            },
-                        )
-                    }
-                    if (handlesShown) {
-                        DragHandle(
-                            Modifier
-                                .revealWidth(HandleWidth) { reveal.value }
-                                .fillMaxHeight()
-                                .pointerInput(Unit) { detectTapGestures {} }
-                                .pointerInput(id, sorting) {
-                                    // while the lines slide away they're only a picture, not something to grab
-                                    if (!sorting) return@pointerInput
-                                    detectDragGestures(
-                                        onDragStart = { startDrag() },
-                                        onDrag = { change, amount ->
-                                            change.consume()
-                                            dragBy(amount.y)
-                                        },
-                                        onDragEnd = { endDrag() },
-                                        onDragCancel = { endDrag() },
-                                    )
-                                },
-                            visibility = { reveal.value },
-                        )
-                    }
-                }
-            }
+    ReorderCards(
+        ids = entries.map { it.id },
+        onReorder = onReorder,
+        rowHeight = 104.dp,
+        gap = RowGap,
+        sorting = sorting,
+        onStartSorting = onStartSorting,
+    ) { id, lifted, hold ->
+        val entry = byId[id] ?: return@ReorderCards
+        val removeLabel = stringResource(R.string.module_remove_short)
+        SwipeActionsBox(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            end = if (entry.removable) {
+                { SwipeAction(R.drawable.delete, SwipeRemoveColor, removeLabel) { onRemove(entry) } }
+            } else null,
+            enabled = !lifted,
+            slab = false,
+        ) {
+            ModuleCard(
+                entry, lifted = lifted, updating = updating == id, onUpdate = { onUpdate(entry) }, onClick = { onOpen(entry) },
+                hold = hold,
+            )
         }
     }
-}
-
-// grows from nothing to its full width, measured at full width the whole time so the lines slide in instead of squashing
-private fun Modifier.revealWidth(full: Dp, progress: () -> Float) = layout { measurable, constraints ->
-    val fullPx = full.roundToPx()
-    val placeable = measurable.measure(constraints.copy(minWidth = fullPx, maxWidth = fullPx))
-    layout((fullPx * progress()).roundToInt(), placeable.height) { placeable.place(0, 0) }
 }
 
 /** one module as the mock draws it: its icon, its name, how it's doing, and what it adds with its version in the corner */
@@ -291,17 +186,3 @@ private fun UpdatePill(updating: Boolean, onClick: () -> Unit) {
     }
 }
 
-// the mock's three lines beside each card, faded by how far they've come in
-@Composable
-private fun DragHandle(modifier: Modifier, visibility: () -> Float) {
-    Canvas(modifier) {
-        val w = 22.dp.toPx()
-        val x0 = size.width - w - 2.dp.toPx()
-        val gap = 7.dp.toPx()
-        val c = Color.White.copy(alpha = 0.55f * visibility().coerceIn(0f, 1f))
-        for (i in -1..1) {
-            val y = size.height / 2 + i * gap
-            drawLine(c, Offset(x0, y), Offset(x0 + w, y), 1.6.dp.toPx(), StrokeCap.Round)
-        }
-    }
-}

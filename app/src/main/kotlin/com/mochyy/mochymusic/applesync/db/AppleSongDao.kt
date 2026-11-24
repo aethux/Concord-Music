@@ -37,6 +37,22 @@ interface AppleSongDao {
     @Query("SELECT * FROM album WHERE id LIKE 'AM_ALB_%'")
     suspend fun appleAlbums(): List<AlbumEntity>
 
+    /**
+     * Concord: an upload album's cover is a signed blobstore URL that lives a day, so each read hands
+     * over the next one. The WHERE is the guarantee: a picture the person chose, or a permanent
+     * `mzstatic` template, never matches and is never touched.
+     */
+    @Query("UPDATE album SET thumbnailUrl = :url WHERE id = :albumId AND (thumbnailUrl LIKE '%blobstore%' OR thumbnailUrl LIKE '%X-Amz%')")
+    suspend fun renewSignedAlbumCover(albumId: String, url: String)
+
+    /**
+     * Concord: the library payload hands an uploaded item the uploader's own signed artwork. It
+     * replaces a stored catalogue template or an older signature — a picture chosen by hand carries
+     * neither host, so it is never touched.
+     */
+    @Query("UPDATE song SET thumbnailUrl = :url WHERE id = :songId AND (thumbnailUrl LIKE '%blobstore%' OR thumbnailUrl LIKE '%X-Amz%' OR thumbnailUrl LIKE '%mzstatic%')")
+    suspend fun setSongThumbnailFromUpload(songId: String, url: String)
+
     @Query("SELECT id, albumId FROM song WHERE id LIKE 'AM_%'")
     suspend fun appleAlbumLinks(): List<AppleAlbumLink>
 

@@ -63,6 +63,52 @@ object AppleAlbums {
         template?.replace("{w}", "300")?.replace("{h}", "300")
 
     /**
+     * Concord: an upload album's cover is a signed blobstore URL that lives a day, so every read
+     * hands over the next one — the same rule the songs follow, and the reason an album tile used
+     * to go blank a day after its first import. Anything permanent (a catalogue `mzstatic` template,
+     * or a picture the person chose) is left exactly as it is.
+     */
+    private fun renewed(stored: String?, fresh: String?): String? = when {
+        fresh == null -> stored
+        stored == null -> fresh
+        stored.contains("blobstore", true) || stored.contains("X-Amz", true) -> fresh
+        else -> stored
+    }
+
+    /**
+     * The signed covers only, renewed on every read: one row read, then one conditional update per
+     * album that can go stale. The SQL keeps the promise the full pass makes — a chosen picture or a
+     * permanent catalogue template never matches, so it is never overwritten.
+     */
+    private suspend fun renewSignedCovers(
+        database: MusicDatabase,
+        songs: List<RemoteSong>,
+    ) {
+        val stored = runCatching { database.appleSongDao.appleAlbums() }.getOrNull() ?: return
+        val signed = stored.filter { album ->
+            album.thumbnailUrl?.let { url ->
+                url.contains("blobstore", true) || url.contains("X-Amz", true)
+            } == true
+        }
+        if (signed.isEmpty()) return
+        // Read off every song, not the grouped list the album pass uses: that one keeps catalogue
+        // rows only, so an upload album (no catalogId) would never be handed its fresh cover.
+        val fresh = songs.mapNotNull { song ->
+            val album = song.albumId ?: return@mapNotNull null
+            val url = artwork(song.albumArtworkUrl) ?: return@mapNotNull null
+            id(album) to url
+        }.toMap()
+        if (fresh.isEmpty()) return
+        runCatching {
+            database.withTransaction {
+                signed.forEach { album ->
+                    database.appleSongDao.renewSignedAlbumCover(album.id, fresh[album.id] ?: return@forEach)
+                }
+            }
+        }
+    }
+
+    /**
      * Writes an album row per album these songs belong to, and links each song to it.
      *
      * Called after the songs are in the database: the link tables carry foreign keys, so an album
@@ -82,6 +128,11 @@ object AppleAlbums {
             .groupBy { it.second }
 
         if (groups.isEmpty()) return Result(0, 0)
+
+        // Concord: an upload album's cover is a signed blobstore URL that dies a day after the read
+        // that wrote it, and the pass below is skipped whenever the album shape is unchanged — which
+        // is the normal case on a refresh. So the signed covers are renewed here, on every read.
+        renewSignedCovers(database, songs)
 
         // The pass rewrites every album row and every song→album link. When neither the albums nor
         // which song is on which has changed - the usual case on a refresh - that is a minute of
@@ -123,8 +174,9 @@ object AppleAlbums {
                     val row = (current ?: AlbumEntity(id = albumId, title = title, songCount = 0, duration = 0)).copy(
                         title = title.ifBlank { current?.title ?: "Unknown album" },
                         year = first.albumYear ?: current?.year,
-                        // Apple's artwork only when nothing was chosen and nothing is set yet
-                        thumbnailUrl = chosen ?: current?.thumbnailUrl ?: artwork(first.albumArtworkUrl),
+                        // Apple's artwork only when nothing was chosen; a signed one is renewed by
+                        // this read instead of being kept until its signature dies
+                        thumbnailUrl = chosen ?: renewed(current?.thumbnailUrl, artwork(first.albumArtworkUrl)),
                         // Apple knows the whole album; the library may only hold a few of its songs
                         songCount = maxOf(first.albumTrackCount ?: 0, entries.size),
                         duration = entries.sumOf { (it.third.durationMs ?: 0L) / 1000L }.toInt(),

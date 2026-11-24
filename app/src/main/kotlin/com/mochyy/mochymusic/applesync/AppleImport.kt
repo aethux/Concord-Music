@@ -182,13 +182,16 @@ class AppleImport(
          * permanent `is1-ssl.mzstatic.com` template exactly as it is.
          */
         suspend fun noteArtwork(songId: String, song: RemoteSong) {
-            if (songId !in withoutArtwork && songId !in signedArtwork) return
             val url = artwork(song.artworkUrl) ?: return
+            // an uploaded item's library row carries the uploader's own signed artwork, and that
+            // outranks the catalogue template a row picks up from a playlist or an album read
+            val uploadArt = url.contains("blobstore", true) || url.contains("X-Amz", true)
+            if (songId !in withoutArtwork && songId !in signedArtwork && !uploadArt) return
             runCatching {
-                if (songId in withoutArtwork) {
-                    database.appleSongDao.setSongThumbnailIfMissing(songId, url)
-                } else {
-                    database.appleSongDao.setSongThumbnailWhenExpired(songId, url)
+                when {
+                    songId in withoutArtwork -> database.appleSongDao.setSongThumbnailIfMissing(songId, url)
+                    songId in signedArtwork -> database.appleSongDao.setSongThumbnailWhenExpired(songId, url)
+                    else -> database.appleSongDao.setSongThumbnailFromUpload(songId, url)
                 }
             }
         }

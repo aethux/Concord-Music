@@ -286,34 +286,12 @@ class AppleClient(
      */
     suspend fun catalogAlbum(albumId: String, maxPages: Int = 10): AppleAlbumPage? {
         val storefront = storefront()
-        if (!albumId.startsWith("l.")) {
-            val page = page("/v1/catalog/$storefront/albums/$albumId?include=artists") ?: return null
-            val album = AppleAlbumReader.album(page) ?: return null
-            return album.copy(
-                songs = all(
-                    first = "/v1/catalog/$storefront/albums/$albumId/tracks?limit=100",
-                    maxPages = maxPages,
-                    parse = AppleLibrary::catalogTracks,
-                ),
-            )
-        }
+        if (!albumId.startsWith("l.")) return catalogueAlbumPage(albumId, storefront, maxPages)
         // A library album's page is its catalogue twin — the usual case. Its tracklist is the
         // catalogue one too: the library's own `/tracks` holds only the songs that are in the
         // library (one row for a sixteen-track album), not the album.
         val twin = libraryAlbumTwin(albumId)
-        if (twin != null) {
-            val page = page("/v1/catalog/$storefront/albums/$twin?include=artists")
-            val album = page?.let(AppleAlbumReader::album)
-            if (album != null) {
-                return album.copy(
-                    songs = all(
-                        first = "/v1/catalog/$storefront/albums/$twin/tracks?limit=100",
-                        maxPages = maxPages,
-                        parse = AppleLibrary::catalogTracks,
-                    ),
-                )
-            }
-        }
+        if (twin != null) catalogueAlbumPage(twin, storefront, maxPages)?.let { return it }
         // no catalogue twin: an upload or an unmatched album. Its own library resource and rows are
         // all Apple has, and they are playable through the library ids.
         val page = page("/v1/me/library/albums/$albumId") ?: return null
@@ -323,7 +301,46 @@ class AppleClient(
                 first = "/v1/me/library/albums/$albumId/tracks?limit=100",
                 maxPages = maxPages,
                 parse = AppleLibrary::songs,
+                keep = "limit=100",
             ),
+        )
+    }
+
+    /**
+     * One catalogue album, its tracklist and its artist in a single request — the shape Cider's
+     * `/am/album/:id` uses.
+     *
+     * `include=tracks` answers the whole list (probed on this account 2026-11-24: 31 of 31 on a
+     * 31-track album), so the paged `/tracks` walk below is only the fallback for a list Apple
+     * truncated. The relationship object is `{data:[…], meta:{total}}`, the same shape the tracks
+     * endpoint returns, so the existing parser reads it unchanged.
+     */
+    private suspend fun catalogueAlbumPage(
+        albumId: String,
+        storefront: String,
+        maxPages: Int,
+    ): AppleAlbumPage? {
+        val page = page("/v1/catalog/$storefront/albums/$albumId?include=tracks,artists") ?: return null
+        val album = AppleAlbumReader.album(page) ?: return null
+        val row = page["data"].array().orEmpty().firstOrNull()?.obj()
+        val included = row?.get("relationships").obj()?.get("tracks").obj()
+        val tracks = included?.let(AppleLibrary::catalogTracks).orEmpty()
+        // `meta` was absent on the probed album, so the resource's own trackCount is the usable
+        // count; without either, a list Apple truncated could not be told from a short album
+        val total = included?.get("meta").obj()?.long("total")?.toInt()
+            ?: row?.get("attributes").obj()?.long("trackCount")?.toInt()
+        val complete = tracks.isNotEmpty() && (total == null || tracks.size >= total)
+        return album.copy(
+            songs = if (complete) {
+                tracks
+            } else {
+                all(
+                    first = "/v1/catalog/$storefront/albums/$albumId/tracks?limit=100",
+                    maxPages = maxPages,
+                    parse = AppleLibrary::catalogTracks,
+                    keep = "limit=100",
+                )
+            },
         )
     }
 

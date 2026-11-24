@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
-import com.mochyy.mochymusic.viewmodels.AppleMatchState
+import com.mochyy.mochymusic.applesync.AppleMatchStatus
 import com.mochyy.mochymusic.ui.component.DefaultDialog
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
 import com.mochyy.mochymusic.ui.component.AppSwitch
@@ -45,7 +45,9 @@ fun ImportSyncScreen(
     // animated-covers switch
     val appleSync = com.mochyy.mochymusic.applesync.AppleSyncStatus.progress
     val appleAnimated by viewModel.appleAnimatedCovers.collectAsState()
-    val appleMatch by viewModel.appleMatch.collectAsState()
+    // Concord: the matching run lives in a service, so its state is read from the object both it and
+    // this row write to, not from the view model that started it
+    val appleMatch = AppleMatchStatus.progress
     val signedIn = rememberYouTubeSignedIn()
     val sheets = LocalZoomOutOverlayState.current
     val devices = rememberDevicesLink()
@@ -110,6 +112,34 @@ fun ImportSyncScreen(
             Spacer(Modifier.height(16.dp))
         }
 
+        // Concord: the matching run's own progress card, so a run started here, or left running while
+        // away, is visible the moment the screen is back. Same card as an import's progress.
+        if (appleMatch.running) {
+            ImportInfoCard {
+                Text(
+                    text = stringResource(R.string.import_sync_apple_match_notification_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(10.dp))
+                val fraction = appleMatch.fraction
+                if (fraction == null) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(
+                        R.string.import_sync_apple_match_progress,
+                        appleMatch.matched,
+                        appleMatch.total,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
         SettingsGroup(
             style = SettingsGroupStyle.Grouped,
             items = listOf(
@@ -149,26 +179,18 @@ fun ImportSyncScreen(
                     iconShape = CircleShape,
                     onClick = { viewModel.syncAppleMusic() },
                 ),
-                // Concord: fill the Apple <-> YouTube reference, a bounded batch per tap
+                // Concord: fill the Apple <-> YouTube reference; the run lives in a service, so one tap
+                // matches the whole library even after this screen is left
                 SettingsItem(
                     title = {
                         Text(
-                            when (val state = appleMatch) {
-                                is AppleMatchState.Running -> stringResource(
-                                    R.string.import_sync_apple_match_running,
-                                    state.done,
-                                    state.total,
+                            when {
+                                appleMatch.running -> stringResource(
+                                    R.string.import_sync_apple_match_progress,
+                                    appleMatch.matched,
+                                    appleMatch.total,
                                 )
-                                is AppleMatchState.Done -> stringResource(
-                                    R.string.import_sync_apple_match_done,
-                                    state.matched,
-                                    state.tried,
-                                    state.remaining,
-                                )
-                                is AppleMatchState.Failed -> stringResource(
-                                    R.string.import_sync_apple_match_failed,
-                                    state.message,
-                                )
+                                appleMatch.finishedMessage != null -> appleMatch.finishedMessage.orEmpty()
                                 else -> stringResource(R.string.import_sync_apple_match_title)
                             },
                         )

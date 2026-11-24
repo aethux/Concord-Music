@@ -186,6 +186,7 @@
     <string name="ps_action_other_menu">Other menu</string>
     <string name="ps_action_sleep_timer">Sleep timer</string>
     <string name="ps_action_see_video">See video</string>
+    <string name="ps_action_stop_video">Stop video</string>
     <string name="ps_action_repeat">Repeat</string>
     <string name="ps_action_shuffle">Shuffle</string>
     <string name="ps_action_lyrics">Lyrics</string>

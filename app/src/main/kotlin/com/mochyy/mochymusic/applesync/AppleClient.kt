@@ -126,28 +126,6 @@ class AppleClient(
         keep = "include=albums&limit=100",
     )
 
-    /**
-     * The library's own search: one request that finds a song by name.
-     *
-     * It exists because the library list is not ordered by date added, so the newest page is the
-     * wrong place to look for something that was just put in, and a full read is fifteen requests.
-     */
-    suspend fun librarySearch(term: String, limit: Int = 25): List<RemoteSong> {
-        val query = java.net.URLEncoder.encode(term, "UTF-8")
-        val page = page("/v1/me/library/search?term=$query&types=library-songs&limit=$limit") ?: return emptyList()
-        val songs = page["results"].obj()?.get("library-songs").obj() ?: return emptyList()
-        return AppleLibrary.songs(songs)
-    }
-
-    /**
-     * The first page of the library only.
-     *
-     * Used to watch for a song that was just added: a full read is fifteen round trips and made a
-     * half-minute poll look like a hang. Newly added songs land at the top of this list.
-     */
-    suspend fun libraryHead(): List<RemoteSong> =
-        page("/v1/me/library/songs?limit=100")?.let(AppleLibrary::songs).orEmpty()
-
     /** Catalog ids for a search term, best match first. Reads only; used to pick sandbox songs. */
     suspend fun searchSongs(term: String, limit: Int = 10): List<String> {
         val storefront = storefront()
@@ -169,16 +147,6 @@ class AppleClient(
         val page = page("/v1/catalog/$storefront/search?term=$query&types=songs&limit=$limit") ?: return emptyList()
         val songs = page["results"].obj()?.get("songs").obj() ?: return emptyList()
         return AppleLibrary.catalogSongs(songs)
-    }
-
-    /** Every kind of result in one request: songs, artists, albums, playlists, videos. */
-    suspend fun searchAll(term: String, limit: Int = 12): JsonObject? {
-        val storefront = storefront()
-        val query = java.net.URLEncoder.encode(term, "UTF-8")
-        return page(
-            "/v1/catalog/$storefront/search?term=$query" +
-                "&types=songs,artists,albums,playlists,music-videos&limit=$limit",
-        )
     }
 
     /**
@@ -212,23 +180,6 @@ class AppleClient(
             ?.get("motionDetailSquare").obj()?.string("video")
             ?: albumAttributes?.get("editorialVideo").obj()?.get("motionDetailTall").obj()?.string("video")
         return com.mochyy.mochymusic.applesync.AppleCovers.AppleCover(motion, still)
-    }
-
-    /** A catalogue song's name and artist, so a write can say what it is about to touch. */
-    suspend fun catalogSong(id: String): Pair<String, String>? {
-        val storefront = storefront()
-        val page = runCatching { page("/v1/catalog/$storefront/songs/$id") }.getOrNull() ?: return null
-        val row = page["data"].array().orEmpty().firstOrNull()?.obj() ?: return null
-        val attributes = row["attributes"].obj() ?: return null
-        val title = attributes.string("name") ?: return null
-        return title to (attributes.string("artistName") ?: "")
-    }
-
-    /** A catalogue song in full, so the page's list can be imported without guessing metadata. */
-    suspend fun catalogSongFull(id: String): com.mochyy.mochymusic.applesync.CatalogSong? {
-        val storefront = storefront()
-        val page = runCatching { page("/v1/catalog/$storefront/songs/$id") }.getOrNull() ?: return null
-        return AppleLibrary.catalogSongs(page).firstOrNull { it.id == id }
     }
 
     /**

@@ -15,7 +15,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
@@ -192,6 +191,7 @@ import com.mochyy.mochymusic.ui.menu.YouTubeArtistMenu
 import com.mochyy.mochymusic.ui.menu.YouTubePlaylistMenu
 import com.mochyy.mochymusic.ui.menu.YouTubeSongMenu
 import com.mochyy.mochymusic.ui.utils.SnapLayoutInfoProvider
+import com.mochyy.mochymusic.ui.utils.rememberCardSnapFling
 import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.utils.joinByBullet
 import com.mochyy.mochymusic.utils.rememberPreference
@@ -265,29 +265,20 @@ private fun <T> HomeCardRow(
 ) {
     val rowState = rememberCardRowState()
     // A swipe settles on a card boundary, leaving a thin sliver of the card before it on show the
-    // way Apple's rows do, and the settle overshoots a touch instead of easing flat.
+    // way Apple's rows do.
     //
     // The sliver is the row's leading padding minus the gap between cards, so the padding starts
     // RowSnapPeek short of the inset and only the first card carries that peek back — at rest the
     // row looks exactly as it did, and a settled card sits where Apple's does.
-    val snapFling = remember(rowState) {
-        androidx.compose.foundation.gestures.snapping.snapFlingBehavior(
-            snapLayoutInfoProvider = androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider(
-                rowState,
-                androidx.compose.foundation.gestures.snapping.SnapPosition.Start,
-            ),
-            decayAnimationSpec = androidx.compose.animation.core.exponentialDecay(),
-            // a softer, less damped spring: it overshoots and settles back, which reads as a snap
-            // rather than a stop. Lower damping is what buys the overshoot; a higher one would
-            // flatten it.
-            // a plain ease for the settle, no overshoot — the back-ease is parked until the feel
-            // of the row is otherwise right
-            snapAnimationSpec = androidx.compose.animation.core.tween(
-                durationMillis = 320,
-                easing = androidx.compose.animation.core.FastOutSlowInEasing,
-            ),
+    //
+    // The settle itself is rememberCardSnapFling's: the same spring every card row in the app uses.
+    val rowSnap = remember(rowState) {
+        androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider(
+            rowState,
+            androidx.compose.foundation.gestures.snapping.SnapPosition.Start,
         )
     }
+    val snapFling = rememberCardSnapFling(rowSnap)
     LazyRow(
         state = rowState,
         flingBehavior = snapFling,
@@ -328,7 +319,7 @@ private fun <T> HomeTrackGrid(
     LazyHorizontalGrid(
         state = state,
         rows = GridCells.Fixed(rows),
-        flingBehavior = rememberSnapFlingBehavior(snapLayoutInfoProvider),
+        flingBehavior = rememberCardSnapFling(snapLayoutInfoProvider),
         contentPadding = PaddingValues(horizontal = HomeContentInset),
         horizontalArrangement = Arrangement.spacedBy(39.dp),
         verticalArrangement = Arrangement.spacedBy(rowSpacing),

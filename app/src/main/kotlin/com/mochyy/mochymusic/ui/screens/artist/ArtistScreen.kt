@@ -16,7 +16,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import com.mochyy.mochymusic.ui.utils.SnapLayoutInfoProvider
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -137,6 +136,7 @@ import com.music.innertube.pages.ArtistSection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.mochyy.mochymusic.ui.component.RemoteFocus
+import com.mochyy.mochymusic.ui.utils.rememberCardSnapFling
 
 /** an artist page's shelves, sorted by what they hold; YouTube's titles are in the account's language */
 private class ArtistShelves(sections: List<ArtistSection>) {
@@ -622,7 +622,7 @@ private fun LazyListScope.artistShelves(
             LazyHorizontalGrid(
                 state = gridState,
                 rows = GridCells.Fixed(rows.coerceAtLeast(1)),
-                flingBehavior = rememberSnapFlingBehavior(snap),
+                flingBehavior = rememberCardSnapFling(snap),
                 contentPadding = PaddingValues(horizontal = PlaylistInset),
                 horizontalArrangement = Arrangement.spacedBy(39.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),

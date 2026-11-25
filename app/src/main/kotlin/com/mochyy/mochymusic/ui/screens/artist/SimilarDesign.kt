@@ -37,7 +37,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -118,6 +117,7 @@ import com.mochyy.mochymusic.ui.utils.SnapLayoutInfoProvider
 import com.mochyy.mochymusic.ui.utils.SoftBlurTransformation
 import com.mochyy.mochymusic.ui.utils.backToMain
 import com.mochyy.mochymusic.ui.utils.resize
+import com.mochyy.mochymusic.ui.utils.rememberCardSnapFling
 import com.mochyy.mochymusic.utils.rememberPreference
 import com.mochyy.mochymusic.viewmodels.SimilarGroups
 import com.music.innertube.models.AlbumItem
@@ -614,7 +614,7 @@ internal fun PagedSongGrid(
     LazyHorizontalGrid(
         state = gridState,
         rows = GridCells.Fixed(rows),
-        flingBehavior = rememberSnapFlingBehavior(snap),
+        flingBehavior = rememberCardSnapFling(snap),
         contentPadding = PaddingValues(horizontal = PlaylistInset),
         horizontalArrangement = Arrangement.spacedBy(39.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),

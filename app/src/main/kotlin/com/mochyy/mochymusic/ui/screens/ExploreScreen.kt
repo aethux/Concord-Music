@@ -5,7 +5,6 @@ package com.mochyy.mochymusic.ui.screens
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -74,6 +73,7 @@ import com.mochyy.mochymusic.ui.component.shimmer.TextPlaceholder
 import com.mochyy.mochymusic.ui.menu.YouTubeAlbumMenu
 import com.mochyy.mochymusic.ui.menu.YouTubeSongMenu
 import com.mochyy.mochymusic.ui.utils.SnapLayoutInfoProvider
+import com.mochyy.mochymusic.ui.utils.rememberCardSnapFling
 import com.mochyy.mochymusic.utils.listItemShape
 import com.mochyy.mochymusic.viewmodels.ChartsViewModel
 import com.mochyy.mochymusic.viewmodels.ExploreViewModel
@@ -244,7 +244,7 @@ fun ExploreScreen(
                         LazyHorizontalGrid(
                             state = lazyGridState,
                             rows = GridCells.Fixed(4),
-                            flingBehavior = rememberSnapFlingBehavior(snapLayoutInfoProvider),
+                            flingBehavior = rememberCardSnapFling(snapLayoutInfoProvider),
                             contentPadding = WindowInsets.systemBars
                                 .only(WindowInsetsSides.Horizontal)
                                 .asPaddingValues(),

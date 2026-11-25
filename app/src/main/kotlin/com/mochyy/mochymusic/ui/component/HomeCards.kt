@@ -3,6 +3,9 @@
 package com.mochyy.mochymusic.ui.component
 
 import androidx.compose.ui.graphics.Shape
+import com.mochyy.mochymusic.constants.AppleAnimatedCoversKey
+import com.mochyy.mochymusic.ui.player.CanvasArtworkPlayer
+import com.mochyy.mochymusic.utils.rememberPreference
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -215,8 +218,10 @@ fun HomeCoverCard(
     badges: @Composable RowScope.() -> Unit = {},
     cover: (@Composable (Dp) -> Unit)? = null,
     size: Dp = homeCardSize(),
+    motionUrl: String? = null,
 ) = HomeCoverCard(
     title, subtitle, thumbnailUrl, modifier, circular, isActive, { isPlaying }, sharedElementKey, badges, cover, size,
+    motionUrl,
 )
 
 // isPlaying is read only inside the cover's indicator, so a play or pause doesn't recompose every card
@@ -233,8 +238,12 @@ fun HomeCoverCard(
     badges: @Composable RowScope.() -> Unit = {},
     cover: (@Composable (Dp) -> Unit)? = null,
     size: Dp = homeCardSize(),
+    /** Concord: Apple's motion loop for this card, drawn over the still once its first frame is up */
+    motionUrl: String? = null,
 ) {
     val shape = if (circular) CircleShape else RoundedCornerShape(HomeCardCornerRadius)
+    // the same switch that governs a song's animated cover governs a card's
+    val animatedCovers by rememberPreference(AppleAnimatedCoversKey, defaultValue = true)
 
     Column(modifier = modifier.width(size)) {
         Box(
@@ -254,6 +263,17 @@ fun HomeCoverCard(
                     shape = shape,
                     modifier = Modifier.fillMaxSize(),
                 )
+                // transparent until the loop's first frame is up, so the still is what shows meanwhile
+                if (motionUrl != null && animatedCovers) {
+                    CanvasArtworkPlayer(
+                        primaryUrl = motionUrl,
+                        fallbackUrl = null,
+                        isPlaying = true,
+                        // a card is small: the small rendition is the one that keeps up
+                        lightweight = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
         Spacer(Modifier.height(8.dp))

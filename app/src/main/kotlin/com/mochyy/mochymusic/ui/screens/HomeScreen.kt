@@ -192,6 +192,9 @@ import com.mochyy.mochymusic.ui.menu.YouTubePlaylistMenu
 import com.mochyy.mochymusic.ui.menu.YouTubeSongMenu
 import com.mochyy.mochymusic.ui.utils.SnapLayoutInfoProvider
 import com.mochyy.mochymusic.ui.utils.rememberCardSnapFling
+import com.mochyy.mochymusic.ui.player.CanvasVideoPrefetch
+import com.mochyy.mochymusic.constants.AppleAnimatedCoversKey
+import com.mochyy.mochymusic.utils.rememberPreference
 import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.utils.joinByBullet
 import com.mochyy.mochymusic.utils.rememberPreference
@@ -881,11 +884,24 @@ fun HomeScreen(
             }
     }
 
+    // warm every card's loop, so a card is already moving by the time it is scrolled to. Nothing is
+    // fetched when the person has motion covers switched off.
+    val motionCoversOn by rememberPreference(AppleAnimatedCoversKey, defaultValue = true)
+    val motionUrls = remember(appleGroups) {
+        appleGroups.orEmpty().flatMap { group -> group.items.mapNotNull { it.motionUrl } }.distinct()
+    }
+    LaunchedEffect(motionUrls, motionCoversOn) {
+        if (motionCoversOn && motionUrls.isNotEmpty()) {
+            CanvasVideoPrefetch.warm(context, motionUrls)
+        }
+    }
+
     val appleCard: @Composable (AppleHomeItem, Dp) -> Unit = { item, size ->
         HomeCoverCard(
             title = item.title,
             subtitle = item.subtitle,
             thumbnailUrl = AppleCovers.sized(item.artworkUrl, (size.value * 2).toInt()),
+            motionUrl = item.motionUrl,
             isPlaying = isPlayingNow,
             size = size,
             sharedElementKey = if (item.kind == AppleHomeItem.Kind.Album) "album-${item.id}" else null,

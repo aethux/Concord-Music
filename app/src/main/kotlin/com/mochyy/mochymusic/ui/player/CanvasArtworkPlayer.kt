@@ -54,7 +54,7 @@ import android.view.ViewGroup
 import android.view.TextureView
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 
-private object CanvasVideoCache {
+internal object CanvasVideoCache {
     @Volatile private var cache: SimpleCache? = null
 
     fun get(context: Context): SimpleCache =
@@ -135,6 +135,12 @@ fun CanvasArtworkPlayer(
     onFrameColors: ((List<androidx.compose.ui.graphics.Color>) -> Unit)? = null,
     // told the short side of the picture playing, and 0 once it's gone, so the player's menu can say what it shows
     onPlayingSize: ((Int) -> Unit)? = null,
+    /**
+     * Concord: a small card, not the player's face. A card asks for the small rendition whatever the
+     * best-quality preference says — a 170 dp tile decoding a 4K loop pins the phone's decoder, which
+     * reads as lag while scrolling (measured: 96 % CPU, 32 % on MediaCodec).
+     */
+    lightweight: Boolean = false,
 ) {
     val context = LocalContext.current
     val primary = primaryUrl?.takeIf { it.isNotBlank() }
@@ -147,7 +153,8 @@ fun CanvasArtworkPlayer(
     val currentOnReadyChange by rememberUpdatedState(onReadyChange)
     val currentOnPlayingSize by rememberUpdatedState(onPlayingSize)
     // data saver keeps covers on the light version even with the sharpest one picked
-    val bestQuality = rememberPreference(CanvasBestQualityKey, defaultValue = true).value && !rememberDataSaverActive()
+    val bestQuality =
+        !lightweight && rememberPreference(CanvasBestQualityKey, defaultValue = true).value && !rememberDataSaverActive()
     // nothing to show with the app in the background, and a looping canvas kept decoding there for nobody
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val shouldPlay = isPlaying && lifecycle.isAtLeast(Lifecycle.State.STARTED)
@@ -383,8 +390,10 @@ internal class CanvasVideoSession(
                 // the biggest picture the decoder can play, at the best bitrate for that size; a size it can't play is skipped
                 setForceHighestSupportedBitrate(true)
             } else {
-                setMaxVideoSize(1280, 1280)
-                setMaxVideoBitrate(2_500_000)
+                // a card is 170 dp: 720 is already twice what it draws, and the smaller rendition
+                // is the one that keeps up while several loops run at once
+                setMaxVideoSize(720, 720)
+                setMaxVideoBitrate(1_200_000)
                 setViewportSizeToPhysicalDisplaySize(true)
                 setForceHighestSupportedBitrate(false)
             }

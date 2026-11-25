@@ -24,6 +24,12 @@ data class AppleHomeItem(
     val subtitle: String?,
     /** Artwork template with {w}x{h}, {c} and {f} in it; null when the card has none. */
     val artworkUrl: String?,
+    /**
+     * Concord: Apple's motion artwork for this card — an HLS `.m3u8` on `mvod.itunes.apple.com` — or
+     * null. Only some cards carry one: every mood and every "Playlists Made for You" card has it,
+     * while most album and station cards do not.
+     */
+    val motionUrl: String?,
 ) {
     enum class Kind { Album, Playlist, Station }
 }
@@ -104,12 +110,17 @@ object AppleHomeReader {
             AppleHomeItem.Kind.Playlist -> attributes?.string("curatorName")
             AppleHomeItem.Kind.Station -> null
         }?.trim()?.takeIf { it.isNotEmpty() }
+        // the square loop is what a square card wants; Apple ships four crops of the same video
+        val motion = attributes?.get("editorialVideo").obj()
+            ?.get("motionSquareVideo1x1").obj()?.string("video")
+            ?: attributes?.get("editorialVideo").obj()?.get("motionDetailSquare").obj()?.string("video")
         return AppleHomeItem(
             id = id,
             kind = kind,
             title = title,
             subtitle = subtitle,
             artworkUrl = attributes?.get("artwork").obj()?.string("url"),
+            motionUrl = motion,
         )
     }
 }

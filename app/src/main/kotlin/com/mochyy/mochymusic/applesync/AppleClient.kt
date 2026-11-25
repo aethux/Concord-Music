@@ -314,6 +314,30 @@ class AppleClient(
         return AppleHomeReader.ordered(AppleHomeReader.groups(page))
     }
 
+    /**
+     * One Home shelf as its own page.
+     *
+     * Apple answers with the group alone and its **whole** card list (`limit`/`offset` are ignored —
+     * measured: Recently Played answers 40 cards where the feed's row showed 12), but only when the
+     * request carries the feed's own context: `name=listen-now`, the timezone and `platform=web`.
+     * Without them the same path answers 404, which is why this is not a plain page read.
+     *
+     * The group id is minted per feed read, so a shelf opened after a refresh can find its id gone;
+     * that is a null, not an error. Not cached: the id rotates, so a row per id would only bloat the
+     * page cache, and this page is opened once per tap.
+     */
+    suspend fun homeShelf(groupId: String): AppleHomeGroup? {
+        val page = page(
+            "/v1/me/recommendations/$groupId/view/see-all?" + listOf(
+                "format%5Bresources%5D=map",
+                "name=listen-now",
+                "platform=web",
+                "timezone=" + timezoneOffset(),
+            ).joinToString("&")
+        ) ?: return null
+        return AppleHomeReader.shelf(page)
+    }
+
     private fun HomeFeedPath(): String = "/v1/me/recommendations?" + listOf(
         "art%5Burl%5D=f",
         "displayFilter%5Bkind%5D=MusicCircleCoverShelf,MusicConcertsEmptyShelf,MusicCoverGrid,MusicCoverShelf,MusicNotesHeroShelf,MusicSocialCardShelf,MusicSuperHeroShelf",
@@ -451,6 +475,30 @@ class AppleClient(
             owner = ApplePlaylistReader.owner(row),
             collaborators = ApplePlaylistReader.collaborators(row),
         )
+    }
+
+    /**
+     * Just an artist's picture, for a shelf whose title names them. One light read (`fields` trims it
+     * to name and artwork) and the page cache holds the row for a day, so Home pays for it once.
+     */
+    suspend fun artistArtwork(id: String): String? {
+        val storefront = storefront()
+        val page = page("/v1/catalog/$storefront/artists/$id?fields%5Bartists%5D=name,artwork") ?: return null
+        return page["data"].array().orEmpty().firstOrNull()?.obj()
+            ?.get("attributes").obj()?.get("artwork").obj()?.string("url")
+    }
+
+    /** the years Apple keeps a Replay for, newest first */
+    suspend fun replayYears(): List<AppleReplayYear> {
+        val page = page("/v1/me/music-summaries/search?period=year&fields%5Bmusic-summaries%5D=period,year")
+            ?: return emptyList()
+        return AppleReplayReader.years(page)
+    }
+
+    /** one year's summary, and the Replay playlist it carries (`pl.…`, so the playlist page opens) */
+    suspend fun replayPlaylistId(summaryId: String): String? {
+        val page = page("/v1/me/music-summaries/$summaryId?include=playlist") ?: return null
+        return AppleReplayReader.playlistId(page)
     }
 
     /**

@@ -110,7 +110,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import android.net.Uri
 import com.mochyy.mochymusic.applesync.AppleCovers
 import com.mochyy.mochymusic.applesync.AppleHomeItem
-import com.mochyy.mochymusic.importer.ImportSource
 import com.mochyy.mochymusic.viewmodels.AppleHomeViewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.NavController
@@ -166,6 +165,7 @@ import com.mochyy.mochymusic.ui.launch.launchRise
 import com.mochyy.mochymusic.ui.launch.rememberLaunchHold
 import com.mochyy.mochymusic.ui.launch.ReportLaunchHomeComposed
 import com.mochyy.mochymusic.ui.component.HomeSectionTitle
+import com.mochyy.mochymusic.ui.component.HomeViewAllCard
 import com.mochyy.mochymusic.ui.component.HomeTrackRow
 import com.mochyy.mochymusic.ui.component.HomeVideoCard
 import com.mochyy.mochymusic.utils.FeedVideoKind
@@ -264,6 +264,8 @@ private fun <T> HomeCardRow(
     items: List<T>,
     revealSeen: RevealSeenState,
     key: (T) -> Any,
+    /** drawn after the last card, in the row: a shelf's "View all", when Apple says it holds more */
+    trailing: (@Composable () -> Unit)? = null,
     content: @Composable (T) -> Unit,
 ) {
     val rowState = rememberCardRowState()
@@ -299,6 +301,13 @@ private fun <T> HomeCardRow(
                 )
             ) {
                 content(item)
+            }
+        }
+        if (trailing != null) {
+            item(key = "trailing") {
+                Box(modifier = Modifier.revealOnAppear("$rowKey/trailing", revealSeen)) {
+                    trailing()
+                }
             }
         }
     }
@@ -819,28 +828,15 @@ fun HomeScreen(
     }
 
     val openAppleItem: (AppleHomeItem) -> Unit = { item ->
-        // routed by the id, not the shelf kind: a mood shelf can arrive typed as a station, and the
-        // id is what Apple actually promises
-        when {
-            item.id.startsWith("pl.") || item.id.startsWith("p.") -> scope.launch(Dispatchers.IO) {
-                val local = runCatching {
-                    viewModel.database.importedPlaylistByRemoteId(ImportSource.APPLE_MUSIC.key, item.id)
-                }.getOrNull()
-                withContext(Dispatchers.Main) {
-                    if (local != null) {
-                        navController.navigate("local_playlist/${local.playlistId}")
-                    } else {
-                        navController.navigate("apple_playlist/${item.id}")
-                    }
-                }
-            }
-            // a station has no page to open: tapping it starts it, the way Apple's does
-            item.id.startsWith("ra.") || item.id.startsWith("AM_STN") -> scope.launch {
-                appleHomeViewModel.stationQueue(item.id)?.let { queue ->
-                    playerConnection.playQueue(queue)
-                }
-            }
-            else -> navController.navigate("album/${item.id}")
+        scope.launch {
+            openAppleHomeItem(
+                item = item,
+                navController = navController,
+                database = viewModel.database,
+                stationQueue = { id -> appleHomeViewModel.stationQueue(id) },
+                playStation = { queue -> playerConnection.playQueue(queue) },
+                openReplay = { openAppleReplay(navController, appleHomeViewModel) },
+            )
         }
     }
 
@@ -865,8 +861,9 @@ fun HomeScreen(
             .map { group ->
                 ArtistGroup(
                     artistName = group.title.removeSuffix(FansLikeSuffix),
-                    artistId = null,
-                    artistThumbnailUrl = group.items.firstOrNull()?.artworkUrl?.let { AppleCovers.sized(it) },
+                    artistId = group.artistId,
+                    artistThumbnailUrl = (group.artistArtwork
+                        ?: group.items.firstOrNull()?.artworkUrl)?.let { AppleCovers.sized(it) },
                     // ArtistListCard draws its cover strip from YTItems. This row is a placeholder
                     // until the artist content is decided, so only the covers are carried over, in
                     // the shape the card already reads — no YouTube call is made for them.
@@ -904,6 +901,8 @@ fun HomeScreen(
             motionUrl = item.motionUrl,
             isPlaying = isPlayingNow,
             size = size,
+            // an artist is a face, not a sleeve
+            circular = item.kind == AppleHomeItem.Kind.Artist,
             sharedElementKey = if (item.kind == AppleHomeItem.Kind.Album) "album-${item.id}" else null,
             modifier = Modifier.combinedClickable(
                 interactionSource = null,
@@ -1633,16 +1632,32 @@ fun HomeScreen(
                             group.title.startsWith(MoreFromPrefix) -> group.title.removePrefix(MoreFromPrefix)
                             else -> null
                         }
+                        // Apple says which shelves hold more than the row shows; only those get a
+                        // chevron, and it opens the shelf's own page
+                        val openShelf: (() -> Unit)? = if (group.hasSeeAll) {
+                            {
+                                navController.navigate(
+                                    "apple_shelf/${Uri.encode(group.id)}?title=${Uri.encode(group.title)}"
+                                )
+                            }
+                        } else {
+                            null
+                        }
+                        // "More like <artist>" is that artist's row: the title opens their page, as
+                        // Mochy's own row does; a shelf with a see-all and no artist opens the shelf
+                        val openArtistRow: (() -> Unit)? = group.artistId?.let { id ->
+                            { navController.navigate("apple_artist/$id") }
+                        }
                         item(key = "apple_group_title_$index", contentType = "title") {
                             if (fansArtist != null) {
-                                // Mochy's row has an artist picture here; Apple sends none for a
-                                // "Fans Like" shelf, so the first card's artwork stands in and a
-                                // person mark is drawn when even that is missing
-                                val art = group.items.firstOrNull()?.artworkUrl?.let { AppleCovers.sized(it, 180) }
+                                // the shelf names its artist (title.contentIds), so the row draws that
+                                // artist's picture; the first card's cover is only a fallback
+                                val art = (group.artistArtwork ?: group.items.firstOrNull()?.artworkUrl)
+                                    ?.let { AppleCovers.sized(it, 180) }
                                 HomeSectionTitle(
                                     label = stringResource(R.string.home_more_like),
                                     title = fansArtist,
-                                    onClick = { navController.navigate("coming_soon/${Uri.encode(group.title)}") },
+                                    onClick = openArtistRow ?: openShelf,
                                     thumbnail = {
                                         Box(
                                             modifier = Modifier
@@ -1672,19 +1687,26 @@ fun HomeScreen(
                             } else {
                                 HomeSectionTitle(
                                     title = group.title,
-                                    // every Apple shelf opens a page of its own; that page is not
-                                    // built yet, so the chevron leads to Mochy's coming-soon screen
-                                    onClick = { navController.navigate("coming_soon/${Uri.encode(group.title)}") },
+                                    // a shelf Apple marks see-all opens its own page; the rest have
+                                    // no more to show, so they carry no chevron
+                                    onClick = openShelf,
                                 )
                             }
                         }
                         item(key = "apple_group_row_$index", contentType = "cardRow") {
+                            val rowCardSize = if (group.isHero) appleHeroSize else homeCardSize()
+                            // the row ends with "View all" when Apple says it holds more than shown
+                            val viewAll: (@Composable () -> Unit)? = when {
+                                openShelf != null -> { { HomeViewAllCard(size = rowCardSize, onClick = openShelf) } }
+                                else -> null
+                            }
                             HomeCardRow(
                                 rowKey = "apple_group_$index",
                                 items = group.items,
                                 revealSeen = revealSeen,
                                 key = { it.id },
-                            ) { item -> appleCard(item, if (group.isHero) appleHeroSize else homeCardSize()) }
+                                trailing = viewAll,
+                            ) { item -> appleCard(item, rowCardSize) }
                         }
                         item(key = "apple_group_gap_$index", contentType = "gap") {
                             Spacer(Modifier.height(26.dp))

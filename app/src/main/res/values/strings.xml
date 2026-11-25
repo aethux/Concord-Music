@@ -196,6 +196,13 @@
          not the release. Saying so is the difference between "a smaller album" and "a bug". -->
     <!-- an Apple profile: name, handle and the playlists Apple publishes for them -->
     <string name="apple_profile_loading">Loading profile</string>
+    <!-- a Home shelf's own page: Apple mints a shelf's id per feed read, so an old one can be gone -->
+    <string name="apple_shelf_loading">Loading</string>
+    <string name="apple_shelf_empty">Apple isn\'t showing this shelf right now.</string>
+    <string name="apple_view_all">View all</string>
+    <string name="apple_replay_title">Replay</string>
+    <string name="apple_replay_row">Your year in music</string>
+    <string name="apple_replay_empty">Apple has no Replay for this account yet.</string>
     <string name="apple_profile_private">This profile is private.</string>
     <string name="apple_collaborators">Collaborators</string>
     <string name="apple_profile_no_playlists">No shared playlists</string>

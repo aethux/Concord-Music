@@ -306,6 +306,22 @@ fun NavGraphBuilder.navigationBuilder(
         com.mochyy.mochymusic.ui.screens.playlist.ApplePlaylistScreen(navController = navController)
     }
 
+    // a Home shelf's own page: its categories read the group Apple marks see-all
+    coverSourceComposable(
+        route = "apple_shelf/{groupId}?title={title}",
+        arguments = listOf(
+            navArgument("groupId") { type = NavType.StringType },
+            navArgument("title") { type = NavType.StringType; defaultValue = "" },
+        ),
+    ) {
+        com.mochyy.mochymusic.ui.screens.AppleShelfScreen(navController = navController)
+    }
+
+    // Apple's Replay: the years it keeps a summary for, each one a playlist
+    coverSourceComposable("apple_replay") {
+        com.mochyy.mochymusic.ui.screens.AppleReplayScreen(navController = navController)
+    }
+
     coverSourceComposable(Screens.Search.route) {
         // YouTube's browse and suggestions were this whole page; hidden, so the tab says so
         com.mochyy.mochymusic.ui.screens.search.AppleSearchPlaceholder(navController = navController)

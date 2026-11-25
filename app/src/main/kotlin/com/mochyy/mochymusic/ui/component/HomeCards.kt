@@ -25,7 +25,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -128,6 +131,43 @@ val HomeCardHighlight = RoundedHighlight(cornerRadius = HomeCardCornerRadius + 6
 @Composable
 fun homeCardSize(): Dp =
     if (LocalGridItemSize.current == GridItemSize.BIG) 137.dp else 104.dp
+
+/**
+ * "View all >" as the last thing in a card row, for a shelf Apple says holds more than the row shows.
+ *
+ * The artist page's own tile (`AppleArtistScreen.ViewAllTile`), at a card's width: same words, same
+ * 16 dp chevron at 70 %, no fill — a row of covers ends with a way to see the rest rather than a
+ * card dressed up as an album.
+ */
+@Composable
+fun HomeViewAllCard(
+    size: Dp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .width(size)
+            .height(size)
+            .clip(RoundedCornerShape(HomeCardCornerRadius))
+            .clickable(onClick = onClick)
+            .padding(start = 4.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.apple_view_all),
+            color = Color.White.copy(alpha = 0.86f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.width(4.dp))
+        Image(
+            painter = painterResource(R.drawable.ic_chevron_right),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.7f)),
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
 
 /**
  * "Recently Played >" style header. the whole line is the tap target, so pressing it lights a

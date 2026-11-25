@@ -30,16 +30,27 @@ data class AppleHomeItem(
      * while most album and station cards do not.
      */
     val motionUrl: String?,
+    /** the page Apple sends for an editorial card — Replay, Concerts — or null */
+    val url: String?,
 ) {
-    enum class Kind { Album, Playlist, Station }
+    enum class Kind { Album, Playlist, Station, Artist, Editorial }
 }
 
 data class AppleHomeGroup(
+    /** Apple's id for this shelf. It is minted per feed read, so it only answers until the feed is read again. */
+    val id: String,
     val title: String,
     /** Apple's shelf kind, e.g. `MusicNotesHeroShelf` — the shelves Apple draws with large cards. */
     val display: String?,
     val hasSeeAll: Boolean,
     val items: List<AppleHomeItem>,
+    /**
+     * A "<Artist> Fans Like" shelf names one artist in its title's `contentIds`. The row's picture is
+     * that artist's, not the first card's: a collab album's cover is not a face.
+     */
+    val artistId: String? = null,
+    /** the artist's artwork, read once by the view model (the page cache keeps it for a day) */
+    val artistArtwork: String? = null,
 ) {
     /** a hero shelf: Apple draws these big */
     val isHero: Boolean get() = display == AppleHomeReader.HeroShelf
@@ -55,25 +66,45 @@ object AppleHomeReader {
         return page["data"].array().mapNotNull { ref ->
             val id = ref.obj()?.idString("id") ?: return@mapNotNull null
             val group = recommendations?.get(id).obj() ?: return@mapNotNull null
-            val attributes = group["attributes"].obj()
-            val title = attributes?.get("title").obj()?.string("stringForDisplay")
-                ?: return@mapNotNull null
-            val display = attributes?.get("display").obj()?.string("kind")
-            // Apple sends this one for an account with no concerts; it has no cards
-            if (display == "MusicConcertsEmptyShelf") return@mapNotNull null
-            val contents = group["relationships"].obj()
-                ?.get("contents").obj()
-                ?.get("data").array()
-                .orEmpty()
-            val items = contents.mapNotNull { card(it.obj(), resources) }
-            if (items.isEmpty()) return@mapNotNull null
-            AppleHomeGroup(
-                title = title,
-                display = display,
-                hasSeeAll = attributes?.get("hasSeeAll")?.let { (it as? JsonPrimitive)?.contentOrNull } == "true",
-                items = items,
-            )
+            groupOf(id, group, resources)
         }
+    }
+
+    /**
+     * One shelf read on its own (`view/see-all`): Apple answers with that group alone and its whole
+     * card list under `contents`, in the same map shape the feed uses.
+     */
+    fun shelf(page: JsonObject): AppleHomeGroup? {
+        val resources = page["resources"].obj()
+        val id = page["data"].array().firstOrNull()?.obj()?.idString("id") ?: return null
+        val group = resources?.get("personal-recommendation").obj()?.get(id).obj() ?: return null
+        return groupOf(id, group, resources)
+    }
+
+    private fun groupOf(id: String, group: JsonObject, resources: JsonObject?): AppleHomeGroup? {
+        val attributes = group["attributes"].obj()
+        val title = attributes?.get("title").obj()?.string("stringForDisplay")
+            ?: return null
+        val display = attributes?.get("display").obj()?.string("kind")
+        // Apple sends this one for an account with no concerts; it has no cards
+        if (display == "MusicConcertsEmptyShelf") return null
+        val contents = group["relationships"].obj()
+            ?.get("contents").obj()
+            ?.get("data").array()
+            .orEmpty()
+        val items = contents.mapNotNull { card(it.obj(), resources) }
+        if (items.isEmpty()) return null
+        // "Alan Walker Fans Like" carries the artist's own id here; other shelves carry none
+        val artistId = attributes?.get("title").obj()?.get("contentIds").array()
+            ?.firstOrNull()?.let { (it as? JsonPrimitive)?.contentOrNull }
+        return AppleHomeGroup(
+            id = id,
+            title = title,
+            display = display,
+            hasSeeAll = attributes?.get("hasSeeAll")?.let { (it as? JsonPrimitive)?.contentOrNull } == "true",
+            items = items,
+            artistId = artistId,
+        )
     }
 
     /**
@@ -98,29 +129,42 @@ object AppleHomeReader {
         val id = ref.idString("id") ?: return null
         val resource = resources?.get(type).obj()?.get(id).obj() ?: return null
         val attributes = resource["attributes"].obj()
-        val title = attributes?.string("name") ?: return null
+        // an editorial card carries no name: its words are in plainEditorialNotes
+        val notes = attributes?.get("plainEditorialNotes").obj()
+        val title = attributes?.string("name") ?: notes?.string("name") ?: return null
         val kind = when (type) {
             "albums" -> AppleHomeItem.Kind.Album
             "playlists", "library-playlists" -> AppleHomeItem.Kind.Playlist
             "stations" -> AppleHomeItem.Kind.Station
+            // Cider routes an artist card to /am/artist/{id}; ours is apple_artist/{id}
+            "artists" -> AppleHomeItem.Kind.Artist
+            // Replay, Concerts, moods: a picture, a name and the page Apple serves for it
+            "editorial-items" -> AppleHomeItem.Kind.Editorial
             else -> return null
         }
         val subtitle = when (kind) {
             AppleHomeItem.Kind.Album -> attributes?.string("artistName")
             AppleHomeItem.Kind.Playlist -> attributes?.string("curatorName")
-            AppleHomeItem.Kind.Station -> null
+            AppleHomeItem.Kind.Editorial -> notes?.string("short") ?: notes?.string("tagline")
+            AppleHomeItem.Kind.Artist, AppleHomeItem.Kind.Station -> null
         }?.trim()?.takeIf { it.isNotEmpty() }
         // the square loop is what a square card wants; Apple ships four crops of the same video
         val motion = attributes?.get("editorialVideo").obj()
             ?.get("motionSquareVideo1x1").obj()?.string("video")
             ?: attributes?.get("editorialVideo").obj()?.get("motionDetailSquare").obj()?.string("video")
+        // an editorial card's picture is a set of crops, not one url; a square card takes the square one
+        val editorialArt = attributes?.get("editorialArtwork").obj()
+        val artwork = attributes?.get("artwork").obj()?.string("url")
+            ?: listOf("brandLogo", "subscriptionCover", "superHeroWide", "superHeroTall")
+                .firstNotNullOfOrNull { editorialArt?.get(it).obj()?.string("url") }
         return AppleHomeItem(
             id = id,
             kind = kind,
             title = title,
             subtitle = subtitle,
-            artworkUrl = attributes?.get("artwork").obj()?.string("url"),
+            artworkUrl = artwork,
             motionUrl = motion,
+            url = attributes?.string("url"),
         )
     }
 }

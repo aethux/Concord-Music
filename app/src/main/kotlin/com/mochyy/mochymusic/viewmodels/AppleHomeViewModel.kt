@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleHomeGroup
 import com.mochyy.mochymusic.applesync.ApplePageCache
+import com.mochyy.mochymusic.applesync.AppleReplaySource
+import com.mochyy.mochymusic.applesync.AppleReplayYear
 import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.playback.queues.AppleStationQueue
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,7 +23,7 @@ import javax.inject.Inject
 class AppleHomeViewModel @Inject constructor(
     private val tokens: AppleTokens,
     private val pageCache: ApplePageCache,
-) : ViewModel() {
+) : ViewModel(), AppleReplaySource {
 
     /** null while the first read is in flight; empty when Apple sent nothing. */
     private val _groups = MutableStateFlow<List<AppleHomeGroup>?>(null)
@@ -54,13 +56,31 @@ class AppleHomeViewModel @Inject constructor(
         AppleStationQueue(client, id, runCatching { client.station(id) }.getOrNull())
     }
 
+    /** the Replay card's one step: the years Apple keeps, and the playlist each year is */
+    override suspend fun replayYears(): List<AppleReplayYear> = withContext(Dispatchers.IO) {
+        val pair = tokens.read() ?: return@withContext emptyList()
+        runCatching { AppleClient(pair).replayYears() }.getOrNull().orEmpty()
+    }
+
+    override suspend fun replayPlaylistId(year: AppleReplayYear): String? = withContext(Dispatchers.IO) {
+        val pair = tokens.read() ?: return@withContext null
+        runCatching { AppleClient(pair).replayPlaylistId(year.summaryId) }.getOrNull()
+    }
+
     private fun load() {
         viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
             _signedOut.value = pair == null
-            val groups = pair?.let { runCatching { AppleClient(it, pageCache).homeGroups() }.getOrNull() }
+            if (pair == null) return@launch
+            val client = AppleClient(pair, pageCache)
+            val groups = runCatching { client.homeGroups() }.getOrNull()
+            // a "<Artist> Fans Like" shelf names its artist; the row draws that face, not a cover
+            val withFaces = groups?.map { group ->
+                val id = group.artistId ?: return@map group
+                group.copy(artistArtwork = runCatching { client.artistArtwork(id) }.getOrNull())
+            }
             _failed.value = groups == null
-            _groups.value = groups.orEmpty()
+            _groups.value = withFaces.orEmpty()
         }
     }
 }

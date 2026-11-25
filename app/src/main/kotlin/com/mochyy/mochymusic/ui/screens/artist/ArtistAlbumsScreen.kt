@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
@@ -35,6 +34,7 @@ import com.mochyy.mochymusic.ui.component.LocalMenuState
 import com.mochyy.mochymusic.ui.component.containerTransformSource
 import com.mochyy.mochymusic.ui.component.detail.PlaylistDetailScaffold
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.component.rememberRevealSeenState
 import com.mochyy.mochymusic.ui.component.revealOnAppear
 import com.mochyy.mochymusic.ui.menu.AlbumMenu
@@ -61,7 +61,7 @@ fun ArtistAlbumsScreen(
 
     val artist by viewModel.artist.collectAsState()
     val albums by viewModel.albums.collectAsState()
-    val lazyListState = rememberLazyListState()
+    val lazyListState = rememberRestoredListState(hasContent = albums.isNotEmpty())
     val revealSeen = rememberRevealSeenState()
     var isGrid by rememberSaveable { mutableStateOf(true) }
 

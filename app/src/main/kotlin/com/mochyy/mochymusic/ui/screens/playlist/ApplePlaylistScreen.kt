@@ -5,6 +5,7 @@
 package com.mochyy.mochymusic.ui.screens.playlist
 
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.screens.library.showLibraryImportSheet
 import com.mochyy.mochymusic.ui.component.AppleSignInPrompt
 import com.mochyy.mochymusic.importer.account.AccountService
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -78,13 +78,15 @@ fun ApplePlaylistScreen(
     }
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
-    val lazyListState = rememberLazyListState()
     val uriHandler = LocalUriHandler.current
     var showPlaylistMenu by remember { mutableStateOf(false) }
     var menuSong by remember { mutableStateOf<Song?>(null) }
 
     val current = page
     val songs = current?.songs.orEmpty()
+    // the page is a live read, so the list is drawn before its songs are here; a list measured with
+    // only the header in it loses the position it was left at
+    val lazyListState = rememberRestoredListState(hasContent = current != null)
     val creators = remember(current) {
         current?.let { creatorsOf(it.owner, it.collaborators, it.curator) }.orEmpty()
     }

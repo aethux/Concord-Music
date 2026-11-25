@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -33,6 +32,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.menu.rememberResyncAll
 import com.mochyy.mochymusic.LocalPlayerAwareWindowInsets
 import com.mochyy.mochymusic.R
@@ -115,7 +115,11 @@ fun LibraryHomeScreen(
             else -> searchLibrary(q, songs, artists, albums, playlists)
         }
     }
-    val listState = rememberLazyListState()
+    // the tiles and rows come from the database a frame after the page does, and a list measured
+    // with only its empty state in it loses the position it was left at
+    val listState = rememberRestoredListState(
+        hasContent = songs.isNotEmpty() || albums.isNotEmpty() || playlists.isNotEmpty(),
+    )
     val glassState = remember { GlassState() }
     val collapse = rememberCollapseProgress(listState)
     val bottomInset = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()

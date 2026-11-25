@@ -30,7 +30,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -76,6 +75,7 @@ import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackBones
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.detail.TrackShape
 import com.mochyy.mochymusic.ui.component.detail.playlistCompactHeaderHeight
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.screens.playlist.GeneratedGroupHeader
 import com.mochyy.mochymusic.ui.screens.playlist.GeneratedNoResults
 import com.mochyy.mochymusic.ui.screens.playlist.GeneratedSearchCapsule
@@ -198,15 +198,16 @@ fun <T> LibraryCollectionPage(
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by remember { mutableStateOf(TextFieldValue()) }
     val searchFocus = remember { FocusRequester() }
-    val listState = rememberLazyListState()
+    val layout by produceState<CollectionLayout<T>?>(null, items, query.text, grid) {
+        value = withContext(Dispatchers.Default) { layoutOf(items, toEntry, query.text, grid, secondsOf) }
+    }
+    // the bones stand in until the sort is here, and a list measured with only those in it loses
+    // the position it was left at
+    val listState = rememberRestoredListState(hasContent = layout != null)
     val scope = rememberCoroutineScope()
     // a letter picked on the rail lands just under the collapsed bar instead of hidden behind it
     val barPx = with(LocalDensity.current) {
         (WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + RailLandingGap).toPx()
-    }
-
-    val layout by produceState<CollectionLayout<T>?>(null, items, query.text, grid) {
-        value = withContext(Dispatchers.Default) { layoutOf(items, toEntry, query.text, grid, secondsOf) }
     }
 
     if (searching) {

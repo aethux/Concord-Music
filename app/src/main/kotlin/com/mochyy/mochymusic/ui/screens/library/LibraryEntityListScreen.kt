@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -24,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.mochyy.mochymusic.LocalPlayerAwareWindowInsets
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.ui.component.GlassState
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.screens.search.rememberCollapseProgress
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -60,9 +60,7 @@ fun <T> LibraryEntityListScreen(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     var query by remember { mutableStateOf(TextFieldValue()) }
-    val listState = rememberLazyListState()
     val glassState = remember { GlassState() }
-    val collapse = rememberCollapseProgress(listState)
     val scope = rememberCoroutineScope()
     val bottomInset = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()
 
@@ -95,6 +93,11 @@ fun <T> LibraryEntityListScreen(
             }
         }
     }
+
+    // the rows arrive from the database a frame after the page does, and a list measured with only
+    // its rule and empty state in it loses the position it was left at
+    val listState = rememberRestoredListState(hasContent = rows.isNotEmpty())
+    val collapse = rememberCollapseProgress(listState)
 
     val sectionIndex = remember(rows) {
         buildMap {

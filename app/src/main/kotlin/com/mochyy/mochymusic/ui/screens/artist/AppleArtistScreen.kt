@@ -4,6 +4,7 @@
 package com.mochyy.mochymusic.ui.screens.artist
 
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.screens.library.showLibraryImportSheet
 import com.mochyy.mochymusic.ui.component.AppleSignInPrompt
 import com.mochyy.mochymusic.importer.account.AccountService
@@ -36,7 +37,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -139,7 +139,7 @@ fun AppleArtistScreen(
     val videosTitle = stringResource(R.string.artist_videos)
     val similarTitle = stringResource(R.string.artist_similar)
 
-    val lazyListState = rememberLazyListState()
+    val lazyListState = rememberRestoredListState(hasContent = page != null)
     val revealSeen = rememberRevealSeenState()
 
     val bannerHeight = playlistCoverHeight()

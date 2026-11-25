@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,6 +51,7 @@ import com.mochyy.mochymusic.ui.component.HomeCardSpacing
 import com.mochyy.mochymusic.ui.component.containerTransformSource
 import com.mochyy.mochymusic.ui.component.detail.TrackSubtitleStyle
 import com.mochyy.mochymusic.ui.component.detail.TrackTitleStyle
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.ui.component.GlassState
 import com.mochyy.mochymusic.ui.screens.search.SearchColors
@@ -81,9 +81,7 @@ fun LibraryGridScreen(
     pureBlack: Boolean = false,
 ) {
     var query by remember { mutableStateOf(TextFieldValue()) }
-    val listState = rememberLazyListState()
     val glassState = remember { GlassState() }
-    val collapse = rememberCollapseProgress(listState)
     val bottomInset = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()
 
     val visible = remember(entries, query.text) {
@@ -94,6 +92,10 @@ fun LibraryGridScreen(
     // the collapsing header needs a LazyListState to read scroll from, and a grid state is a
     // different type that rememberCollapseProgress can't consume.
     val rows = remember(visible) { visible.chunked(2) }
+    // the tiles arrive from the database a frame after the page does, and a list measured with only
+    // its rule and empty state in it loses the position it was left at
+    val listState = rememberRestoredListState(hasContent = rows.isNotEmpty())
+    val collapse = rememberCollapseProgress(listState)
 
     LibraryScaffold(
         title = title,

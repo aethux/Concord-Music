@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,6 +68,7 @@ import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.detail.playlistCoverHeight
 import com.mochyy.mochymusic.ui.component.librarySwipeAction
 import com.mochyy.mochymusic.ui.component.queueSwipeAction
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.component.rememberRevealSeenState
 import com.mochyy.mochymusic.ui.component.revealOnAppear
 import com.mochyy.mochymusic.ui.menu.YouTubeAlbumMenu
@@ -152,7 +152,7 @@ fun ArtistItemsScreen(
     var isGrid by rememberSaveable { mutableStateOf<Boolean?>(null) }
     val gridMode = isGrid ?: (kind == ItemsKind.Albums || kind == ItemsKind.Playlists || kind == ItemsKind.Artists)
 
-    val lazyListState = rememberLazyListState()
+    val lazyListState = rememberRestoredListState(hasContent = items.isNotEmpty())
     val revealSeen = rememberRevealSeenState()
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
 

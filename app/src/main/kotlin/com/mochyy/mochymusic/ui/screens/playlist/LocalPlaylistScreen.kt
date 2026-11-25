@@ -31,7 +31,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -113,6 +112,7 @@ import com.mochyy.mochymusic.ui.component.DraggableScrollbar
 import com.mochyy.mochymusic.ui.component.EmptyPlaceholder
 import com.mochyy.mochymusic.playlistcover.PlaylistCoverStore
 import com.mochyy.mochymusic.ui.component.LocalMenuState
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.component.showEditPlaylistSheet
 import com.mochyy.mochymusic.ui.component.SongSwipeBox
 import com.mochyy.mochymusic.ui.component.TextFieldDialog
@@ -327,7 +327,7 @@ fun LocalPlaylistScreen(
 
     // the header is the only item above the songs, and only while not searching
     val headerItems by rememberUpdatedState(if (isSearching) 0 else 1)
-    val lazyListState = rememberLazyListState()
+    val lazyListState = rememberRestoredListState(hasContent = songs.isNotEmpty())
     // each new search shows its matches from the first, not from wherever the last one was scrolled (#128)
     LaunchedEffect(query.text) {
         if (isSearching) lazyListState.scrollToItem(0)

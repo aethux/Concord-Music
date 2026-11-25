@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.collectAsState
@@ -47,6 +46,7 @@ import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackBones
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.librarySwipeAction
 import com.mochyy.mochymusic.ui.component.queueSwipeAction
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.menu.SongMenu
 import com.mochyy.mochymusic.ui.screens.playlist.GeneratedGroupHeader
 import com.mochyy.mochymusic.ui.screens.playlist.GeneratedNoResults
@@ -144,10 +144,12 @@ fun LibraryRecentlyAddedScreen(
     val currentQueue by playerConnection.queueTitle.collectAsState()
 
     var query by remember { mutableStateOf(TextFieldValue()) }
-    val listState = rememberLazyListState()
     val rows by produceState<List<AddedRow>?>(null, songs, query.text) {
         value = withContext(Dispatchers.Default) { addedRows(songs, query.text, resources) }
     }
+    // the bones stand in until the rows are here, and a list measured with only those in it loses
+    // the position it was left at
+    val listState = rememberRestoredListState(hasContent = rows != null)
     val totalSeconds = remember(songs) { songs.sumOf { it.song.duration.coerceAtLeast(0) } }
     val isThisQueue = currentQueue == queueTitle
 

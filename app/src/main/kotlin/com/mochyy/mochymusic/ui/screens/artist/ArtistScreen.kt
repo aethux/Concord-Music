@@ -15,6 +15,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.utils.SnapLayoutInfoProvider
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,7 +39,6 @@ import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -231,7 +231,7 @@ fun ArtistScreen(
         featuredOn = stringResource(R.string.artist_featured_on),
         similar = stringResource(R.string.artist_similar),
     )
-    val lazyListState = rememberLazyListState()
+    val lazyListState = rememberRestoredListState(hasContent = page != null)
     val revealSeen = rememberRevealSeenState()
     // on its side the banner is the whole screen, the name block sitting at its foot just over the bottom bar
     val landscape = com.mochyy.mochymusic.ui.utils.isLandscapeLayout()

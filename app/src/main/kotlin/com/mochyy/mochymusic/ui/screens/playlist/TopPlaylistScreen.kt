@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -60,6 +59,7 @@ import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.detail.rememberFeaturedArtists
 import com.mochyy.mochymusic.ui.component.librarySwipeAction
 import com.mochyy.mochymusic.ui.component.queueSwipeAction
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.component.rememberRevealSeenState
 import com.mochyy.mochymusic.ui.component.revealOnAppear
 import com.mochyy.mochymusic.ui.menu.SelectionSongMenu
@@ -89,7 +89,7 @@ fun TopPlaylistScreen(
     val name = stringResource(R.string.my_top) + " ${viewModel.top}"
 
     var query by remember { mutableStateOf(TextFieldValue()) }
-    val lazyListState = rememberLazyListState()
+    val lazyListState = rememberRestoredListState(hasContent = songs != null)
     val revealSeen = rememberRevealSeenState()
 
     var inSelectMode by rememberSaveable { mutableStateOf(false) }

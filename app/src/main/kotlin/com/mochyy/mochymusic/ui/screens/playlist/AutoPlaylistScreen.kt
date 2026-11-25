@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -104,6 +103,7 @@ import com.mochyy.mochymusic.ui.component.detail.PlaylistModeBar
 import com.mochyy.mochymusic.ui.component.detail.PlaylistSelectTick
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.detail.playlistCoverHeight
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.component.rememberRevealSeenState
 import com.mochyy.mochymusic.ui.component.revealOnAppear
 import com.mochyy.mochymusic.ui.menu.AutoPlaylistMenu
@@ -274,7 +274,7 @@ fun AutoPlaylistScreen(
 
     val featuredArtists = rememberFeaturedArtists(songs, { songs.orEmpty().flatMap { it.artists } }, id = { it.id }, name = { it.name })
 
-    val state = rememberLazyListState()
+    val state = rememberRestoredListState(hasContent = !songs.isNullOrEmpty())
     // each new search shows its matches from the first, not from wherever the last one was scrolled (#128)
     LaunchedEffect(query.text) {
         if (isSearching) state.scrollToItem(0)

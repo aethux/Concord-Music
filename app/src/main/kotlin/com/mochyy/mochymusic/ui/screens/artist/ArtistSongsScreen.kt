@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
@@ -41,6 +40,7 @@ import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.librarySwipeAction
 import com.mochyy.mochymusic.ui.component.queueSwipeAction
 import com.mochyy.mochymusic.ui.component.rememberRevealSeenState
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.component.revealOnAppear
 import com.mochyy.mochymusic.ui.menu.SongMenu
 import com.mochyy.mochymusic.ui.utils.backToMain
@@ -69,7 +69,7 @@ fun ArtistSongsScreen(
 
     val artist by viewModel.artist.collectAsState()
     val songs by viewModel.songs.collectAsState()
-    val lazyListState = rememberLazyListState()
+    val lazyListState = rememberRestoredListState(hasContent = songs.isNotEmpty())
     val revealSeen = rememberRevealSeenState()
 
     val artistId = artist?.artist?.id

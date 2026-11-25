@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,6 +40,7 @@ import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackBones
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.librarySwipeAction
 import com.mochyy.mochymusic.ui.component.queueSwipeAction
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.menu.SongMenu
 import com.mochyy.mochymusic.ui.screens.playlist.GeneratedNoResults
 import com.mochyy.mochymusic.ui.screens.playlist.GeneratedPlaylistPage
@@ -62,7 +62,7 @@ fun LibraryGenreScreen(navController: NavController) {
 
     val title = viewModel.name
     var query by remember { mutableStateOf(TextFieldValue()) }
-    val listState = rememberLazyListState()
+    val listState = rememberRestoredListState(hasContent = songs.isNotEmpty())
     val totalSeconds = remember(songs) { songs.sumOf { it.song.duration.coerceAtLeast(0) } }
     val shown = remember(songs, query.text) {
         val q = query.text.trim()

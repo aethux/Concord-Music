@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -88,6 +87,7 @@ import com.mochyy.mochymusic.ui.component.detail.rememberFeaturedArtists
 import com.mochyy.mochymusic.ui.component.detail.playlistCoverHeight
 import com.mochyy.mochymusic.ui.component.librarySwipeAction
 import com.mochyy.mochymusic.ui.component.queueSwipeAction
+import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.component.rememberRevealSeenState
 import com.mochyy.mochymusic.ui.component.revealOnAppear
 import com.mochyy.mochymusic.ui.menu.AlbumMenu
@@ -184,7 +184,7 @@ fun AlbumScreen(
         representativeSongId?.let { database.format(it) } ?: kotlinx.coroutines.flow.flowOf(null)
     }.collectAsState(initial = null)
 
-    val lazyListState = rememberLazyListState()
+    val lazyListState = rememberRestoredListState(hasContent = albumWithSongs != null)
     val revealSeen = rememberRevealSeenState()
     val album = albumWithSongs
     val totalSeconds = remember(filteredSongs) { filteredSongs.sumOf { it.song.duration } }

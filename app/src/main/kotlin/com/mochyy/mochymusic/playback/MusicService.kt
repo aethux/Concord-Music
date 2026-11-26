@@ -90,6 +90,7 @@ import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.car.CarLyrics
 import com.mochyy.mochymusic.car.CarLyricsPlayer
 import com.mochyy.mochymusic.car.CarLyricsSource
+import com.mochyy.mochymusic.applesync.AppleSongWrites
 import com.mochyy.mochymusic.widget.WidgetLyricTracker
 import com.mochyy.mochymusic.constants.AudioNormalizationKey
 import com.mochyy.mochymusic.constants.AudioOffload
@@ -2813,6 +2814,13 @@ class MusicService :
         scope.launch {
             val songToToggle = currentSong.first()
             songToToggle?.let {
+                // an Apple row's library membership is Apple's: the guard, then the call, then the row
+                if (it.song.id.startsWith("AM_")) {
+                    AppleSongWrites.setLibrary(this@MusicService, it.song, add = it.song.inLibrary == null)
+                    currentMediaMetadata.value = player.currentMetadata
+                    updateWidgetUI(player.isPlaying)
+                    return@launch
+                }
                 val isInLibrary = it.song.inLibrary != null
                 val token = if (isInLibrary) it.song.libraryRemoveToken else it.song.libraryAddToken
 
@@ -2832,6 +2840,15 @@ class MusicService :
         scope.launch {
             val songToToggle = currentSong.first()
             songToToggle?.let {
+                // an Apple row is loved on Apple, the way Cider does it: the rating goes first and the
+                // local heart follows Apple's own read-back — never a YouTube call with an AM_ id.
+                // The home-screen widgets and the media session both arrive here.
+                if (it.song.id.startsWith("AM_")) {
+                    AppleSongWrites.pushLike(this@MusicService, it.song, !it.song.liked)
+                    currentMediaMetadata.value = player.currentMetadata
+                    updateWidgetUI(player.isPlaying)
+                    return@launch
+                }
                 val song = it.song.toggleLike()
                 database.query {
                     update(song)
@@ -2854,6 +2871,7 @@ class MusicService :
                     }
                 }
                 currentMediaMetadata.value = player.currentMetadata
+                updateWidgetUI(player.isPlaying)
             }
         }
     }
@@ -4652,7 +4670,14 @@ class MusicService :
                 val song = songData?.song
                 val songTitle = song?.title ?: getString(R.string.no_song_playing)
                 val artistName = songData?.artists?.joinToString(", ") { it.name } ?: getString(R.string.tap_to_open)
-                val isLiked = songData?.song?.liked == true
+                // a full redraw reads the row: a heart pressed a moment ago is already in the database
+                // but the flow behind songData may not have emitted it yet. Progress ticks keep the
+                // flow value, so the extra query never runs on a tick.
+                val isLiked = if (progressOnly) {
+                    song?.liked == true
+                } else {
+                    song?.id?.let { database.getSongById(it)?.song?.liked } ?: (song?.liked == true)
+                }
                 val (currentLyric, nextLyric) = lyricCue
 
                 widgetManager.updateWidgets(

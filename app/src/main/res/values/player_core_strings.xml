@@ -135,6 +135,7 @@
     <string name="pc_video_no_match">Nothing closer found. The video is unchanged.</string>
     <string name="pc_error_no_app">No app available</string>
     <string name="pc_like_added">Added to Library and Liked Songs</string>
+    <string name="pc_like_removed">Removed from Liked Songs</string>
     <string name="pc_like_mixing">Mixxing…</string>
     <string name="pc_no_lyrics_found">No lyrics found</string>
     <string name="pc_lyrics_source">Source</string>

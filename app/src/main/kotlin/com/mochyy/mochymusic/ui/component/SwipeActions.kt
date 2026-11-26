@@ -77,6 +77,7 @@ import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import com.mochyy.mochymusic.LocalDatabase
+import com.mochyy.mochymusic.applesync.AppleSongWrites
 import com.mochyy.mochymusic.LocalDownloadUtil
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.R
@@ -569,16 +570,22 @@ fun librarySwipeAction(song: SongEntity): SwipeAction {
         color = SwipeSaveColor,
         label = stringResource(if (inLibrary) R.string.remove_from_library else R.string.add_to_library),
     ) {
-        // the same as the song menu's library item: the feedback token, then the local flag
-        // (which also tells YouTube)
-        val token = if (inLibrary) song.libraryRemoveToken else song.libraryAddToken
-        token?.let { SwipeScope.launch { YouTube.feedback(listOf(it)) } }
-        database.query { update(song.toggleLibrary()) }
-        TopToaster.show(
-            text = context.getString(if (inLibrary) R.string.removed_from_library else R.string.added_to_library),
-            thumbnail = song.thumbnailUrl,
-            iconRes = R.drawable.library_add_check,
-        )
+        if (song.id.startsWith("AM_")) {
+            // an Apple row changes membership on Apple; the feedback-token path is YouTube's.
+            // AppleSongWrites shows the result itself, so this does not toast twice.
+            SwipeScope.launch { AppleSongWrites.setLibrary(context, song, add = !inLibrary) }
+        } else {
+            // the same as the song menu's library item: the feedback token, then the local flag
+            // (which also tells YouTube)
+            val token = if (inLibrary) song.libraryRemoveToken else song.libraryAddToken
+            token?.let { SwipeScope.launch { YouTube.feedback(listOf(it)) } }
+            database.query { update(song.toggleLibrary()) }
+            TopToaster.show(
+                text = context.getString(if (inLibrary) R.string.removed_from_library else R.string.added_to_library),
+                thumbnail = song.thumbnailUrl,
+                iconRes = R.drawable.library_add_check,
+            )
+        }
     }
 }
 

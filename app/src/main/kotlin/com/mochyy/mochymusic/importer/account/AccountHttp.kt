@@ -5,12 +5,12 @@ package com.mochyy.mochymusic.importer.account
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.request.get
 import io.ktor.client.request.header
-import io.ktor.client.request.post
+import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpMethod
 import io.ktor.http.content.TextContent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -34,19 +34,29 @@ internal object AccountHttp {
 
     class Response(val status: Int, val body: String, val retryAfterSeconds: Long?)
 
-    suspend fun get(url: String, headers: Map<String, String>, service: String): Response = try {
-        val response = client.get(url) { headers.forEach { (name, value) -> header(name, value) } }
-        Response(response.status.value, response.bodyAsText(), response.headers["Retry-After"]?.trim()?.toLongOrNull())
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        throw AccountImportException("Couldn't reach $service. Check your connection.")
-    }
+    suspend fun get(url: String, headers: Map<String, String>, service: String): Response =
+        send("GET", url, headers, null, service)
 
-    suspend fun post(url: String, headers: Map<String, String>, body: String, service: String): Response = try {
-        val response = client.post(url) {
+    suspend fun post(url: String, headers: Map<String, String>, body: String, service: String): Response =
+        send("POST", url, headers, body, service)
+
+    /**
+     * Any verb, for Apple's write calls: a rating is a `PUT`, a cleared rating a `DELETE`.
+     *
+     * Same client, same timeouts and the same one exception as the reads, so a write is never a
+     * second transport that drifts from them.
+     */
+    suspend fun send(
+        verb: String,
+        url: String,
+        headers: Map<String, String>,
+        body: String?,
+        service: String,
+    ): Response = try {
+        val response = client.request(url) {
+            method = HttpMethod.parse(verb)
             headers.forEach { (name, value) -> header(name, value) }
-            setBody(TextContent(body, ContentType.Application.Json))
+            if (body != null) setBody(TextContent(body, ContentType.Application.Json))
         }
         Response(response.status.value, response.bodyAsText(), response.headers["Retry-After"]?.trim()?.toLongOrNull())
     } catch (e: CancellationException) {

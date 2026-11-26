@@ -114,18 +114,25 @@ class LikeBurstState {
     /** The like button's scale: 1 at rest, kicked when a heart lands. */
     internal val landing = Animatable(1f)
 
-    /** Counts likes (not unlikes), for the "added" label above the title. */
+    /** Counts like notes, for the label above the title: both a like and a cleared heart say theirs. */
     var likeCount by mutableIntStateOf(0)
+        private set
+
+    /** True when the note that just fired was a heart being taken back. */
+    var lastNoteRemoved by mutableStateOf(false)
         private set
 
     internal fun homeTarget(): Offset? = buttonBounds[slotProvider()]?.center
 
-    /** A like button tapped. Liking sends a heart up out of the button; unliking is quiet. */
+    /** A like button tapped. Liking sends a heart up out of the button; an unlike still says so. */
     fun likeFromButton(slot: LikeSlot, liked: Boolean, toggleLike: () -> Unit) {
         if (!liked) {
             buttonBounds[slot]?.let { launch(it.center, fromButton = true) }
-            likeCount++
+            lastNoteRemoved = false
+        } else {
+            lastNoteRemoved = true
         }
+        likeCount++
         toggleLike()
     }
 
@@ -136,6 +143,7 @@ class LikeBurstState {
     fun likeFromDoubleTap(rootPosition: Offset, liked: Boolean, toggleLike: () -> Unit) {
         launch(rootPosition, fromButton = false)
         if (!liked) {
+            lastNoteRemoved = false
             likeCount++
             toggleLike()
         }
@@ -430,6 +438,8 @@ private fun quad(a: Offset, control: Offset, b: Offset, t: Float): Offset {
 @Composable
 fun LikedLabel(
     likeCount: Int,
+    /** The note that just fired was a heart taken back, so it says "Removed" instead of "Added". */
+    removedNote: Boolean,
     /** The title's bounds on the player page, in root coordinates. */
     sourceRectProvider: () -> Rect?,
     /** Where the title sits in the lyrics/queue header, in root coordinates. */
@@ -480,7 +490,10 @@ fun LikedLabel(
             alpha = ((sheetProgressProvider() - 0.9f) / 0.1f).coerceIn(0f, 1f)
         },
     ) {
-        if (likeShown > 0.001f) NoteText(stringResource(R.string.pc_like_added), likeShown)
+        if (likeShown > 0.001f) NoteText(
+            stringResource(if (removedNote) R.string.pc_like_removed else R.string.pc_like_added),
+            likeShown,
+        )
         if (mixShown > 0.001f) MixingNote(stringResource(R.string.crossmix_mixing_note), mixShown, active = { sheetProgressProvider() > 0.9f })
     }
 }

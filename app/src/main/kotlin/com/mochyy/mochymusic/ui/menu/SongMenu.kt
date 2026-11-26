@@ -57,6 +57,7 @@ import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import com.music.innertube.YouTube
 import com.mochyy.mochymusic.LocalDatabase
+import com.mochyy.mochymusic.applesync.AppleSongWrites
 import com.mochyy.mochymusic.applesync.AppleVersionSwitch
 import com.mochyy.mochymusic.importer.ImportedVersions
 import com.mochyy.mochymusic.importer.TrackMatch
@@ -545,17 +546,25 @@ fun SongMenu(
                             onClick = {
                                 val currentSong = song.song
                                 val isInLibrary = currentSong.inLibrary != null
-                                val token =
-                                    if (isInLibrary) currentSong.libraryRemoveToken else currentSong.libraryAddToken
-
-                                token?.let {
+                                if (currentSong.id.startsWith("AM_")) {
+                                    // an Apple row changes membership on Apple, never through a
+                                    // YouTube feedback token
                                     coroutineScope.launch {
-                                        YouTube.feedback(listOf(it))
+                                        AppleSongWrites.setLibrary(context, currentSong, add = !isInLibrary)
                                     }
-                                }
+                                } else {
+                                    val token =
+                                        if (isInLibrary) currentSong.libraryRemoveToken else currentSong.libraryAddToken
 
-                                database.query {
-                                    update(song.song.toggleLibrary())
+                                    token?.let {
+                                        coroutineScope.launch {
+                                            YouTube.feedback(listOf(it))
+                                        }
+                                    }
+
+                                    database.query {
+                                        update(song.song.toggleLibrary())
+                                    }
                                 }
                             }
                         )

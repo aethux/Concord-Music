@@ -19,6 +19,9 @@ val IsFirstRunKey = booleanPreferencesKey("isFirstRun")
 // Concord: whether Apple's motion artwork is fetched and used at all. On by default; off keeps the
 // still cover and stops the background motion fetch the import starts.
 val AppleAnimatedCoversKey = booleanPreferencesKey("appleAnimatedCovers")
+// Concord: a heart also adds the song to the Apple library, as Cider's `addToLibraryOnFavorite`
+// does. On when unset; a cleared heart never removes anything. No settings row sets it yet.
+val AppleAddToLibraryOnFavoriteKey = booleanPreferencesKey("appleAddToLibraryOnFavorite")
 val EnableHighRefreshRateKey = booleanPreferencesKey("enableHighRefreshRate")
 val DynamicThemeKey = booleanPreferencesKey("dynamicTheme")
 val SelectedThemeColorKey = intPreferencesKey("selectedThemeColor")

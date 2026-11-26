@@ -1411,6 +1411,7 @@ private fun PlayerSheet(
             com.mochyy.mochymusic.ui.utils.OwnScope {
             LikedLabel(
                 likeCount = likeBurst.likeCount,
+                removedNote = likeBurst.lastNoteRemoved,
                 mixing = playerConnection.isCrossmixing.collectAsState().value,
                 sourceRectProvider = { songInfoSourceRect },
                 headerTitleX = LyricsHeaderArtX + LyricsHeaderArtSize + 18.dp,

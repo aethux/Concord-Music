@@ -341,6 +341,14 @@
     <string name="apple_sign_in_title">Sign in to Apple Music</string>
     <string name="apple_sign_in_body">Your library, playlists and Apple\'s catalogue load once you are signed in.</string>
     <string name="apple_sign_in_action">Sign in</string>
+    <!-- the heart, pushed to Apple Music (AppleSongWrites) -->
+    <string name="apple_write_off">Changing your Apple library is switched off</string>
+    <string name="apple_write_too_soon">Apple takes ten changes a minute. Try again in a moment.</string>
+    <string name="apple_write_signed_out">Apple signed this session out. Sign in again.</string>
+    <string name="apple_write_unconfirmed">Apple didn\'t show \"%1$s\" afterwards</string>
+    <string name="apple_like_failed">Apple didn\'t take that heart</string>
+    <string name="apple_library_failed">Apple didn\'t take that library change</string>
+    <string name="apple_library_not_synced">Apple hasn\'t synced this song\'s library id yet. Refresh the library, then try again.</string>
     <string name="playlist_load_failed">Could not load this playlist. Tap to try again.</string>
     <string name="search_apple_coming">Apple Music search is coming. Your library is still searchable from Your Library.</string>
     <string name="home_apple_failed">Could not load Apple Music</string>

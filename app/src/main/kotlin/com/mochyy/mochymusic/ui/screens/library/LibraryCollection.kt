@@ -9,6 +9,7 @@ package com.mochyy.mochymusic.ui.screens.library
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -100,6 +103,16 @@ data class CollectionEntry(
     val songId: String? = null,
     // albums and playlists open growing out of their cover
     val sharedElementKey: String? = null,
+    // playlists only: more than one person can edit it, marked on the card and the row
+    val collaborative: Boolean = false,
+)
+
+/** A folder on a collection page: its own header, expanding in place to show what Apple put in it. */
+@Immutable
+class CollectionFolder<T>(
+    val id: String,
+    val name: String,
+    val items: List<T>,
 )
 
 /**
@@ -141,6 +154,14 @@ private sealed interface CollectionRow<out T> {
     }
 
     class Tiles<T>(override val key: String, val tiles: List<Pair<T, CollectionEntry>>) : CollectionRow<T>
+
+    class Folder(
+        override val key: String,
+        val id: String,
+        val name: String,
+        val count: Int,
+        val expanded: Boolean,
+    ) : CollectionRow<Nothing>
 }
 
 // what the page shows, worked out off the main thread: rows in index order, the letters on the rail and where each starts
@@ -162,6 +183,8 @@ private fun <T> layoutOf(
     grid: Boolean,
     secondsOf: ((T) -> Int)?,
     sort: CollectionSorting<T>?,
+    folders: List<CollectionFolder<T>> = emptyList(),
+    expandedFolders: Set<String> = emptySet(),
 ): CollectionLayout<T> {
     val pairs = items.map { it to toEntry(it) }
     val q = query.trim()
@@ -169,6 +192,10 @@ private fun <T> layoutOf(
         pairs
     } else {
         pairs.filter { (_, e) -> e.title.contains(q, ignoreCase = true) || e.subtitle?.contains(q, ignoreCase = true) == true }
+    }
+    // folders are the page's own structure: a search has to search everything, so it goes flat
+    if (folders.isNotEmpty() && q.isEmpty()) {
+        return foldLayout(items, visible, toEntry, grid, sort, folders, expandedFolders)
     }
     // a null comparator leaves the list in the order it arrived in (newest first, from the
     // database); descending then has nothing to turn round, which is the order Apple gives too
@@ -218,6 +245,70 @@ private fun <T> layoutOf(
 }
 
 /**
+ * The page with Apple's folders: a header per folder, and its playlists only while it is open.
+ * Sorting still applies, inside each folder and to the playlists that sit outside one. No letter
+ * rail — the folders are the structure the page is drawn by.
+ */
+private fun <T> foldLayout(
+    items: List<T>,
+    visible: List<Pair<T, CollectionEntry>>,
+    toEntry: (T) -> CollectionEntry,
+    grid: Boolean,
+    sort: CollectionSorting<T>?,
+    folders: List<CollectionFolder<T>>,
+    expanded: Set<String>,
+): CollectionLayout<T> {
+    val rows = ArrayList<CollectionRow<T>>(visible.size + folders.size * 2)
+    val ordered = ArrayList<T>(visible.size)
+    val folderOf = HashMap<String, Int>()
+    folders.forEachIndexed { index, folder ->
+        folder.items.forEach { folderOf[toEntry(it).id] = index }
+    }
+
+    fun sorted(pairs: List<Pair<T, CollectionEntry>>): List<Pair<T, CollectionEntry>> {
+        val comparator = sort?.comparator ?: return pairs
+        if (sort.sectioned) return pairs
+        val byItem = Comparator<Pair<T, CollectionEntry>> { a, b -> comparator.compare(a.first, b.first) }
+        val ascending = pairs.sortedWith(byItem)
+        return if (sort.descending) ascending.asReversed() else ascending
+    }
+
+    fun addRows(pairs: List<Pair<T, CollectionEntry>>) {
+        if (grid) {
+            pairs.chunked(GridColumns).forEachIndexed { i, chunk ->
+                rows += CollectionRow.Tiles("t_f${rows.size}_$i", chunk)
+            }
+        } else {
+            pairs.forEach { (item, entry) -> rows += CollectionRow.Single(item, entry) }
+        }
+        ordered += pairs.map { it.first }
+    }
+
+    folders.forEachIndexed { index, folder ->
+        val pairs = sorted(visible.filter { folderOf[it.second.id] == index })
+        rows += CollectionRow.Folder(
+            key = "f_${folder.id}",
+            id = folder.id,
+            name = folder.name,
+            count = pairs.size,
+            expanded = folder.id in expanded,
+        )
+        if (folder.id in expanded) addRows(pairs)
+    }
+    addRows(sorted(visible.filter { folderOf[it.second.id] == null }))
+
+    return CollectionLayout(
+        rows = rows,
+        ordered = ordered,
+        sections = emptyList(),
+        firstRowOf = emptyMap(),
+        count = items.size,
+        totalSeconds = 0,
+        coverUrl = items.firstOrNull { !toEntry(it).thumbnailUrl.isNullOrEmpty() }?.let { toEntry(it).thumbnailUrl },
+    )
+}
+
+/**
  * the page itself. [onOpen] and [onPlay] get the items in the order shown, so a tap or Play queues
  * what's on screen. [pageKey] remembers this page's list or grid choice on its own.
  */
@@ -234,6 +325,8 @@ fun <T> LibraryCollectionPage(
     onPlay: (ordered: List<T>, shuffle: Boolean) -> Unit,
     navController: NavController,
     sort: CollectionSorting<T>,
+    /** Apple's folders: when present, the page draws each as a header that opens in place. */
+    folders: List<CollectionFolder<T>> = emptyList(),
     roundCovers: Boolean = false,
     secondsOf: ((T) -> Int)? = null,
     rowWrapper: @Composable (item: T, row: @Composable () -> Unit) -> Unit = { _, row -> row() },
@@ -249,8 +342,11 @@ fun <T> LibraryCollectionPage(
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by remember { mutableStateOf(TextFieldValue()) }
     val searchFocus = remember { FocusRequester() }
-    val layout by produceState<CollectionLayout<T>?>(null, items, query.text, grid, sort) {
-        value = withContext(Dispatchers.Default) { layoutOf(items, toEntry, query.text, grid, secondsOf, sort) }
+    var expandedFolders by remember { mutableStateOf(emptySet<String>()) }
+    val layout by produceState<CollectionLayout<T>?>(null, items, query.text, grid, sort, folders, expandedFolders) {
+        value = withContext(Dispatchers.Default) {
+            layoutOf(items, toEntry, query.text, grid, secondsOf, sort, folders, expandedFolders)
+        }
     }
     // the bones stand in until the sort is here, and a list measured with only those in it loses
     // the position it was left at
@@ -365,11 +461,20 @@ fun <T> LibraryCollectionPage(
                     is CollectionRow.Letter -> "letter"
                     is CollectionRow.Single -> "row"
                     is CollectionRow.Tiles -> "tiles"
+                    is CollectionRow.Folder -> "folder"
                 }
             },
         ) { row ->
             when (row) {
                 is CollectionRow.Letter -> GeneratedGroupHeader(row.section.label)
+                is CollectionRow.Folder -> CollectionFolderRow(
+                    name = row.name,
+                    count = row.count,
+                    expanded = row.expanded,
+                    onClick = {
+                        expandedFolders = if (row.id in expandedFolders) expandedFolders - row.id else expandedFolders + row.id
+                    },
+                )
                 is CollectionRow.Single -> rowWrapper(row.item) {
                     val entry = row.entry
                     val active = entry.songId != null && entry.songId == nowPlaying.value?.id
@@ -385,6 +490,11 @@ fun <T> LibraryCollectionPage(
                         coverShape = if (roundCovers) CircleShape else TrackShape,
                         coverModifier = entry.sharedElementKey?.let { Modifier.containerTransformSource(it, cornerRadius = 9.dp) } ?: Modifier,
                         songId = entry.songId,
+                        trailing = if (entry.collaborative) {
+                            { CollaborativeMark() }
+                        } else {
+                            null
+                        },
                     )
                 }
                 is CollectionRow.Tiles -> Row(
@@ -488,6 +598,13 @@ internal fun CollectionTile(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
+            if (entry.collaborative) {
+                CollaborativeMark(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp),
+                )
+            }
         }
         Spacer(Modifier.height(6.dp))
         Text(
@@ -506,5 +623,76 @@ internal fun CollectionTile(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+}
+
+/**
+ * The small mark a collaborative playlist wears: two heads in a dark chip, in the corner of its
+ * cover and before the menu on its row. Copper-free so it reads on any artwork.
+ */
+@Composable
+internal fun CollaborativeMark(modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(20.dp)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.55f)),
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.group_filled),
+            contentDescription = stringResource(R.string.playlist_collaborative),
+            tint = Color.White,
+            modifier = Modifier.size(12.dp),
+        )
+    }
+}
+
+/** One Apple folder on the page: a header that opens and closes in place, no separate screen. */
+@Composable
+private fun CollectionFolderRow(
+    name: String,
+    count: Int,
+    expanded: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 10.dp),
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_folder_small),
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.78f),
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = name,
+            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+            color = Color.White.copy(alpha = 0.92f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = count.toString(),
+            style = TextStyle(fontSize = 12.sp),
+            color = Color.White.copy(alpha = 0.5f),
+        )
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            painter = painterResource(R.drawable.expand_more),
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.6f),
+            modifier = Modifier
+                .size(16.dp)
+                .graphicsLayer { rotationZ = if (expanded) 180f else 0f },
+        )
     }
 }

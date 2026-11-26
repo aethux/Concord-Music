@@ -83,6 +83,17 @@ object ApplePlaylistImport {
         val client = AppleClient(pair)
 
         val remotes = runCatching { client.playlists() }.getOrDefault(emptyList())
+        // the folder tree: the list just answered each playlist's parent, and the folders read names
+        // them. One state row, replaced wholesale, so the library page can expand them in place.
+        runCatching {
+            val folders = client.playlistFolders()
+            dao.saveState(
+                com.mochyy.mochymusic.applesync.db.AppleStateEntity(
+                    PlaylistFolders.KEY,
+                    PlaylistFolders.encode(remotes, folders),
+                ),
+            )
+        }
         var songs = 0
         var skipped = 0
         var unchanged = 0

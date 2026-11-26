@@ -49,7 +49,20 @@ internal object AppleLibrary {
                 obj["relationships"].obj()?.get("collaborators") != null,
             lastModified = attributes?.string("lastModifiedDate"),
             canDelete = attributes?.bool("canDelete") ?: false,
+            folderId = obj["relationships"].obj()
+                ?.get("parent").obj()
+                ?.get("data").array()
+                ?.firstOrNull()?.obj()
+                ?.idString("id"),
         )
+    }
+
+    /** `/v1/me/library/playlist-folders`: the account's folders, in Apple's order. */
+    fun folders(page: JsonObject): List<RemotePlaylistFolder> = page["data"].array().mapNotNull { item ->
+        val obj = item.obj() ?: return@mapNotNull null
+        val id = obj.idString("id") ?: return@mapNotNull null
+        val name = obj["attributes"].obj()?.string("name")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        RemotePlaylistFolder(id = id, name = name)
     }
 
     /**

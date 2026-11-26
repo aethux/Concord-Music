@@ -8,6 +8,7 @@ package com.mochyy.mochymusic.ui.screens.library
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
@@ -195,6 +196,43 @@ internal fun LibraryArtistsPage(navController: NavController) {
 internal fun LibraryPlaylistsPage(navController: NavController) {
     val viewModel: LibraryHomeViewModel = hiltViewModel()
     val playlists by viewModel.playlists.collectAsState()
+    val context = LocalContext.current
+    // which playlists more than one person can edit: the sidecar knows, the music database does not
+    val collaborative by produceState<Set<String>>(emptySet(), playlists) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                dagger.hilt.android.EntryPointAccessors
+                    .fromApplication(context.applicationContext, com.mochyy.mochymusic.applesync.di.ApplePlaylistEntryPoint::class.java)
+                    .dao()
+                    .playlistMetas()
+                    .filter { it.collaborative }
+                    .mapTo(HashSet()) { it.playlistId }
+            }.getOrDefault(emptySet())
+        }
+    }
+    // Apple's folders, from the tree the playlist import keeps: a header per folder, opened in place
+    val folderTree by produceState<com.mochyy.mochymusic.applesync.PlaylistFolders.Tree?>(null, playlists) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val dao = dagger.hilt.android.EntryPointAccessors
+                    .fromApplication(context.applicationContext, com.mochyy.mochymusic.applesync.di.ApplePlaylistEntryPoint::class.java)
+                    .dao()
+                com.mochyy.mochymusic.applesync.PlaylistFolders.decode(
+                    dao.state(com.mochyy.mochymusic.applesync.PlaylistFolders.KEY),
+                )
+            }.getOrNull()
+        }
+    }
+    val folderSections = remember(playlists, folderTree) {
+        val tree = folderTree ?: return@remember emptyList()
+        tree.folders.map { folder ->
+            CollectionFolder(
+                id = folder.id,
+                name = folder.name,
+                items = playlists.filter { tree.parentOf[it.id] == folder.id },
+            )
+        }
+    }
     val resources = LocalContext.current.resources
     val database = LocalDatabase.current
     val player = LocalPlayerConnection.current
@@ -236,6 +274,7 @@ internal fun LibraryPlaylistsPage(navController: NavController) {
                 thumbnailUrl = playlist.thumbnails.firstOrNull(),
                 // the same key Home's cards use, so the playlist opens growing out of its cover
                 sharedElementKey = "playlist-${playlist.id}",
+                collaborative = playlist.id in collaborative,
             )
         },
         countText = { pluralStringResource(R.plurals.n_playlist, it, it) },
@@ -251,6 +290,7 @@ internal fun LibraryPlaylistsPage(navController: NavController) {
         },
         navController = navController,
         sort = sort,
+        folders = folderSections,
     )
 }
 

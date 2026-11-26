@@ -75,6 +75,17 @@ data class RemotePlaylist(
     val lastModified: String? = null,
     /** canDelete: false means the playlist belongs to someone else and is in the library by follow. */
     val canDelete: Boolean = false,
+    /**
+     * The folder this playlist sits in, from the list's `include=parent` relationship. The root is
+     * `p.playlistsroot`, which is treated as "not in a folder" by the library page.
+     */
+    val folderId: String? = null,
+)
+
+/** One row of `/v1/me/library/playlist-folders`: Apple's own folder, with a name and an id. */
+data class RemotePlaylistFolder(
+    val id: String,
+    val name: String,
 )
 
 /**

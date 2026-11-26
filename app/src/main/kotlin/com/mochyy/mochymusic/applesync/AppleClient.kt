@@ -48,13 +48,23 @@ class AppleClient(
      */
     suspend fun playlists(maxPages: Int = 40, onPage: (Int) -> Unit = {}): List<RemotePlaylist> =
         all(
-            first = "/v1/me/library/playlists?limit=100&include=catalog",
+            first = "/v1/me/library/playlists?limit=100&include=catalog,parent",
             maxPages = maxPages,
             parse = AppleLibrary::playlists,
             onPage = onPage,
             // the next page is a bare offset: without these every page after the first has no owner
-            // and answers 25 rows instead of 100
-            keep = "include=catalog&limit=100",
+            // and answers 25 rows instead of 100. `include=parent` is the only way the list says
+            // which folder a playlist sits in, so it is kept too.
+            keep = "include=catalog,parent&limit=100",
+        )
+
+    /** `/v1/me/library/playlist-folders`: every folder Apple keeps for this account. */
+    suspend fun playlistFolders(maxPages: Int = 10): List<RemotePlaylistFolder> =
+        all(
+            first = "/v1/me/library/playlist-folders?limit=100",
+            maxPages = maxPages,
+            parse = AppleLibrary::folders,
+            keep = "limit=100",
         )
 
     /**

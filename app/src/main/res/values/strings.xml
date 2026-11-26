@@ -354,6 +354,9 @@
     <string name="folder_rename">Rename folder</string>
     <string name="folder_delete">Delete folder</string>
     <string name="folder_add_playlist">New playlist here</string>
+    <string name="folder_edit_lists">Edit playlists</string>
+    <string name="folder_edit_hint">Tap a playlist to add it or take it out</string>
+    <string name="folder_playlists_title">Playlists</string>
     <string name="folder_name_hint">Folder name</string>
     <string name="playlist_name_hint">Playlist name</string>
     <string name="playlist_add_to_folder">Add to folder</string>

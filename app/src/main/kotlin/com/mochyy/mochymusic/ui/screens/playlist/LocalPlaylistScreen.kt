@@ -50,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -153,6 +154,7 @@ import com.music.innertube.YouTube
 import com.music.innertube.models.SongItem
 import com.music.innertube.utils.completed
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -178,6 +180,20 @@ fun LocalPlaylistScreen(
     val queueTitle by playerConnection.queueTitle.collectAsState()
 
     val playlist by viewModel.playlist.collectAsState()
+    // more than one person can edit it: the sidecar's answer, joined by the local playlist id
+    val collaborative by produceState(false, playlist?.id) {
+        val id = playlist?.id
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                if (id == null) return@runCatching false
+                dagger.hilt.android.EntryPointAccessors
+                    .fromApplication(context.applicationContext, com.mochyy.mochymusic.applesync.di.ApplePlaylistEntryPoint::class.java)
+                    .dao()
+                    .playlistMeta(id)
+                    ?.collaborative ?: false
+            }.getOrDefault(false)
+        }
+    }
     val imported by viewModel.imported.collectAsState()
     val songs by viewModel.playlistSongs.collectAsState()
     val mutableSongs = remember { mutableStateListOf<com.mochyy.mochymusic.db.entities.PlaylistSong>() }
@@ -645,7 +661,7 @@ fun LocalPlaylistScreen(
                     stats = playlistStats(
                         context.resources.getQuantityString(R.plurals.n_song, songs.size, songs.size),
                         playlistLength,
-                    ),
+                    ) + if (collaborative) " · ${context.getString(R.string.playlist_collaborative_tag)}" else "",
                     isPlaying = isThisQueue && isPlaying,
                     onPlayClick = {
                         if (isThisQueue) playerConnection.togglePlayPause() else play(songs)

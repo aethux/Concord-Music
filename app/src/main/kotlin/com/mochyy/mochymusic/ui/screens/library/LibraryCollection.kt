@@ -8,6 +8,14 @@ package com.mochyy.mochymusic.ui.screens.library
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -155,13 +163,13 @@ private sealed interface CollectionRow<out T> {
 
     class Tiles<T>(override val key: String, val tiles: List<Pair<T, CollectionEntry>>) : CollectionRow<T>
 
-    class Folder(
+    class Folder<T>(
         override val key: String,
         val id: String,
         val name: String,
-        val count: Int,
+        val items: List<Pair<T, CollectionEntry>>,
         val expanded: Boolean,
-    ) : CollectionRow<Nothing>
+    ) : CollectionRow<T>
 }
 
 // what the page shows, worked out off the main thread: rows in index order, the letters on the rail and where each starts
@@ -290,10 +298,10 @@ private fun <T> foldLayout(
             key = "f_${folder.id}",
             id = folder.id,
             name = folder.name,
-            count = pairs.size,
+            items = pairs,
             expanded = folder.id in expanded,
         )
-        if (folder.id in expanded) addRows(pairs)
+        ordered += pairs.map { it.first }
     }
     addRows(sorted(visible.filter { folderOf[it.second.id] == null }))
 
@@ -365,6 +373,30 @@ fun <T> LibraryCollectionPage(
     }
 
     val shown = layout
+    // one list row, drawn the same at the top level and inside a folder card
+    val listRow: @Composable (T, CollectionEntry) -> Unit = { item, entry ->
+        val active = entry.songId != null && entry.songId == nowPlaying.value?.id
+        rowWrapper(item) {
+            PlaylistTrackRow(
+                thumbnailUrl = entry.thumbnailUrl,
+                title = entry.title,
+                subtitle = entry.subtitle.orEmpty(),
+                isActive = active,
+                isPlaying = active && isPlaying.value,
+                onClick = { onOpen(item, shown?.ordered.orEmpty()) },
+                onLongClick = { onMenu(item) },
+                onMenuClick = { onMenu(item) },
+                coverShape = if (roundCovers) CircleShape else TrackShape,
+                coverModifier = entry.sharedElementKey?.let { Modifier.containerTransformSource(it, cornerRadius = 9.dp) } ?: Modifier,
+                songId = entry.songId,
+                badge = if (entry.collaborative) {
+                    { CollaborativeMark(modifier = Modifier.padding(end = 6.dp), chip = false) }
+                } else {
+                    null
+                },
+            )
+        }
+    }
     val stats = shown?.let {
         val count = countText(it.count)
         if (it.totalSeconds > 0) {
@@ -467,36 +499,17 @@ fun <T> LibraryCollectionPage(
         ) { row ->
             when (row) {
                 is CollectionRow.Letter -> GeneratedGroupHeader(row.section.label)
-                is CollectionRow.Folder -> CollectionFolderRow(
-                    name = row.name,
-                    count = row.count,
-                    expanded = row.expanded,
-                    onClick = {
+                is CollectionRow.Folder -> CollectionFolderCard(
+                    folder = row,
+                    grid = grid,
+                    listRow = listRow,
+                    onToggle = {
                         expandedFolders = if (row.id in expandedFolders) expandedFolders - row.id else expandedFolders + row.id
                     },
+                    onOpen = { item -> onOpen(item, shown.ordered) },
+                    onMenu = onMenu,
                 )
-                is CollectionRow.Single -> rowWrapper(row.item) {
-                    val entry = row.entry
-                    val active = entry.songId != null && entry.songId == nowPlaying.value?.id
-                    PlaylistTrackRow(
-                        thumbnailUrl = entry.thumbnailUrl,
-                        title = entry.title,
-                        subtitle = entry.subtitle.orEmpty(),
-                        isActive = active,
-                        isPlaying = active && isPlaying.value,
-                        onClick = { onOpen(row.item, shown.ordered) },
-                        onLongClick = { onMenu(row.item) },
-                        onMenuClick = { onMenu(row.item) },
-                        coverShape = if (roundCovers) CircleShape else TrackShape,
-                        coverModifier = entry.sharedElementKey?.let { Modifier.containerTransformSource(it, cornerRadius = 9.dp) } ?: Modifier,
-                        songId = entry.songId,
-                        trailing = if (entry.collaborative) {
-                            { CollaborativeMark() }
-                        } else {
-                            null
-                        },
-                    )
-                }
+                is CollectionRow.Single -> listRow(row.item, row.entry)
                 is CollectionRow.Tiles -> Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth().padding(start = 30.dp, end = 30.dp, bottom = 16.dp),
@@ -631,7 +644,20 @@ internal fun CollectionTile(
  * cover and before the menu on its row. Copper-free so it reads on any artwork.
  */
 @Composable
-internal fun CollaborativeMark(modifier: Modifier = Modifier) {
+internal fun CollaborativeMark(
+    modifier: Modifier = Modifier,
+    /** the grid's corner chip; the list draws the bare icon beside the menu instead */
+    chip: Boolean = true,
+) {
+    if (!chip) {
+        Icon(
+            painter = painterResource(R.drawable.group_filled),
+            contentDescription = stringResource(R.string.playlist_collaborative),
+            tint = Color.White.copy(alpha = 0.78f),
+            modifier = modifier.size(18.dp),
+        )
+        return
+    }
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -648,51 +674,96 @@ internal fun CollaborativeMark(modifier: Modifier = Modifier) {
     }
 }
 
-/** One Apple folder on the page: a header that opens and closes in place, no separate screen. */
+/** One Apple folder as a card: its header, and its playlists inside while it is open. */
 @Composable
-private fun CollectionFolderRow(
-    name: String,
-    count: Int,
-    expanded: Boolean,
-    onClick: () -> Unit,
+private fun <T> CollectionFolderCard(
+    folder: CollectionRow.Folder<T>,
+    grid: Boolean,
+    listRow: @Composable (T, CollectionEntry) -> Unit,
+    onToggle: () -> Unit,
+    onOpen: (T) -> Unit,
+    onMenu: (T) -> Unit,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    val chevron by animateFloatAsState(
+        targetValue = if (folder.expanded) 180f else 0f,
+        animationSpec = tween(220),
+        label = "folder_chevron",
+    )
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 10.dp),
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = if (folder.expanded) 0.06f else 0.035f))
+            .animateContentSize(animationSpec = tween(240)),
     ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_folder_small),
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.78f),
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(Modifier.width(10.dp))
-        Text(
-            text = name,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-            color = Color.White.copy(alpha = 0.92f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = count.toString(),
-            style = TextStyle(fontSize = 12.sp),
-            color = Color.White.copy(alpha = 0.5f),
-        )
-        Spacer(Modifier.width(8.dp))
-        Icon(
-            painter = painterResource(R.drawable.expand_more),
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.6f),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .size(16.dp)
-                .graphicsLayer { rotationZ = if (expanded) 180f else 0f },
-        )
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 16.dp, vertical = 13.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_folder_small),
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.78f),
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = folder.name,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                color = Color.White.copy(alpha = 0.92f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = folder.items.size.toString(),
+                style = TextStyle(fontSize = 12.sp),
+                color = Color.White.copy(alpha = 0.5f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                painter = painterResource(R.drawable.expand_more),
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier
+                    .size(16.dp)
+                    .graphicsLayer { rotationZ = chevron },
+            )
+        }
+        AnimatedVisibility(
+            visible = folder.expanded,
+            enter = expandVertically(animationSpec = tween(240)) + fadeIn(animationSpec = tween(180)),
+            exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(animationSpec = tween(120)),
+        ) {
+            Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                if (grid) {
+                    folder.items.chunked(GridColumns).forEach { chunk ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                        ) {
+                            chunk.forEach { (item, entry) ->
+                                CollectionTile(
+                                    entry = entry,
+                                    round = false,
+                                    onClick = { onOpen(item) },
+                                    onLongClick = { onMenu(item) },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            repeat(GridColumns - chunk.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                } else {
+                    folder.items.forEach { (item, entry) -> listRow(item, entry) }
+                }
+            }
+        }
     }
 }

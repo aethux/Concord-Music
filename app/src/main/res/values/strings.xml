@@ -206,6 +206,7 @@
     <string name="apple_profile_private">This profile is private.</string>
     <string name="apple_collaborators">Collaborators</string>
     <string name="playlist_collaborative">Collaborative playlist</string>
+    <string name="playlist_collaborative_tag">Collaborative</string>
     <string name="apple_profile_no_playlists">No shared playlists</string>
     <plurals name="apple_profile_playlists">
         <item quantity="one">%d shared playlist</item>

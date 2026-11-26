@@ -97,8 +97,13 @@ internal data class ShareLyricsLook(
 internal class SongShareSession(val song: MediaMetadata) {
     val share = ShareSong(song.title, song.artists.joinToString { it.name }, song.thumbnailUrl)
 
-    // youtube music by default; a song that only lives on this phone has no link to give
-    val link: String? = if (song.localUri != null || song.id.startsWith("LOCAL_")) null else "https://music.youtube.com/watch?v=${song.id}"
+    // youtube music by default; a song that only lives on this phone has no link to give, and an
+    // Apple row links to its own catalogue page rather than a YouTube watch page that has no video
+    val link: String? = when {
+        song.localUri != null || song.id.startsWith("LOCAL_") -> null
+        song.id.startsWith("AM_") -> "https://music.apple.com/song/${song.id.removePrefix("AM_")}"
+        else -> "https://music.youtube.com/watch?v=${song.id}"
+    }
 
     val durationMs: Long = song.duration.coerceAtLeast(0) * 1000L
 

@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleCovers
 import com.mochyy.mochymusic.applesync.AppleStation
+import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.db.entities.ArtistEntity
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.db.entities.SongEntity
@@ -63,5 +64,19 @@ class AppleStationQueue(
                 artists = listOf(ArtistEntity(id = artistName, name = artistName)),
             ).toMediaItem()
         }
+    }
+
+    companion object {
+        /**
+         * A station from a seed id: `ra.<catalogueId>` for a song or an album, Apple's own shortcut
+         * (Cider's `startRadio`, `apple-calls.txt:38-39`), so nothing is asked for before playback
+         * starts. Null when there is no Apple session to play it with.
+         */
+        suspend fun seeded(tokens: AppleTokens, seedId: String): AppleStationQueue? =
+            withContext(Dispatchers.IO) {
+                val pair = tokens.read() ?: return@withContext null
+                val client = AppleClient(pair)
+                AppleStationQueue(client, seedId, runCatching { client.station(seedId) }.getOrNull())
+            }
     }
 }

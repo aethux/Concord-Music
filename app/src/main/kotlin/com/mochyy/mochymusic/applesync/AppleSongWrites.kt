@@ -35,6 +35,7 @@ object AppleSongWrites {
 
     /** Cider's body verbatim: `attributes` only, value 1 is the love. */
     private const val LoveBody = """{"attributes":{"value":1}}"""
+    private const val DislikeBody = """{"attributes":{"value":-1}}"""
 
     /**
      * The heart on one song. [liked] true sets Apple's rating, false clears it.
@@ -121,6 +122,65 @@ object AppleSongWrites {
     }
 
     // ---- add to / remove from the library --------------------------------------------------------
+
+    /**
+     * Apple's "Suggest Less" on one song, and its undo: the same `/v1/me/ratings/songs/{id}` the heart
+     * uses, with value −1 instead of 1 (Cider's `setSuggestLess`).
+     *
+     * No local row changes: there is no `disliked` column and none is added — the song menu reads the
+     * rating back when it opens, so the row it draws and the account cannot disagree. A row Apple has
+     * never seen (an upload) has no rating to send, and says so rather than pretending.
+     */
+    suspend fun pushDislike(context: Context, song: SongEntity, disliked: Boolean): Boolean {
+        val entry = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            AppleSongWritesEntryPoint::class.java,
+        )
+        val dao = entry.dao()
+        val catalogId = catalogueId(dao, song.id) ?: run {
+            TopToaster.error(context.getString(R.string.apple_dislike_no_id))
+            return false
+        }
+
+        val write = if (disliked) AppleWrite.SET_RATING else AppleWrite.CLEAR_RATING
+        if (refuse(context, dao, write, catalogId)) return false
+
+        if (!WriteBudget.take()) {
+            dao.audit(audit(write.name, catalogId, "REFUSE", reason = "RATE_LIMITED"))
+            TopToaster.error(context.getString(R.string.apple_write_too_soon))
+            return false
+        }
+
+        val tokens = runCatching { entry.tokens().read() }.getOrNull()
+        if (tokens == null) {
+            dao.audit(audit(write.name, catalogId, "REFUSE", reason = "SIGNED_OUT"))
+            TopToaster.error(context.getString(R.string.apple_write_signed_out))
+            return false
+        }
+
+        return try {
+            val answer = request(
+                tokens = tokens,
+                verb = if (disliked) "PUT" else "DELETE",
+                path = "/v1/me/ratings/songs/$catalogId",
+                body = if (disliked) DislikeBody else null,
+            )
+            if (answer.status !in 200..299) {
+                throw AppleSyncException("Apple answered ${answer.status}", signedOut = answer.status == 401)
+            }
+            dao.audit(audit(write.name, catalogId, "ALLOW", httpStatus = answer.status))
+            true
+        } catch (e: Exception) {
+            dao.audit(audit(write.name, catalogId, "ERROR", reason = e.message))
+            val signedOut = e is AppleSyncException && e.signedOut
+            TopToaster.error(
+                context.getString(
+                    if (signedOut) R.string.apple_write_signed_out else R.string.apple_dislike_failed,
+                ),
+            )
+            false
+        }
+    }
 
     /**
      * Put a song in the Apple library, or take it out: the player's library button, the song menu's

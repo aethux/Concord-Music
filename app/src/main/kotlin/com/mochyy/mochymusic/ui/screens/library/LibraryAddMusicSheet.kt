@@ -315,7 +315,7 @@ private fun PickerRow(song: PickerSong, checked: Boolean, onToggle: () -> Unit) 
  * white with a dark tick when ticked.
  */
 @Composable
-private fun PickerCheckbox(checked: Boolean) {
+internal fun PickerCheckbox(checked: Boolean) {
     val fill by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),

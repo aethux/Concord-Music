@@ -56,6 +56,7 @@ import com.mochyy.mochymusic.ui.component.detail.AppleAddedByAvatar
 import com.mochyy.mochymusic.ui.component.detail.AppleCreatorsMenu
 import com.mochyy.mochymusic.ui.component.detail.appleProfileRoute
 import com.mochyy.mochymusic.ui.component.LocalMenuState
+import com.mochyy.mochymusic.ui.menu.SongMenu
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.viewmodels.ApplePlaylistViewModel
 
@@ -80,7 +81,6 @@ fun ApplePlaylistScreen(
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
     val uriHandler = LocalUriHandler.current
     var showPlaylistMenu by remember { mutableStateOf(false) }
-    var menuSong by remember { mutableStateOf<Song?>(null) }
 
     val current = page
     val songs = current?.songs.orEmpty()
@@ -175,7 +175,16 @@ fun ApplePlaylistScreen(
                     if (active) playerConnection.togglePlayPause() else play(index, shuffled = false)
                 },
                 onLongClick = {},
-                onMenuClick = { menuSong = song },
+                onMenuClick = {
+                    // the app's own song sheet: same header, cards and rows as everywhere else
+                    creatorsMenu.show {
+                        SongMenu(
+                            originalSong = song,
+                            navController = navController,
+                            onDismiss = creatorsMenu::dismiss,
+                        )
+                    }
+                },
                 badge = {
                     // a shared playlist credits every row; one person's own playlist draws nothing
                     current?.addedBy?.get(song.id.removePrefix("AM_"))?.let { person ->
@@ -228,28 +237,6 @@ fun ApplePlaylistScreen(
         }
     }
 
-    menuSong?.let { song ->
-        ListDialog(onDismiss = { menuSong = null }) {
-            item {
-                MenuRow(
-                    title = stringResource(R.string.play_next),
-                    icon = R.drawable.play,
-                ) {
-                    playerConnection.playNext(listOf(song.toMediaItem()))
-                    menuSong = null
-                }
-            }
-            item {
-                MenuRow(
-                    title = stringResource(R.string.add_to_queue),
-                    icon = R.drawable.queue_music,
-                ) {
-                    playerConnection.addToQueue(listOf(song.toMediaItem()))
-                    menuSong = null
-                }
-            }
-        }
-    }
 }
 
 /** a menu row: Mochy's own list item with one of its own icons */

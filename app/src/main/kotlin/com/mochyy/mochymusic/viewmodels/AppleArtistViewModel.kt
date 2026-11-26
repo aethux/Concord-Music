@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import com.mochyy.mochymusic.applesync.PageKind
 
@@ -108,12 +107,8 @@ class AppleArtistViewModel @Inject constructor(
     }
 
     /** the artist's radio: a station seeded from the artist itself */
-    suspend fun stationQueue(): AppleStationQueue? = withContext(Dispatchers.IO) {
-        val pair = tokens.read() ?: return@withContext null
-        val client = AppleClient(pair)
-        val stationId = "ra.${artistId}"
-        AppleStationQueue(client, stationId, runCatching { client.station(stationId) }.getOrNull())
-    }
+    suspend fun stationQueue(): AppleStationQueue? =
+        AppleStationQueue.seeded(tokens, "ra.$artistId")
 
     private fun observeLibrary(name: String) {
         observer?.cancel()

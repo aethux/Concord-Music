@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -406,6 +408,7 @@ internal fun SheetActionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    active: Boolean = false,
 ) {
     SheetActionCard(
         icon = { SheetIcon(icon, size = 24.dp) },
@@ -413,6 +416,7 @@ internal fun SheetActionCard(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
+        active = active,
     )
 }
 
@@ -424,6 +428,11 @@ internal fun SheetActionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /**
+     * The action is switched on right now (shuffle, a library the song is already in): the card
+     * takes a lighter surface and a small dot, so a glance says On rather than "did it work?".
+     */
+    active: Boolean = false,
 ) {
     Column(
         verticalArrangement = Arrangement.SpaceBetween,
@@ -432,7 +441,7 @@ internal fun SheetActionCard(
             .heightIn(min = ActionCardMinHeight)
             .graphicsLayer { alpha = if (enabled) 1f else 0.35f }
             .clip(RoundedCornerShape(18.dp))
-            .background(MenuRowSurface)
+            .background(if (active) SheetCardActiveSurface else MenuRowSurface)
             .clickable(
                 enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
@@ -441,7 +450,19 @@ internal fun SheetActionCard(
             )
             .padding(16.dp),
     ) {
-        icon()
+        Box {
+            icon()
+            if (active) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 6.dp, y = (-6).dp)
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(Color.White),
+                )
+            }
+        }
         Spacer(Modifier.height(16.dp))
         Text(
             text = title,
@@ -453,6 +474,9 @@ internal fun SheetActionCard(
         )
     }
 }
+
+/** the card's surface while its action is on; MenuRowSurface is the same shape, one step lighter */
+private val SheetCardActiveSurface = Color.White.copy(alpha = 0.14f)
 
 /**
  * The Download card, following the download as it goes: "Download" to start it, a spinner while

@@ -119,7 +119,16 @@
     <string name="add_to_playlist">Add to playlist</string>
     <string name="start_an_radio">Radio</string>
     <string name="add_to_an_playlist">Add</string>
+    <string name="add_to_playlist_name">Add to %1$s</string>
+    <string name="add_to_multiple">Add to multiple playlists</string>
+    <string name="add_to_multiple_count">%1$d selected</string>
+    <string name="added_to_playlists">Added to %1$d playlists</string>
+    <string name="suggest_less">Suggest less</string>
+    <string name="undo_dislike">Undo dislike</string>
+    <string name="apple_dislike_no_id">Apple has no copy of this song to rate.</string>
+    <string name="apple_dislike_failed">Apple didn\'t take that dislike</string>
     <string name="view_artist">View artist</string>
+    <string name="view_song">View song</string>
     <string name="view_album">View album</string>
     <string name="refetch">Refetch</string>
     <string name="share">Share</string>

@@ -456,6 +456,9 @@ val LastArtistSyncKey = longPreferencesKey("last_artist_sync")
 val LastPlaylistSyncKey = longPreferencesKey("last_playlist_sync")
 val LastFullSyncKey = longPreferencesKey("last_full_sync")
 
+// the playlist the last "add to playlist" went into, so the song menu can offer it in one tap
+val LastAddedPlaylistKey = stringPreferencesKey("last_added_playlist")
+
 const val SYNC_COOLDOWN = 30 * 60L
 
 val ArtistViewTypeKey = stringPreferencesKey("artistViewType")

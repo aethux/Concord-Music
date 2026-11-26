@@ -4,6 +4,7 @@ package com.mochyy.mochymusic.ui.menu
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.datastore.preferences.core.edit
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,7 +44,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.mochyy.mochymusic.LocalDatabase
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.constants.LastAddedPlaylistKey
 import com.mochyy.mochymusic.db.entities.Playlist
+import com.mochyy.mochymusic.utils.dataStore
 import com.mochyy.mochymusic.ui.component.CreatePlaylistDialog
 import com.mochyy.mochymusic.ui.component.DefaultDialog
 import com.mochyy.mochymusic.ui.component.LocalMenuState
@@ -114,16 +117,19 @@ internal suspend fun addToPlaylistKeepingSync(
     database: com.mochyy.mochymusic.db.MusicDatabase,
     playlist: Playlist,
     ids: List<String>,
+    announce: Boolean = true,
 ) {
     if (ids.isEmpty()) return
     val browseId = playlist.playlist.browseId
+    // remembered for the song menu's one-tap row; an id that no longer resolves is simply not offered
+    runCatching { context.dataStore.edit { it[LastAddedPlaylistKey] = playlist.id } }
     if (browseId != null) {
         com.mochyy.mochymusic.importer.PlaylistAddedHere.add(context, playlist.id, ids)
         database.addSongsToPlaylistTop(playlist, ids)
     } else {
         database.addSongToPlaylist(playlist, ids)
     }
-    announceAddedToPlaylist(database, playlist, ids, context)
+    if (announce) announceAddedToPlaylist(database, playlist, ids, context)
     browseId?.let { ids.forEach { id -> YouTube.addToPlaylist(it, id) } }
 }
 
@@ -154,8 +160,39 @@ fun AddToPlaylistDialog(
     var songIds by remember { mutableStateOf<List<String>?>(null) }
     var duplicates by remember { mutableStateOf(emptyList<String>()) }
 
+    // several playlists at once: the same sheet, with a check on each row and one Add at the top
+    var multi by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf(emptySet<String>()) }
+
     // This sheet's own handle, for closing exactly it: Create playlist opens over it.
     val sheet = remember { arrayOfNulls<PopupSheetHandle>(1) }
+
+    val addToMany: () -> Unit = {
+        val chosen = playlists.value.filter { it.id in picked }
+        multi = false
+        picked = emptySet()
+        sheet[0]?.dismiss()
+        currentOnDismiss()
+        if (chosen.isNotEmpty()) {
+            scope.launch(Dispatchers.IO) {
+                var touched = 0
+                chosen.forEach { playlist ->
+                    val ids = currentOnGetSong(playlist)
+                    // a playlist that already holds the song is left alone, exactly as the
+                    // single-playlist flow's "skip duplicates" does
+                    val keep = ids.filterNot { it in database.playlistDuplicates(playlist.id, ids) }
+                    if (keep.isNotEmpty()) {
+                        addToPlaylistKeepingSync(context, database, playlist, keep, announce = false)
+                        touched++
+                    }
+                }
+                com.mochyy.mochymusic.ui.component.TopToaster.show(
+                    text = context.getString(R.string.added_to_playlists, touched),
+                    iconRes = R.drawable.playlist_add,
+                )
+            }
+        }
+    }
 
     val pick: (Playlist) -> Unit = { playlist ->
         selectedPlaylist = playlist
@@ -193,7 +230,18 @@ fun AddToPlaylistDialog(
                         currentOnDismiss()
                     },
                 ) {
-                    AddToPlaylistContent(playlists = playlists, onPick = pick)
+                    AddToPlaylistContent(
+                        playlists = playlists,
+                        onPick = pick,
+                        multi = multi,
+                        picked = picked,
+                        onEnterMulti = { multi = true; picked = emptySet() },
+                        onCancelMulti = { multi = false; picked = emptySet() },
+                        onTogglePick = { playlist ->
+                            picked = if (playlist.id in picked) picked - playlist.id else picked + playlist.id
+                        },
+                        onAddMany = addToMany,
+                    )
                 }
             onDispose {
                 if (!closed) sheet[0]?.dismiss()
@@ -271,6 +319,12 @@ fun AddToPlaylistDialog(
 private fun AddToPlaylistContent(
     playlists: State<List<Playlist>>,
     onPick: (Playlist) -> Unit,
+    multi: Boolean,
+    picked: Set<String>,
+    onEnterMulti: () -> Unit,
+    onCancelMulti: () -> Unit,
+    onTogglePick: (Playlist) -> Unit,
+    onAddMany: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     val all = playlists.value
@@ -298,6 +352,61 @@ private fun AddToPlaylistContent(
         }
 
     Column(modifier = Modifier.fillMaxWidth()) {
+        // Cider's "Add to Multiple…", in this sheet rather than a second one: one row turns the list
+        // into a checklist, and the same sheet's own pill takes every tick at once.
+        if (multi) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.add_to_multiple_count, picked.size),
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onCancelMulti) {
+                    Text(
+                        text = stringResource(android.R.string.cancel),
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 13.sp,
+                    )
+                }
+                SheetPillButton(
+                    text = stringResource(R.string.add_to_an_playlist),
+                    onClick = onAddMany,
+                    enabled = picked.isNotEmpty(),
+                    modifier = Modifier.width(132.dp),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = RemoteFocus,
+                            onClick = onEnterMulti,
+                        ).padding(vertical = 6.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.playlist_add),
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    text = stringResource(R.string.add_to_multiple),
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+
         SheetSearchField(
             value = query,
             onValueChange = { query = it },
@@ -314,7 +423,12 @@ private fun AddToPlaylistContent(
             if (sections.recents.isNotEmpty()) {
                 item(key = "recents-label") { SheetLabel(stringResource(R.string.sheet_label_recents), Modifier.padding(bottom = 6.dp)) }
                 items(sections.recents, key = { "recent-${it.id}" }) { playlist ->
-                    PlaylistPickRow(playlist = playlist, onClick = { onPick(playlist) })
+                    PlaylistPickRow(
+                        playlist = playlist,
+                        onClick = { if (multi) onTogglePick(playlist) else onPick(playlist) },
+                        showCheck = multi,
+                        checked = multi && playlist.id in picked,
+                    )
                 }
                 item(key = "recents-gap") { Spacer(Modifier.height(14.dp)) }
             }
@@ -327,7 +441,12 @@ private fun AddToPlaylistContent(
                     )
                 }
                 items(sections.rest, key = { "all-${it.id}" }) { playlist ->
-                    PlaylistPickRow(playlist = playlist, onClick = { onPick(playlist) })
+                    PlaylistPickRow(
+                        playlist = playlist,
+                        onClick = { if (multi) onTogglePick(playlist) else onPick(playlist) },
+                        showCheck = multi,
+                        checked = multi && playlist.id in picked,
+                    )
                 }
             } else if (sections.recents.isEmpty()) {
                 item(key = "empty") {
@@ -358,6 +477,8 @@ private class Sections(
 private fun PlaylistPickRow(
     playlist: Playlist,
     onClick: () -> Unit,
+    showCheck: Boolean = false,
+    checked: Boolean = false,
 ) {
     val count =
         if (playlist.songCount == 0 && playlist.playlist.remoteSongCount != null) {
@@ -407,6 +528,10 @@ private fun PlaylistPickRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+        if (showCheck) {
+            Spacer(Modifier.width(12.dp))
+            com.mochyy.mochymusic.ui.screens.library.PickerCheckbox(checked = checked)
         }
     }
 }

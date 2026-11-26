@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -121,10 +122,16 @@ fun PlaylistMenu(
 
     val isPinned by remember(database, playlist.id) { database.speedDialDao.isPinned(playlist.id) }.collectAsState(initial = false)
     val resync = rememberPlaylistResync(playlist.id, playlist.playlist.browseId, navController, onDismiss)
+    val folderScope = rememberCoroutineScope()
 
 
     // Apple's folders live in their own sheet; this one only offers the way in
     val isApplePlaylist = playlist.id.startsWith("AM_PL_")
+    // ...and, when Apple has this playlist inside a folder, the one-tap way out of it (Cider's
+    // "Move to Top": the same parent write to `p.playlistsroot`, offered where the row is)
+    val folderTree by folderTree(playlist.id)
+    val folderId = folderTree.parentOf[playlist.id]
+    val folderName = folderTree.folders.firstOrNull { it.id == folderId }?.name
 
     LaunchedEffect(songs) {
         if (songs.isEmpty()) return@LaunchedEffect
@@ -424,6 +431,38 @@ fun PlaylistMenu(
                                             playlist = playlist,
                                             onDismiss = menuState::dismiss,
                                         )
+                                    }
+                                }
+                            )
+                        )
+                    }
+                    // Cider's "Move to Top": back to the playlists root, one tap, only when Apple
+                    // has this playlist in a folder
+                    if (isApplePlaylist && folderId != null) {
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.playlist_remove_from_folder)) },
+                                description = folderName?.let { name -> { Text(text = name) } },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_folder_small),
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    onDismiss()
+                                    folderScope.launch(Dispatchers.IO) {
+                                        val done = ApplePlaylistWrites.movePlaylist(
+                                            context = context,
+                                            localId = playlist.id,
+                                            remoteId = playlist.id.removePrefix("AM_PL_"),
+                                            folderId = null,
+                                        )
+                                        withContext(Dispatchers.Main) {
+                                            if (done) {
+                                                TopToaster.show(context.getString(R.string.playlist_remove_from_folder))
+                                            }
+                                        }
                                     }
                                 }
                             )

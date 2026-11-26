@@ -443,7 +443,7 @@ private fun PlaylistPickRow(
 
 /** The folder tree, observed: a write made on one of these sheets lands on the page behind it. */
 @Composable
-private fun folderTree(key: String): androidx.compose.runtime.State<PlaylistFolders.Tree> {
+internal fun folderTree(key: String): androidx.compose.runtime.State<PlaylistFolders.Tree> {
     val app = LocalContext.current.applicationContext
     return produceState(
         initialValue = PlaylistFolders.Tree(emptyList(), emptyMap()),

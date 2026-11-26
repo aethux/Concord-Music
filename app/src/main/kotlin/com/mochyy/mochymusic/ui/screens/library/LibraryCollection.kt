@@ -654,7 +654,7 @@ internal fun CollaborativeMark(
             painter = painterResource(R.drawable.group_filled),
             contentDescription = stringResource(R.string.playlist_collaborative),
             tint = Color.White.copy(alpha = 0.78f),
-            modifier = modifier.size(18.dp),
+            modifier = modifier.size(15.dp),
         )
         return
     }
@@ -702,7 +702,7 @@ private fun <T> CollectionFolderCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onToggle)
-                .padding(horizontal = 16.dp, vertical = 13.dp),
+                .padding(horizontal = 16.dp, vertical = 17.dp),
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_folder_small),

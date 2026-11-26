@@ -52,6 +52,39 @@ internal object AppleLibrary {
         )
     }
 
+    /**
+     * `/v1/me/library/artists` rows: the account's own artist list, keyed by Apple's `r.…` ids.
+     * `attributes` carries the name and nothing else; `include=catalog` puts the catalogue twin
+     * (with its picture) in `relationships.catalog`, and that is allowed to be empty.
+     */
+    fun artists(page: JsonObject): List<RemoteLibraryArtist> = page["data"].array().mapNotNull { item ->
+        val obj = item.obj() ?: return@mapNotNull null
+        val id = obj.idString("id") ?: return@mapNotNull null
+        val attributes = obj["attributes"].obj()
+        val catalog = obj["relationships"].obj()
+            ?.get("catalog").obj()
+            ?.get("data").array()
+            ?.firstOrNull()?.obj()
+        val catalogAttributes = catalog?.get("attributes").obj()
+        val name = attributes?.string("name")?.takeIf { it.isNotBlank() }
+            ?: catalogAttributes?.string("name")?.takeIf { it.isNotBlank() }
+            ?: return@mapNotNull null
+        RemoteLibraryArtist(
+            id = id,
+            name = name,
+            catalogId = catalog?.idString("id"),
+            artworkUrl = catalogAttributes?.get("artwork").obj()?.string("url"),
+        )
+    }
+
+    /** The catalogue artist behind a library one: `?include=catalog`, the read Cider uses. */
+    fun catalogArtistId(page: JsonObject): String? = page["data"].array().firstOrNull()?.obj()
+        ?.get("relationships").obj()
+        ?.get("catalog").obj()
+        ?.get("data").array()
+        ?.firstOrNull()?.obj()
+        ?.idString("id")
+
     /** `personal-social-profiles`: the account's own name, handle and picture. */
     fun socialProfile(page: JsonObject): AppleProfile? {
         val attributes = page["data"].array().firstOrNull()?.obj()?.get("attributes").obj() ?: return null
@@ -118,6 +151,26 @@ internal object AppleLibrary {
             ?.get("data").array()
             ?.firstOrNull()?.obj()
         val albumAttributes = albumObj?.get("attributes").obj()
+        // Apple's artist grouping: the library row's `relationships.artists` is one library artist
+        // and is sometimes a combined "A & B" entity; the catalogue twin, when the read included it,
+        // carries the split list under its own `relationships.artists` — that is the one to keep.
+        val relationships = obj["relationships"].obj()
+        val catalogObj = relationships?.get("catalog").obj()
+            ?.get("data").array()
+            ?.firstOrNull()?.obj()
+        fun artistRows(owner: JsonObject?): List<RemoteArtist> = owner
+            ?.get("relationships").obj()
+            ?.get("artists").obj()
+            ?.get("data").array()
+            .orEmpty()
+            .mapNotNull { item ->
+                val row = item.obj() ?: return@mapNotNull null
+                val artistId = row.idString("id") ?: return@mapNotNull null
+                val artistName = row["attributes"].obj()?.string("name")?.takeIf { it.isNotBlank() }
+                    ?: return@mapNotNull null
+                RemoteArtist(id = artistId, name = artistName)
+            }
+        val artists = artistRows(catalogObj).ifEmpty { artistRows(obj) }.distinctBy { it.id }
         RemoteSong(
             libraryId = libraryId,
             catalogId = attributes?.get("playParams").obj()?.string("catalogId"),
@@ -136,6 +189,7 @@ internal object AppleLibrary {
             albumTrackCount = albumAttributes?.long("trackCount")?.toInt(),
             albumYear = albumAttributes?.string("releaseDate")?.take(4)?.toIntOrNull(),
             trackNumber = attributes?.long("trackNumber")?.toInt(),
+            artists = artists,
         )
     }
 

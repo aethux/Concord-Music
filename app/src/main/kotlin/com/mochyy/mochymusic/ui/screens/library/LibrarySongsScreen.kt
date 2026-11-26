@@ -29,11 +29,15 @@ import androidx.navigation.NavController
 import com.mochyy.mochymusic.LocalPlayerAwareWindowInsets
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.constants.LibrarySongsSortDescendingKey
+import com.mochyy.mochymusic.constants.LibrarySongsSortTypeKey
+import com.mochyy.mochymusic.constants.SongSortType
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.ui.component.LocalMenuState
 import com.mochyy.mochymusic.ui.component.SongSwipeBox
+import com.mochyy.mochymusic.ui.component.detail.PlaylistSortControl
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackBones
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.librarySwipeAction
@@ -45,7 +49,10 @@ import com.mochyy.mochymusic.ui.screens.playlist.GeneratedNoResults
 import com.mochyy.mochymusic.ui.screens.playlist.GeneratedPlaylistPage
 import com.mochyy.mochymusic.ui.utils.backToMain
 import com.mochyy.mochymusic.utils.makeTimeString
+import com.mochyy.mochymusic.utils.rememberEnumPreference
+import com.mochyy.mochymusic.utils.rememberPreference
 import com.mochyy.mochymusic.viewmodels.LibraryHomeViewModel
+import com.mochyy.mochymusic.viewmodels.sortedForSongSort
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -65,7 +72,7 @@ private sealed interface SongRow {
 // the rows a to z under their letters, and the songs in that same order for play and shuffle
 private class SongLayout(val rows: List<SongRow>, val ordered: List<Song>)
 
-private fun songLayout(songs: List<Song>, query: String): SongLayout {
+private fun songLayout(songs: List<Song>, query: String, sortType: SongSortType, descending: Boolean): SongLayout {
     val q = query.trim()
     val visible = if (q.isEmpty()) {
         songs
@@ -74,16 +81,24 @@ private fun songLayout(songs: List<Song>, query: String): SongLayout {
     }
     val rows = ArrayList<SongRow>(visible.size + 30)
     val ordered = ArrayList<Song>(visible.size)
-    indexSections(visible) { it.song.title }.forEach { (section, entries) ->
-        rows += SongRow.Heading("h_${section.key}", section.label)
-        entries.forEach { song ->
-            val subtitle = listOfNotNull(
-                song.artists.joinToString { it.name }.ifBlank { null },
-                song.song.duration.takeIf { it > 0 }?.let { makeTimeString(it * 1000L) },
-            ).joinToString(" • ")
-            rows += SongRow.Track(song, subtitle)
-            ordered += song
+    fun add(song: Song) {
+        val subtitle = listOfNotNull(
+            song.artists.joinToString { it.name }.ifBlank { null },
+            song.song.duration.takeIf { it > 0 }?.let { makeTimeString(it * 1000L) },
+        ).joinToString(" • ")
+        rows += SongRow.Track(song, subtitle)
+        ordered += song
+    }
+    if (sortType == SongSortType.NAME && !descending) {
+        // A to Z is the one order the letter headings can tell the truth about
+        indexSections(visible) { it.song.title }.forEach { (section, entries) ->
+            rows += SongRow.Heading("h_${section.key}", section.label)
+            entries.forEach { add(it) }
         }
+    } else {
+        visible
+            .sortedForSongSort(sortType, descending) { list -> list.sortedBy { it.song.inLibrary ?: it.song.date } }
+            .forEach { add(it) }
     }
     return SongLayout(rows, ordered)
 }
@@ -105,9 +120,11 @@ fun LibrarySongsScreen(
     val currentQueue by playerConnection.queueTitle.collectAsState()
 
     var query by remember { mutableStateOf(TextFieldValue()) }
+    val (sortType, onSortTypeChange) = rememberEnumPreference(LibrarySongsSortTypeKey, SongSortType.CREATE_DATE)
+    val (sortDescending, onSortDescendingChange) = rememberPreference(LibrarySongsSortDescendingKey, true)
     // sorting thousands of titles waits off the main thread, so the page opens straight away
-    val layout by produceState<SongLayout?>(null, songs, query.text) {
-        value = withContext(Dispatchers.Default) { songLayout(songs, query.text) }
+    val layout by produceState<SongLayout?>(null, songs, query.text, sortType, sortDescending) {
+        value = withContext(Dispatchers.Default) { songLayout(songs, query.text, sortType, sortDescending) }
     }
     // the bones stand in until the sort is here, and a page measured with only those in it loses
     // the position it was left at — hence the restored state
@@ -150,6 +167,19 @@ fun LibrarySongsScreen(
         query = query,
         onQueryChange = { query = it },
         searchPlaceholder = stringResource(R.string.lib_songs_search),
+        sortControl = {
+            PlaylistSortControl(
+                current = sortType,
+                descending = sortDescending,
+                options = SongSortType.entries,
+                label = { songSortLabel(it) },
+                onSelect = { type ->
+                    onSortTypeChange(type)
+                    onSortDescendingChange(type.readsNewestFirst())
+                },
+                onToggleDirection = { onSortDescendingChange(!sortDescending) },
+            )
+        },
         onBackClick = { navController.navigateUp() },
         onBackLongClick = { navController.backToMain() },
     ) {
@@ -195,3 +225,17 @@ fun LibrarySongsScreen(
         item(key = "bottom_spacer", contentType = "spacer") { Spacer(Modifier.height(50.dp)) }
     }
 }
+
+// what a date or a play count reads as: newest and busiest first. A name or an artist reads A to Z.
+private fun SongSortType.readsNewestFirst(): Boolean =
+    this == SongSortType.CREATE_DATE || this == SongSortType.PLAY_TIME
+
+@Composable
+private fun songSortLabel(type: SongSortType): String = stringResource(
+    when (type) {
+        SongSortType.CREATE_DATE -> R.string.sort_by_create_date
+        SongSortType.NAME -> R.string.sort_by_name
+        SongSortType.ARTIST -> R.string.sort_by_artist
+        SongSortType.PLAY_TIME -> R.string.sort_by_play_time
+    },
+)

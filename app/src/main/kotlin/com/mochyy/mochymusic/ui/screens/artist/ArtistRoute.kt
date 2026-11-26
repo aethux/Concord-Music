@@ -69,7 +69,16 @@ class ArtistRouteViewModel @Inject constructor(
         if (!hasApple) return@withContext ArtistTarget.YouTube
 
         val pair = tokens.read() ?: return@withContext ArtistTarget.YouTube
-        val appleId = runCatching { AppleClient(pair).artistIdByName(name) }.getOrNull()
+        val client = AppleClient(pair)
+        // an `r.…` row is Apple's own library artist. Its catalogue twin comes from Cider's
+        // `?include=catalog` read; when Apple has none, Mochy's page draws the library rows —
+        // deliberately no name search, which answers a different artist for a common name
+        if (row != null && row.id.startsWith("r.")) {
+            val appleId = runCatching { client.catalogIdForLibraryArtist(row.id) }.getOrNull()
+            return@withContext if (appleId != null) ArtistTarget.Apple(appleId) else ArtistTarget.YouTube
+        }
+
+        val appleId = runCatching { client.artistIdByName(name) }.getOrNull()
         if (appleId != null) ArtistTarget.Apple(appleId) else ArtistTarget.YouTube
     }
 }

@@ -86,6 +86,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.Collator
+import java.util.Locale
 
 /** one entry on a library page, as both the list and the grid draw it */
 @Immutable
@@ -99,6 +101,29 @@ data class CollectionEntry(
     // albums and playlists open growing out of their cover
     val sharedElementKey: String? = null,
 )
+
+/**
+ * How a collection page is ordered. [comparator] sorts the list ascending; [descending] turns it
+ * round; [sectioned] is true only when A-Z would be telling the truth, so a date or a count sorts
+ * without letter headings over it. [control] is the "date added ⌄" line under the buttons, the same
+ * one Liked songs wears.
+ */
+class CollectionSorting<T>(
+    val descending: Boolean,
+    val sectioned: Boolean,
+    val comparator: Comparator<T>?,
+    val control: @Composable () -> Unit,
+)
+
+/** Names compare the way people read them: "Ä" files with "A", not after "Z". */
+internal fun libraryCollator(): Collator =
+    Collator.getInstance(Locale.getDefault()).apply { strength = Collator.PRIMARY }
+
+/** A comparator on a text key, collated. Built once per sort and used off the main thread. */
+internal fun <T> byCollated(selector: (T) -> String): Comparator<T> {
+    val collator = libraryCollator()
+    return Comparator { a, b -> collator.compare(selector(a), selector(b)) }
+}
 
 private const val GridColumns = 3
 private val TileShape = RoundedCornerShape(14.dp)
@@ -136,6 +161,7 @@ private fun <T> layoutOf(
     query: String,
     grid: Boolean,
     secondsOf: ((T) -> Int)?,
+    sort: CollectionSorting<T>?,
 ): CollectionLayout<T> {
     val pairs = items.map { it to toEntry(it) }
     val q = query.trim()
@@ -144,21 +170,45 @@ private fun <T> layoutOf(
     } else {
         pairs.filter { (_, e) -> e.title.contains(q, ignoreCase = true) || e.subtitle?.contains(q, ignoreCase = true) == true }
     }
-    val sections = indexSections(visible) { it.second.title }
-    val rows = ArrayList<CollectionRow<T>>(visible.size + sections.size)
+    // a null comparator leaves the list in the order it arrived in (newest first, from the
+    // database); descending then has nothing to turn round, which is the order Apple gives too
+    val itemComparator = sort?.comparator
+    val orderedPairs = when {
+        sort == null || sort.sectioned || itemComparator == null -> visible
+        else -> {
+            val byItem = Comparator<Pair<T, CollectionEntry>> { a, b -> itemComparator.compare(a.first, b.first) }
+            val sorted = visible.sortedWith(byItem)
+            if (sort.descending) sorted.asReversed() else sorted
+        }
+    }
+    val sections = if (sort?.sectioned == true) {
+        indexSections(orderedPairs) { it.second.title }
+    } else {
+        emptyList()
+    }
+    val rows = ArrayList<CollectionRow<T>>(orderedPairs.size + sections.size)
     val firstRowOf = HashMap<String, Int>()
-    sections.forEach { (section, entries) ->
-        firstRowOf[section.key] = rows.size
-        rows += CollectionRow.Letter(section)
+    if (sections.isEmpty()) {
+        // no letters: one row an item, or tiles three to a row
         if (grid) {
-            entries.chunked(GridColumns).forEachIndexed { i, chunk -> rows += CollectionRow.Tiles("t_${section.key}_$i", chunk) }
+            orderedPairs.chunked(GridColumns).forEachIndexed { i, chunk -> rows += CollectionRow.Tiles("t_$i", chunk) }
         } else {
-            entries.forEach { (item, entry) -> rows += CollectionRow.Single(item, entry) }
+            orderedPairs.forEach { (item, entry) -> rows += CollectionRow.Single(item, entry) }
+        }
+    } else {
+        sections.forEach { (section, entries) ->
+            firstRowOf[section.key] = rows.size
+            rows += CollectionRow.Letter(section)
+            if (grid) {
+                entries.chunked(GridColumns).forEachIndexed { i, chunk -> rows += CollectionRow.Tiles("t_${section.key}_$i", chunk) }
+            } else {
+                entries.forEach { (item, entry) -> rows += CollectionRow.Single(item, entry) }
+            }
         }
     }
     return CollectionLayout(
         rows = rows,
-        ordered = sections.flatMap { (_, entries) -> entries.map { it.first } },
+        ordered = if (sections.isEmpty()) orderedPairs.map { it.first } else sections.flatMap { (_, entries) -> entries.map { it.first } },
         sections = sections.map { it.first },
         firstRowOf = firstRowOf,
         count = items.size,
@@ -183,6 +233,7 @@ fun <T> LibraryCollectionPage(
     onMenu: (T) -> Unit,
     onPlay: (ordered: List<T>, shuffle: Boolean) -> Unit,
     navController: NavController,
+    sort: CollectionSorting<T>,
     roundCovers: Boolean = false,
     secondsOf: ((T) -> Int)? = null,
     rowWrapper: @Composable (item: T, row: @Composable () -> Unit) -> Unit = { _, row -> row() },
@@ -198,8 +249,8 @@ fun <T> LibraryCollectionPage(
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by remember { mutableStateOf(TextFieldValue()) }
     val searchFocus = remember { FocusRequester() }
-    val layout by produceState<CollectionLayout<T>?>(null, items, query.text, grid) {
-        value = withContext(Dispatchers.Default) { layoutOf(items, toEntry, query.text, grid, secondsOf) }
+    val layout by produceState<CollectionLayout<T>?>(null, items, query.text, grid, sort) {
+        value = withContext(Dispatchers.Default) { layoutOf(items, toEntry, query.text, grid, secondsOf, sort) }
     }
     // the bones stand in until the sort is here, and a list measured with only those in it loses
     // the position it was left at
@@ -280,6 +331,7 @@ fun <T> LibraryCollectionPage(
                     }
                 },
                 actionsEnd = { ViewSwitch(grid = grid, onChange = { grid = it }) },
+                sortControl = sort.control,
                 below = if (searching) {
                     {
                         GeneratedSearchCapsule(

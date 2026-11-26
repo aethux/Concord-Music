@@ -43,6 +43,13 @@ class AppleLibraryPull(
             val songs = client.librarySongs { read ->
                 AppleSyncStatus.update(phase = "Reading your library…", songs = read, totalSongs = 0)
             }
+            // diagnostic: how many rows actually carried Apple's artist relationship this read
+            timber.log.Timber.d(
+                "ApplePull: %d songs, %d with artists, %d with more than one",
+                songs.size,
+                songs.count { it.artists.isNotEmpty() },
+                songs.count { it.artists.size > 1 },
+            )
             AppleSyncStatus.update(phase = "Reading your favourites…", songs = songs.size, totalSongs = songs.size)
 
             // favourites are a rating, and they come in one call per hundred songs

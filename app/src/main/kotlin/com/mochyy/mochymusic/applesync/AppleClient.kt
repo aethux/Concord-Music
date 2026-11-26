@@ -127,7 +127,9 @@ class AppleClient(
         // read at once instead of one `next` URL after another. Eight at a time; a 429 costs one
         // `Retry-After` wait and the read carries on. Measured on 1488 songs: fifteen pages in a row
         // took 26 s, four at a time 10 s, eight at a time most of that again.
-        val query = "include=albums&limit=100"
+        // `include=albums,artists,catalog` plus the catalogue row's own artists: the library row's
+        // single artist is a grouping bucket, the catalogue twin carries the split artists
+        val query = "include=albums,artists,catalog&include[songs]=artists&limit=100"
         val first = page("/v1/me/library/songs?$query") ?: return emptyList()
         val songs = AppleLibrary.songs(first).toMutableList()
         onPage(songs.size)
@@ -135,7 +137,10 @@ class AppleClient(
         val total = first["meta"].obj()?.long("total")?.toInt() ?: return songs
         if (total <= songs.size) return songs
 
-        val gate = Semaphore(8)
+        val gate = Semaphore(4)
+        // each page is parsed inside its own read and only the songs are kept: the JSON tree of a
+        // page with `include=catalog` is far larger than its rows, and holding fourteen of them at
+        // once is what ran this phone's 256 MB debug heap out of memory
         val rest = coroutineScope {
             (songs.size until total step 100)
                 .take((maxPages - 1).coerceAtLeast(0))
@@ -143,19 +148,46 @@ class AppleClient(
                     async(Dispatchers.IO) {
                         gate.withPermit {
                             runCatching {
-                                page("/v1/me/library/songs?$query&offset=$offset")
+                                page("/v1/me/library/songs?$query&offset=$offset")?.let(AppleLibrary::songs)
                             }.getOrNull()
                         }
                     }
                 }
                 .awaitAll()
         }
-        for (response in rest) {
-            if (response == null) continue
-            songs += AppleLibrary.songs(response)
+        for (page in rest) {
+            if (page == null) continue
+            songs += page
             onPage(songs.size)
         }
         return songs
+    }
+
+    /**
+     * Cider's library-artists read: every artist in the account's library, keyed by Apple's own
+     * `r.…` ids and sorted by name. `include=catalog` carries the catalogue twin (and whatever
+     * artwork Apple has for it). `all()` keeps `sort` and `include` on every page, because Apple's
+     * `next` is a bare offset URL and drops them.
+     */
+    suspend fun libraryArtists(maxPages: Int = 20): List<RemoteLibraryArtist> {
+        val query = "limit=100&sort=name&include=catalog&art%5Burl%5D=f"
+        return all(
+            first = "/v1/me/library/artists?$query",
+            maxPages = maxPages,
+            parse = AppleLibrary::artists,
+            keep = query,
+        )
+    }
+
+    /**
+     * The catalogue artist behind an `r.…` library artist. Cider's read: the `/catalog` suffix form
+     * 404s for artists, so this has to be `?include=catalog`, and the relationship can be empty.
+     */
+    suspend fun catalogIdForLibraryArtist(libraryArtistId: String): String? {
+        val page = runCatching {
+            page("/v1/me/library/artists/$libraryArtistId?include=catalog&fields%5Bartists%5D=name,url,artwork")
+        }.getOrNull() ?: return null
+        return AppleLibrary.catalogArtistId(page)
     }
 
     /** Catalog ids for a search term, best match first. Reads only; used to pick sandbox songs. */

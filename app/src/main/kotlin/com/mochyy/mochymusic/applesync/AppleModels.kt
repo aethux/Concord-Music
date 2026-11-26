@@ -29,6 +29,19 @@ data class RemoteSong(
     val albumYear: Int? = null,
     /** Where the song sits on its album, so an album page lists it in Apple's order. */
     val trackNumber: Int? = null,
+    /**
+     * The individual artists Apple names for this song. Its library row's own relationship is one
+     * library artist (`r.…`) and is sometimes a combined "A & B" entity; the catalogue twin's
+     * `relationships.artists` is the split list (numeric catalogue ids) and is preferred when the
+     * read carried it. This is the grouping Apple's and Cider's artist lists show.
+     */
+    val artists: List<RemoteArtist> = emptyList(),
+)
+
+/** One artist a song credits: the id its page is opened by, and the name a row shows. */
+data class RemoteArtist(
+    val id: String,
+    val name: String,
 )
 
 /** A song on Apple's catalogue. The id here is the one a rating or a library add is keyed by. */
@@ -95,6 +108,19 @@ data class AppleAuditReport(
 
 /** A failure worth showing to the user; [signedOut] means the fix is to sign in again. */
 class AppleSyncException(message: String, val signedOut: Boolean = false) : Exception(message)
+
+/**
+ * One row of `/v1/me/library/artists`, Cider's own list. [id] is Apple's per-account library id
+ * (`r.…`) and is what an artist row is keyed by here; [catalogId] is the catalogue twin when the
+ * list's `include=catalog` carries one, which Apple does not always have.
+ */
+data class RemoteLibraryArtist(
+    val id: String,
+    val name: String,
+    val catalogId: String? = null,
+    /** The catalogue twin's picture; the library row itself has no artwork at all. */
+    val artworkUrl: String? = null,
+)
 
 /** The epoch and ownership tables key on "kind:id", because both halves together identify an object. */
 internal fun AppleRef.key(): String = "${kind.name}:$id"

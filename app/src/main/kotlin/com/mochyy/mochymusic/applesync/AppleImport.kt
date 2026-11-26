@@ -51,7 +51,7 @@ class AppleImport(
     /** A song that is not in the library yet, resolved as far as the reads allow. */
     private class NewSong(
         val song: SongEntity,
-        val artist: ArtistEntity,
+        val artists: List<ArtistEntity>,
         val track: AppleTrackEntity,
         val favourite: Boolean,
     )
@@ -143,6 +143,10 @@ class AppleImport(
             .getOrDefault(emptyList())
             .map { it.id }
             .toSet()
+        // every song's artist links, in one read: a song Apple files under a different artist than
+        // the row we wrote last time is relinked below instead of paying a query per song
+        val linksBySong = runCatching { database.songArtistLinks().groupBy { it.songId } }
+            .getOrDefault(emptyMap())
 
         var added = 0
         var skipped = 0
@@ -153,6 +157,20 @@ class AppleImport(
         val pendingThumbnails = ArrayList<ThumbnailWrite>()
         val newSongs = ArrayList<NewSong>()
         val artistIds = HashMap<String, String>()
+        // (song, Apple's artists): applied in one transaction once the loop is done
+        val relinks = ArrayList<Pair<String, List<RemoteArtist>>>()
+
+        /**
+         * Apple names the artists of every library song. A row written before this read exists
+         * carries the combined `artistName` line instead, so it is moved onto Apple's own artists
+         * here — the same grouping Apple's and Cider's Artists lists show.
+         */
+        fun noteArtists(songId: String, song: RemoteSong) {
+            if (song.artists.isEmpty()) return
+            val current = linksBySong[songId].orEmpty().map { it.artistId }.toSet()
+            if (current == song.artists.map { it.id }.toSet()) return
+            relinks += songId to song.artists.distinctBy { it.id }
+        }
 
         /** Writes the mapping only when one of its fields actually moved. */
         fun noteTrack(songId: String, catalogId: String, song: RemoteSong, state: String) {
@@ -271,17 +289,32 @@ class AppleImport(
                 // signed one is renewed instead of being left to expire
                 noteArtwork(songId, song)
                 applyFavourite(songId, favourite, songId in likedNow)
+                noteArtists(songId, song)
                 return@forEachIndexed
             }
 
             // the import writes Apple's artwork only when the person has not chosen one
             val chosenCover = covers[CoverOverrides.key(CoverOverrides.Kind.SONG, songId)]
-            // an Apple artist carries no artwork here, so a picture chosen by hand is all it has
-            val artistName = song.artist.ifBlank { "Unknown artist" }
-            val artistId = artistIds.getOrPut(artistName) {
-                database.artistByName(artistName)?.id ?: ArtistEntity.generateArtistId()
-            }
-            val artistCover = covers[CoverOverrides.key(CoverOverrides.Kind.ARTIST, artistId)]
+            // Apple's own artists for this song, when the read carried them; the combined line is
+            // only the fallback for a row Apple gave no relationship for
+            val artists = song.artists.ifEmpty {
+                val fallbackName = song.artist.ifBlank { "Unknown artist" }
+                listOf(
+                    RemoteArtist(
+                        id = artistIds.getOrPut(fallbackName) {
+                            database.artistByName(fallbackName)?.id ?: ArtistEntity.generateArtistId()
+                        },
+                        name = fallbackName,
+                    ),
+                )
+            }.map { artist ->
+                ArtistEntity(
+                    id = artist.id,
+                    name = artist.name,
+                    // an Apple artist carries no artwork here, so a picture chosen by hand is all it has
+                    thumbnailUrl = covers[CoverOverrides.key(CoverOverrides.Kind.ARTIST, artist.id)],
+                )
+            }.distinctBy { it.id }
 
             newSongs += NewSong(
                 song = SongEntity(
@@ -301,7 +334,7 @@ class AppleImport(
                     // the only place Apple rows are created.
                     source = SongSource.Apple,
                 ),
-                artist = ArtistEntity(id = artistId, name = artistName, thumbnailUrl = artistCover),
+                artists = artists,
                 track = AppleTrackEntity(
                     songId = songId,
                     catalogId = catalogId,
@@ -322,8 +355,10 @@ class AppleImport(
                     batch.forEach { new ->
                         insert(new.song)
                         // insert is IGNORE: an artist that already exists keeps whatever picture it has
-                        insert(new.artist)
-                        insert(SongArtistMap(songId = new.song.id, artistId = new.artist.id, position = 0))
+                        new.artists.forEachIndexed { position, artist ->
+                            insert(artist)
+                            insert(SongArtistMap(songId = new.song.id, artistId = artist.id, position = position))
+                        }
                     }
                 }
             }.isSuccess
@@ -335,8 +370,10 @@ class AppleImport(
                     runCatching {
                         database.transaction {
                             insert(new.song)
-                            insert(new.artist)
-                            insert(SongArtistMap(songId = new.song.id, artistId = new.artist.id, position = 0))
+                            new.artists.forEachIndexed { position, artist ->
+                                insert(artist)
+                                insert(SongArtistMap(songId = new.song.id, artistId = artist.id, position = position))
+                            }
                         }
                     }.isSuccess
                 }
@@ -348,6 +385,22 @@ class AppleImport(
                 if (new.favourite) liked++
             }
             skipped += batch.size - written.size
+        }
+
+        // the songs already in the library move onto Apple's own artists: batched like the inserts,
+        // because one transaction for a 1,400-song library is what ran the debug heap out of memory
+        relinks.chunked(batchSize).forEach { batch ->
+            runCatching {
+                database.transaction {
+                    batch.forEach { (songId, artists) ->
+                        clearSongArtistLinks(songId)
+                        artists.forEachIndexed { position, artist ->
+                            insert(ArtistEntity(id = artist.id, name = artist.name))
+                            insert(SongArtistMap(songId = songId, artistId = artist.id, position = position))
+                        }
+                    }
+                }
+            }.onFailure { timber.log.Timber.e(it, "relinking %d songs onto Apple's artists failed", batch.size) }
         }
 
         if (pendingThumbnails.isNotEmpty()) {

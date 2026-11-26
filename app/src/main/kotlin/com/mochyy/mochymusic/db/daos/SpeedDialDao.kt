@@ -27,6 +27,10 @@ interface SpeedDialDao {
     @Query("SELECT EXISTS(SELECT * FROM speed_dial_item WHERE id = :id)")
     fun isPinned(id: String): Flow<Boolean>
 
+    /** An artist re-keyed onto Apple's id keeps its pin: the card's id follows the row. */
+    @Query("UPDATE OR IGNORE speed_dial_item SET id = :to WHERE id = :from AND type = 'ARTIST'")
+    fun moveArtistPin(from: String, to: String)
+
     companion object {
         /**
          * Pinning is meant to surface a handful of things you reach for constantly, on a Library

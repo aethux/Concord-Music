@@ -35,6 +35,7 @@ import com.mochyy.mochymusic.db.entities.LyricsEntity
 import com.mochyy.mochymusic.db.entities.PlayCountEntity
 import com.mochyy.mochymusic.db.entities.Playlist
 import com.mochyy.mochymusic.db.entities.PlaylistEntity
+import com.mochyy.mochymusic.db.entities.SongArtistLink
 import com.mochyy.mochymusic.db.entities.ImportSession
 import com.mochyy.mochymusic.db.entities.ImportSessionSong
 import com.mochyy.mochymusic.db.entities.ImportedPlaylist
@@ -876,7 +877,9 @@ interface DatabaseDao {
             ArtistSortType.PLAY_TIME -> artistsByPlayTimeAsc()
         }.map { artists ->
             artists
-                .filter { it.artist.isYouTubeArtist || it.artist.isLocal }
+                // Concord: an Apple artist is neither a YouTube nor a local one, but it has songs —
+                // without this the Library's Artists page is empty on an Apple-only library
+                .filter { it.artist.isYouTubeArtist || it.artist.isLocal || it.songCount > 0 }
                 .reversed(descending)
         }
 
@@ -1588,6 +1591,51 @@ interface DatabaseDao {
 
     @Query("SELECT * FROM artist WHERE id = :id LIMIT 1")
     fun getArtistById(id: String): ArtistEntity?
+
+    // The library-artists import re-keys an artist row to Apple's own `r.…` id. Every link moves
+    // first; a row that already points at the new id is left for the delete that follows, because
+    // OR IGNORE skips a primary-key clash rather than failing the whole update.
+    @Query("UPDATE OR IGNORE song_artist_map SET artistId = :to WHERE artistId = :from")
+    fun moveSongArtistLinks(from: String, to: String)
+
+    @Query("DELETE FROM song_artist_map WHERE artistId = :artistId")
+    fun deleteSongArtistLinks(artistId: String)
+
+    @Query("UPDATE OR IGNORE album_artist_map SET artistId = :to WHERE artistId = :from")
+    fun moveAlbumArtistLinks(from: String, to: String)
+
+    @Query("DELETE FROM album_artist_map WHERE artistId = :artistId")
+    fun deleteAlbumArtistLinks(artistId: String)
+
+    @Query("DELETE FROM artist WHERE id = :id")
+    fun deleteArtistRow(id: String)
+
+    /** Every song's artist links in one read; a refresh compares these instead of asking per song. */
+    @Query("SELECT songId, artistId FROM song_artist_map")
+    fun songArtistLinks(): List<SongArtistLink>
+
+    @Query("DELETE FROM song_artist_map WHERE songId = :songId")
+    fun clearSongArtistLinks(songId: String)
+
+    /**
+     * Apple's library-artist rows carry no artwork of their own, and many catalogue twins have none
+     * either. Cider still draws a cover for them: the first of the artist's library songs. That is
+     * this pass — only where nothing is set, so a picture chosen by hand or Apple's own wins.
+     */
+    @Query(
+        """
+        UPDATE artist SET thumbnailUrl = (
+            SELECT s.thumbnailUrl FROM song s
+            JOIN song_artist_map m ON m.songId = s.id
+            WHERE m.artistId = artist.id
+              AND s.inLibrary IS NOT NULL
+              AND s.thumbnailUrl IS NOT NULL AND s.thumbnailUrl != ''
+            ORDER BY s.rowid DESC LIMIT 1
+        )
+        WHERE thumbnailUrl IS NULL AND id != ''
+        """,
+    )
+    fun fillArtistCoversFromSongs()
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insert(song: SongEntity): Long

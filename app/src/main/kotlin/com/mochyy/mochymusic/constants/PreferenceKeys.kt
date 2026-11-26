@@ -420,6 +420,16 @@ val AutoPlaylistSongSortTypeKey = stringPreferencesKey("autoPlaylistSongSortType
 val AutoPlaylistSongSortDescendingKey = booleanPreferencesKey("autoPlaylistSongSortDescending")
 val LikedSongSortTypeKey = stringPreferencesKey("likedSongSortType")
 val LikedSongSortDescendingKey = booleanPreferencesKey("likedSongSortDescending")
+// the Library's own four pages keep their order to themselves: picking an order on Albums must not
+// move Liked songs, or the playlists screen that shares the same enums
+val LibrarySongsSortTypeKey = stringPreferencesKey("librarySongsSortType")
+val LibrarySongsSortDescendingKey = booleanPreferencesKey("librarySongsSortDescending")
+val LibraryAlbumsSortTypeKey = stringPreferencesKey("libraryAlbumsSortType")
+val LibraryAlbumsSortDescendingKey = booleanPreferencesKey("libraryAlbumsSortDescending")
+val LibraryArtistsSortTypeKey = stringPreferencesKey("libraryArtistsSortType")
+val LibraryArtistsSortDescendingKey = booleanPreferencesKey("libraryArtistsSortDescending")
+val LibraryPlaylistsSortTypeKey = stringPreferencesKey("libraryPlaylistsSortType")
+val LibraryPlaylistsSortDescendingKey = booleanPreferencesKey("libraryPlaylistsSortDescending")
 val ArtistSortTypeKey = stringPreferencesKey("artistSortType")
 val ArtistSortDescendingKey = booleanPreferencesKey("artistSortDescending")
 val AlbumSortTypeKey = stringPreferencesKey("albumSortType")

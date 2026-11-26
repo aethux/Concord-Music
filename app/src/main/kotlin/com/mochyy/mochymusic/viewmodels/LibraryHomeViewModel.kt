@@ -227,6 +227,22 @@ constructor(
             }
             .forEach { artist ->
                 val preferred = ArtistImageResolver.resolveThumbnail(artist)
+                // an `r.…` row is Apple's library artist and a numeric id a catalogue artist:
+                // YouTube can never answer for either, so the picture the resolver found is the
+                // only thing worth writing, and it costs no call
+                if (artist.id.startsWith("r.") || artist.id.all(Char::isDigit)) {
+                    if (preferred != null) {
+                        database.query {
+                            update(
+                                artist.copy(
+                                    thumbnailUrl = preferred,
+                                    lastUpdateTime = LocalDateTime.now(),
+                                )
+                            )
+                        }
+                    }
+                    return@forEach
+                }
                 YouTube.artist(artist.id)
                     .onSuccess { page ->
                         database.query { update(artist, page, preferred) }

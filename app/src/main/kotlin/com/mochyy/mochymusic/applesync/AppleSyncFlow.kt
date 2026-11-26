@@ -68,6 +68,15 @@ object AppleSyncFlow {
                 .getOrDefault(true)
 
             // the songs, and the album rows and motion covers AppleImport queues itself
+            AppleSyncStatus.start("Reading Apple's artists…")
+            // Cider reads the library's artists before its songs, so every song links to Apple's
+            // own `r.…` row instead of inventing one from a name. A failed read costs the artist
+            // ids for this run and nothing else: the import still falls back to the generated ids.
+            val artists = entry.tokens().read()?.let { pair ->
+                runCatching { AppleClient(pair).libraryArtists() }.getOrDefault(emptyList())
+            } ?: emptyList()
+            runCatching { AppleLibraryArtists.run(entry.database(), artists) }
+
             AppleSyncStatus.start("Reading Apple's library…")
             val pulled = AppleLibraryPull(dao, entry.tokens(), light = light).run()
             val songs = AppleImport(entry.database(), dao, entry.tokens(), animatedCovers)
@@ -84,6 +93,11 @@ object AppleSyncFlow {
                 AppleSyncStatus.start("Importing playlists…")
                 runCatching { ApplePlaylistImport.run(context.applicationContext, onPlaylistProgress) }.getOrNull()
             }
+
+            // an artist Apple gives no picture for still gets a cover: the first of its library
+            // songs, the one Apple's own lists show. After the playlists, because that import can
+            // still create an artist row of its own.
+            runCatching { entry.database().fillArtistCoversFromSongs() }
 
             // what this library still holds on Apple, but Apple no longer has
             runCatching {

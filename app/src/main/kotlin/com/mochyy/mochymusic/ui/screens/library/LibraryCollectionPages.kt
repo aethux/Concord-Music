@@ -8,6 +8,7 @@ package com.mochyy.mochymusic.ui.screens.library
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -17,14 +18,29 @@ import androidx.navigation.NavController
 import com.mochyy.mochymusic.LocalDatabase
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.constants.AlbumSortType
+import com.mochyy.mochymusic.constants.ArtistSortType
+import com.mochyy.mochymusic.constants.LibraryAlbumsSortDescendingKey
+import com.mochyy.mochymusic.constants.LibraryAlbumsSortTypeKey
+import com.mochyy.mochymusic.constants.LibraryArtistsSortDescendingKey
+import com.mochyy.mochymusic.constants.LibraryArtistsSortTypeKey
+import com.mochyy.mochymusic.constants.LibraryPlaylistsSortDescendingKey
+import com.mochyy.mochymusic.constants.LibraryPlaylistsSortTypeKey
+import com.mochyy.mochymusic.constants.PlaylistSortType
+import com.mochyy.mochymusic.db.entities.Album
+import com.mochyy.mochymusic.db.entities.Artist
+import com.mochyy.mochymusic.db.entities.Playlist
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.playback.PlayerConnection
 import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.ui.component.LocalMenuState
+import com.mochyy.mochymusic.ui.component.detail.PlaylistSortControl
 import com.mochyy.mochymusic.ui.menu.AlbumMenu
 import com.mochyy.mochymusic.ui.menu.ArtistMenu
 import com.mochyy.mochymusic.ui.menu.PlaylistMenu
+import com.mochyy.mochymusic.utils.rememberEnumPreference
+import com.mochyy.mochymusic.utils.rememberPreference
 import com.mochyy.mochymusic.viewmodels.LibraryHomeViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +70,28 @@ internal fun LibraryAlbumsPage(navController: NavController) {
     val menuState = LocalMenuState.current
     val scope = rememberCoroutineScope()
     val title = stringResource(R.string.albums)
+    val (sortType, onSortTypeChange) = rememberEnumPreference(LibraryAlbumsSortTypeKey, AlbumSortType.CREATE_DATE)
+    val (sortDescending, onSortDescendingChange) = rememberPreference(LibraryAlbumsSortDescendingKey, true)
+    val sort = remember(sortType, sortDescending) {
+        CollectionSorting(
+            descending = sortDescending,
+            sectioned = sortType == AlbumSortType.NAME && !sortDescending,
+            comparator = albumComparator(sortType),
+            control = {
+                PlaylistSortControl(
+                    current = sortType,
+                    descending = sortDescending,
+                    options = AlbumSortOrder,
+                    label = { albumSortLabel(it) },
+                    onSelect = { type ->
+                        onSortTypeChange(type)
+                        onSortDescendingChange(type.readsNewestFirst())
+                    },
+                    onToggleDirection = { onSortDescendingChange(!sortDescending) },
+                )
+            },
+        )
+    }
 
     LibraryCollectionPage(
         title = title,
@@ -83,6 +121,7 @@ internal fun LibraryAlbumsPage(navController: NavController) {
             }
         },
         navController = navController,
+        sort = sort,
     )
 }
 
@@ -96,6 +135,29 @@ internal fun LibraryArtistsPage(navController: NavController) {
     val menuState = LocalMenuState.current
     val scope = rememberCoroutineScope()
     val title = stringResource(R.string.artists)
+    val (sortType, onSortTypeChange) = rememberEnumPreference(LibraryArtistsSortTypeKey, ArtistSortType.NAME)
+    // Cider's list is `sort=name`; A→Z is the direction that matches it, not Z→A
+    val (sortDescending, onSortDescendingChange) = rememberPreference(LibraryArtistsSortDescendingKey, false)
+    val sort = remember(sortType, sortDescending) {
+        CollectionSorting(
+            descending = sortDescending,
+            sectioned = sortType == ArtistSortType.NAME && !sortDescending,
+            comparator = artistComparator(sortType),
+            control = {
+                PlaylistSortControl(
+                    current = sortType,
+                    descending = sortDescending,
+                    options = ArtistSortOrder,
+                    label = { artistSortLabel(it) },
+                    onSelect = { type ->
+                        onSortTypeChange(type)
+                        onSortDescendingChange(type.readsNewestFirst())
+                    },
+                    onToggleDirection = { onSortDescendingChange(!sortDescending) },
+                )
+            },
+        )
+    }
 
     LibraryCollectionPage(
         title = title,
@@ -125,6 +187,7 @@ internal fun LibraryArtistsPage(navController: NavController) {
         },
         navController = navController,
         roundCovers = true,
+        sort = sort,
     )
 }
 
@@ -138,6 +201,28 @@ internal fun LibraryPlaylistsPage(navController: NavController) {
     val menuState = LocalMenuState.current
     val scope = rememberCoroutineScope()
     val title = stringResource(R.string.playlists)
+    val (sortType, onSortTypeChange) = rememberEnumPreference(LibraryPlaylistsSortTypeKey, PlaylistSortType.CREATE_DATE)
+    val (sortDescending, onSortDescendingChange) = rememberPreference(LibraryPlaylistsSortDescendingKey, true)
+    val sort = remember(sortType, sortDescending) {
+        CollectionSorting(
+            descending = sortDescending,
+            sectioned = sortType == PlaylistSortType.NAME && !sortDescending,
+            comparator = playlistComparator(sortType),
+            control = {
+                PlaylistSortControl(
+                    current = sortType,
+                    descending = sortDescending,
+                    options = PlaylistSortOrder,
+                    label = { playlistSortLabel(it) },
+                    onSelect = { type ->
+                        onSortTypeChange(type)
+                        onSortDescendingChange(type.readsNewestFirst())
+                    },
+                    onToggleDirection = { onSortDescendingChange(!sortDescending) },
+                )
+            },
+        )
+    }
 
     LibraryCollectionPage(
         title = title,
@@ -165,5 +250,101 @@ internal fun LibraryPlaylistsPage(navController: NavController) {
             scope.playGathered(player, title, shuffle) { ordered.flatMap { list -> database.playlistSongs(list.id).first().map { it.song } } }
         },
         navController = navController,
+        sort = sort,
     )
 }
+
+// ---------------------------------------------------------------------------------------------
+// the sorts the four library pages offer
+// ---------------------------------------------------------------------------------------------
+
+// Only the orders each page can actually answer for: an album has a year and a length, an artist
+// does not, and a playlist counts its songs. Date added is "when it reached this library".
+private val AlbumSortOrder = listOf(
+    AlbumSortType.CREATE_DATE,
+    AlbumSortType.NAME,
+    AlbumSortType.ARTIST,
+    AlbumSortType.YEAR,
+    AlbumSortType.SONG_COUNT,
+    AlbumSortType.LENGTH,
+)
+
+private val ArtistSortOrder = listOf(
+    ArtistSortType.CREATE_DATE,
+    ArtistSortType.NAME,
+    ArtistSortType.SONG_COUNT,
+)
+
+private val PlaylistSortOrder = listOf(
+    PlaylistSortType.CREATE_DATE,
+    PlaylistSortType.NAME,
+    PlaylistSortType.SONG_COUNT,
+    PlaylistSortType.LAST_UPDATED,
+)
+
+// what a date or a count reads as: newest and biggest first. A name or an artist reads A to Z.
+private fun AlbumSortType.readsNewestFirst(): Boolean =
+    this == AlbumSortType.CREATE_DATE || this == AlbumSortType.YEAR || this == AlbumSortType.SONG_COUNT || this == AlbumSortType.LENGTH
+
+private fun ArtistSortType.readsNewestFirst(): Boolean =
+    this == ArtistSortType.CREATE_DATE || this == ArtistSortType.SONG_COUNT
+
+private fun PlaylistSortType.readsNewestFirst(): Boolean =
+    this == PlaylistSortType.CREATE_DATE || this == PlaylistSortType.SONG_COUNT || this == PlaylistSortType.LAST_UPDATED
+
+private fun albumComparator(type: AlbumSortType): Comparator<Album> = when (type) {
+    AlbumSortType.CREATE_DATE -> compareBy<Album> { it.album.inLibrary ?: it.album.bookmarkedAt ?: it.album.lastUpdateTime }
+    AlbumSortType.NAME -> byCollated { it.album.title }
+    AlbumSortType.ARTIST -> byCollated { it.artists.joinToString("") { artist -> artist.name } }
+    AlbumSortType.YEAR -> compareBy { it.album.year ?: 0 }
+    AlbumSortType.SONG_COUNT -> compareBy { it.album.songCount }
+    AlbumSortType.LENGTH -> compareBy { it.album.duration }
+    AlbumSortType.PLAY_TIME -> compareBy { it.timeListened ?: 0 }
+}
+
+private fun artistComparator(type: ArtistSortType): Comparator<Artist> = when (type) {
+    ArtistSortType.CREATE_DATE -> compareBy<Artist> { it.artist.bookmarkedAt ?: it.artist.lastUpdateTime }
+    ArtistSortType.NAME -> byCollated { it.artist.name }
+    ArtistSortType.SONG_COUNT -> compareBy { it.songCount }
+    ArtistSortType.PLAY_TIME -> compareBy { it.timeListened ?: 0 }
+}
+
+private fun playlistComparator(type: PlaylistSortType): Comparator<Playlist> = when (type) {
+    PlaylistSortType.CREATE_DATE -> compareBy<Playlist> { it.playlist.createdAt ?: it.playlist.lastUpdateTime }
+    PlaylistSortType.NAME -> byCollated { it.playlist.name }
+    PlaylistSortType.SONG_COUNT -> compareBy { it.songCount }
+    PlaylistSortType.LAST_UPDATED -> compareBy<Playlist> { it.playlist.lastUpdateTime }
+}
+
+@Composable
+private fun albumSortLabel(type: AlbumSortType): String = stringResource(
+    when (type) {
+        AlbumSortType.CREATE_DATE -> R.string.sort_by_create_date
+        AlbumSortType.NAME -> R.string.sort_by_name
+        AlbumSortType.ARTIST -> R.string.sort_by_artist
+        AlbumSortType.YEAR -> R.string.sort_by_year
+        AlbumSortType.SONG_COUNT -> R.string.sort_by_song_count
+        AlbumSortType.LENGTH -> R.string.sort_by_length
+        AlbumSortType.PLAY_TIME -> R.string.sort_by_play_time
+    },
+)
+
+@Composable
+private fun artistSortLabel(type: ArtistSortType): String = stringResource(
+    when (type) {
+        ArtistSortType.CREATE_DATE -> R.string.sort_by_create_date
+        ArtistSortType.NAME -> R.string.sort_by_name
+        ArtistSortType.SONG_COUNT -> R.string.sort_by_song_count
+        ArtistSortType.PLAY_TIME -> R.string.sort_by_play_time
+    },
+)
+
+@Composable
+private fun playlistSortLabel(type: PlaylistSortType): String = stringResource(
+    when (type) {
+        PlaylistSortType.CREATE_DATE -> R.string.sort_by_create_date
+        PlaylistSortType.NAME -> R.string.sort_by_name
+        PlaylistSortType.SONG_COUNT -> R.string.sort_by_song_count
+        PlaylistSortType.LAST_UPDATED -> R.string.sort_by_last_updated
+    },
+)

@@ -85,6 +85,7 @@ import com.mochyy.mochymusic.ui.component.containerTransformSource
 import com.mochyy.mochymusic.ui.component.detail.PlaylistDetailScaffold
 import com.mochyy.mochymusic.ui.component.detail.PlaylistHeader
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackBones
+import com.mochyy.mochymusic.ui.component.detail.CircleAction
 import com.mochyy.mochymusic.ui.component.detail.PlaylistTrackRow
 import com.mochyy.mochymusic.ui.component.detail.TrackShape
 import com.mochyy.mochymusic.ui.component.detail.playlistCompactHeaderHeight
@@ -339,6 +340,8 @@ fun <T> LibraryCollectionPage(
     folders: List<CollectionFolder<T>> = emptyList(),
     /** a folder's long press, for pages that can change folders (the playlists page) */
     onFolderMenu: ((id: String, name: String) -> Unit)? = null,
+    /** the page's own "new …" button, drawn between shuffle and search */
+    onAdd: (() -> Unit)? = null,
     roundCovers: Boolean = false,
     secondsOf: ((T) -> Int)? = null,
     rowWrapper: @Composable (item: T, row: @Composable () -> Unit) -> Unit = { _, row -> row() },
@@ -460,6 +463,15 @@ fun <T> LibraryCollectionPage(
                     scope.launch {
                         listState.animateScrollToItem(0)
                         runCatching { searchFocus.requestFocus() }
+                    }
+                },
+                afterShuffle = onAdd?.let { add ->
+                    {
+                        CircleAction(
+                            icon = R.drawable.playlist_add,
+                            contentDescription = stringResource(R.string.pc_create_playlist),
+                            onClick = add,
+                        )
                     }
                 },
                 actionsEnd = { ViewSwitch(grid = grid, onChange = { grid = it }) },

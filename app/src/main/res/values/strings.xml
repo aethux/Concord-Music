@@ -360,6 +360,10 @@
     <string name="playlist_add_to_folder_desc">Put it in one of Apple’s folders</string>
     <string name="playlist_remove_from_folder">Remove from folder</string>
     <string name="folder_root">Library</string>
+    <plurals name="folder_playlist_count">
+        <item quantity="one">%1$d playlist</item>
+        <item quantity="other">%1$d playlists</item>
+    </plurals>
     <string name="folder_delete_confirm">Delete “%1$s”? The playlists inside it stay in your library.</string>
     <string name="apple_write_unconfirmed">Apple didn\'t show \"%1$s\" afterwards</string>
     <string name="apple_like_failed">Apple didn\'t take that heart</string>

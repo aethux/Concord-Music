@@ -37,6 +37,8 @@ import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.playback.PlayerConnection
 import com.mochyy.mochymusic.playback.queues.ListQueue
+import com.mochyy.mochymusic.ui.component.CreatePlaylistDialog
+import com.mochyy.mochymusic.ui.menu.FolderMenuSheet
 import com.mochyy.mochymusic.ui.component.DefaultDialog
 import com.mochyy.mochymusic.ui.component.ListDialog
 import com.mochyy.mochymusic.ui.component.TextFieldDialog
@@ -276,10 +278,10 @@ internal fun LibraryPlaylistsPage(navController: NavController) {
         )
     }
 
-    var folderMenu by remember { mutableStateOf<PlaylistFolders.Folder?>(null) }
-    var folderRename by remember { mutableStateOf<PlaylistFolders.Folder?>(null) }
-    var folderNewPlaylist by remember { mutableStateOf<PlaylistFolders.Folder?>(null) }
-    var folderDelete by remember { mutableStateOf<PlaylistFolders.Folder?>(null) }
+    var showCreatePlaylist by remember { mutableStateOf(false) }
+    if (showCreatePlaylist) {
+        CreatePlaylistDialog(onDismiss = { showCreatePlaylist = false })
+    }
 
     LibraryCollectionPage(
         title = title,
@@ -310,79 +312,19 @@ internal fun LibraryPlaylistsPage(navController: NavController) {
         navController = navController,
         sort = sort,
         folders = folderSections,
-        onFolderMenu = { id, name -> folderMenu = PlaylistFolders.Folder(id, name) },
+        onAdd = { showCreatePlaylist = true },
+        onFolderMenu = { id, name ->
+            menuState.show {
+                FolderMenuSheet(
+                    folderId = id,
+                    folderName = name,
+                    playlistCount = folderSections.firstOrNull { it.id == id }?.items?.size ?: 0,
+                    onDismiss = menuState::dismiss,
+                )
+            }
+        },
     )
 
-    // ---- a folder's own menu: rename it, put a new playlist in it, or delete it -----------------
-    folderMenu?.let { folder ->
-        ListDialog(onDismiss = { folderMenu = null }) {
-            item {
-                DialogMenuRow(
-                    title = stringResource(R.string.folder_rename),
-                    icon = R.drawable.edit,
-                    onClick = { folderMenu = null; folderRename = folder },
-                )
-            }
-            item {
-                DialogMenuRow(
-                    title = stringResource(R.string.folder_add_playlist),
-                    icon = R.drawable.playlist_add,
-                    onClick = { folderMenu = null; folderNewPlaylist = folder },
-                )
-            }
-            item {
-                DialogMenuRow(
-                    title = stringResource(R.string.folder_delete),
-                    icon = R.drawable.delete,
-                    onClick = { folderMenu = null; folderDelete = folder },
-                )
-            }
-        }
-    }
-
-    folderRename?.let { folder ->
-        TextFieldDialog(
-            title = { Text(stringResource(R.string.folder_rename)) },
-            initialTextFieldValue = TextFieldValue(folder.name),
-            onDismiss = { folderRename = null },
-            onDone = { name ->
-                folderRename = null
-                scope.launch(Dispatchers.IO) { ApplePlaylistWrites.renameFolder(context, folder.id, name.trim()) }
-            },
-        )
-    }
-
-    folderNewPlaylist?.let { folder ->
-        TextFieldDialog(
-            title = { Text(stringResource(R.string.folder_add_playlist)) },
-            placeholder = { Text(stringResource(R.string.playlist_name_hint)) },
-            onDismiss = { folderNewPlaylist = null },
-            onDone = { name ->
-                folderNewPlaylist = null
-                scope.launch(Dispatchers.IO) {
-                    ApplePlaylistWrites.createPlaylist(context, name.trim(), folder.id)
-                }
-            },
-        )
-    }
-
-    folderDelete?.let { folder ->
-        DefaultDialog(
-            onDismiss = { folderDelete = null },
-            title = { Text(stringResource(R.string.folder_delete)) },
-            buttons = {
-                TextButton(onClick = { folderDelete = null }) { Text(stringResource(R.string.cancel)) }
-                TextButton(
-                    onClick = {
-                        folderDelete = null
-                        scope.launch(Dispatchers.IO) { ApplePlaylistWrites.deleteFolder(context, folder.id) }
-                    },
-                ) { Text(stringResource(R.string.delete)) }
-            },
-        ) {
-            Text(stringResource(R.string.folder_delete_confirm, folder.name))
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------------------------

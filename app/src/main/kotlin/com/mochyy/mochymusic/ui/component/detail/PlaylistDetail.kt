@@ -1048,6 +1048,8 @@ fun PlaylistHeader(
     below: (@Composable () -> Unit)? = null,
     // opens the list's own song search, from a round button beside shuffle
     onSearchClick: (() -> Unit)? = null,
+    // a round button between shuffle and search, for the page's own "new" action
+    afterShuffle: (@Composable () -> Unit)? = null,
     // sits at the far end of the button row, like the library pages' grid and list switch
     actionsEnd: (@Composable () -> Unit)? = null,
 ) {
@@ -1122,6 +1124,10 @@ fun PlaylistHeader(
                     onClick = onShuffleClick,
                     spinOnClick = true,
                 )
+                if (afterShuffle != null) {
+                    Spacer(Modifier.width(4.dp))
+                    afterShuffle()
+                }
                 if (onSearchClick != null) {
                     Spacer(Modifier.width(4.dp))
                     CircleAction(

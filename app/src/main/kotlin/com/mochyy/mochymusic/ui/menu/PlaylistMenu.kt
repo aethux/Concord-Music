@@ -70,7 +70,7 @@ import com.mochyy.mochymusic.ui.component.NewActionGrid
 import com.mochyy.mochymusic.ui.component.PlaylistListItem
 import com.mochyy.mochymusic.ui.component.TextFieldDialog
 import com.mochyy.mochymusic.ui.component.ListDialog
-import com.mochyy.mochymusic.ui.player.menu.MenuRow
+import com.mochyy.mochymusic.ui.component.DialogMenuRow
 import com.mochyy.mochymusic.applesync.ApplePlaylistWrites
 import com.mochyy.mochymusic.applesync.PlaylistFolders
 import com.mochyy.mochymusic.ui.component.TopToaster
@@ -631,7 +631,7 @@ fun PlaylistMenu(
     if (showFolderPicker) {
         ListDialog(onDismiss = { showFolderPicker = false }) {
             item {
-                MenuRow(
+                DialogMenuRow(
                     title = stringResource(R.string.folder_new),
                     icon = R.drawable.ic_folder_small,
                     onClick = {
@@ -642,7 +642,7 @@ fun PlaylistMenu(
             }
             folderTree.folders.forEach { folder ->
                 item(key = folder.id) {
-                    MenuRow(
+                    DialogMenuRow(
                         title = folder.name,
                         icon = R.drawable.ic_folder_small,
                         onClick = {
@@ -654,7 +654,7 @@ fun PlaylistMenu(
             }
             if (folderTree.parentOf.containsKey(playlist.id)) {
                 item {
-                    MenuRow(
+                    DialogMenuRow(
                         title = stringResource(R.string.playlist_remove_from_folder),
                         icon = R.drawable.ic_folder_small,
                         onClick = {

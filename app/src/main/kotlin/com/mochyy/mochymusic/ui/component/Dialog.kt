@@ -2,6 +2,9 @@
 
 package com.mochyy.mochymusic.ui.component
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.text.KeyboardActions
@@ -344,4 +348,24 @@ fun TextFieldDialog(
             extraContent?.invoke()
         }
     }
+}
+
+/**
+ * One action in a [ListDialog], in the shape Mochy's dialogs already use: a plain [ListItem] with
+ * its icon tinted to the surface, not the sheet's raised card (that belongs to a sheet, not a dialog).
+ */
+@Composable
+fun DialogMenuRow(title: String, icon: Int, onClick: () -> Unit) {
+    ListItem(
+        modifier = Modifier.clickable(onClick = onClick),
+        title = title,
+        thumbnailContent = {
+            Image(
+                painter = painterResource(icon),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
+                modifier = Modifier.size(22.dp),
+            )
+        },
+    )
 }

@@ -17,6 +17,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.combinedClickable
@@ -698,8 +699,11 @@ private fun <T> CollectionFolderCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color.White.copy(alpha = if (folder.expanded) 0.06f else 0.035f))
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                if (folder.expanded) MaterialTheme.colorScheme.surfaceContainerHigh
+                else MaterialTheme.colorScheme.surfaceContainer,
+            )
             .animateContentSize(animationSpec = tween(240)),
     ) {
         Row(
@@ -712,14 +716,14 @@ private fun <T> CollectionFolderCard(
             Icon(
                 painter = painterResource(R.drawable.ic_folder_small),
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.78f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),
             )
             Spacer(Modifier.width(10.dp))
             Text(
                 text = folder.name,
                 style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-                color = Color.White.copy(alpha = 0.92f),
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -727,13 +731,13 @@ private fun <T> CollectionFolderCard(
             Text(
                 text = folder.items.size.toString(),
                 style = TextStyle(fontSize = 12.sp),
-                color = Color.White.copy(alpha = 0.5f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.width(8.dp))
             Icon(
                 painter = painterResource(R.drawable.expand_more),
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.6f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .size(16.dp)
                     .graphicsLayer { rotationZ = chevron },

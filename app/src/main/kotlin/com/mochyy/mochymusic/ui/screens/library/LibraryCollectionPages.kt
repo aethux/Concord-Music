@@ -40,7 +40,7 @@ import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.ui.component.DefaultDialog
 import com.mochyy.mochymusic.ui.component.ListDialog
 import com.mochyy.mochymusic.ui.component.TextFieldDialog
-import com.mochyy.mochymusic.ui.player.menu.MenuRow
+import com.mochyy.mochymusic.ui.component.DialogMenuRow
 import com.mochyy.mochymusic.applesync.ApplePlaylistWrites
 import com.mochyy.mochymusic.applesync.PlaylistFolders
 import androidx.compose.material3.Text
@@ -317,21 +317,21 @@ internal fun LibraryPlaylistsPage(navController: NavController) {
     folderMenu?.let { folder ->
         ListDialog(onDismiss = { folderMenu = null }) {
             item {
-                MenuRow(
+                DialogMenuRow(
                     title = stringResource(R.string.folder_rename),
                     icon = R.drawable.edit,
                     onClick = { folderMenu = null; folderRename = folder },
                 )
             }
             item {
-                MenuRow(
+                DialogMenuRow(
                     title = stringResource(R.string.folder_add_playlist),
                     icon = R.drawable.playlist_add,
                     onClick = { folderMenu = null; folderNewPlaylist = folder },
                 )
             }
             item {
-                MenuRow(
+                DialogMenuRow(
                     title = stringResource(R.string.folder_delete),
                     icon = R.drawable.delete,
                     onClick = { folderMenu = null; folderDelete = folder },

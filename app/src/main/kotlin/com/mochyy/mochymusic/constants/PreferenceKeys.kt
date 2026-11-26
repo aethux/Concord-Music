@@ -154,7 +154,9 @@ val YtSyncLikedSongsKey = booleanPreferencesKey("ytSyncLikedSongs")
  * marked anything, so that one sync marks everything YouTube has, not just what is new.
  */
 val YtSyncSourcesTaggedKey = booleanPreferencesKey("ytSyncSourcesTagged")
-/** Songs and playlists that came from other services stay on this phone, nothing goes up to YouTube for them. */
+/** Songs and playlists that came from other services stay on this phone, nothing goes up to YouTube for them.
+ *  Concord: on unless it is switched off — Apple is the library of record and the YouTube side stays off for
+ *  the first releases, so nothing Apple brought in is mirrored, liked or copied onto YouTube by default. */
 val YtExcludeImportsKey = booleanPreferencesKey("ytExcludeImports")
 /** Set by an undo: YouTube pulls wait until the user runs Sync now, so the undo isn't written back. */
 val YtSyncHoldKey = booleanPreferencesKey("ytSyncHold")

@@ -55,7 +55,7 @@ fun YouTubeSyncScreen(
     val (syncNewPlaylists, onSyncNewPlaylistsChange) = rememberPreference(YtSyncNewPlaylistsKey, false)
     val (reportPlays, onReportPlaysChange) = rememberPreference(YtReportPlaysKey, true)
     val (pullHistory, onPullHistoryChange) = rememberPreference(YtPullHistoryKey, false)
-    val (excludeImports, onExcludeImportsChange) = rememberPreference(YtExcludeImportsKey, false)
+    val (excludeImports, onExcludeImportsChange) = rememberPreference(YtExcludeImportsKey, true)
     val state by viewModel.youTubeState.collectAsState()
 
     var confirmSignOut by remember { mutableStateOf(false) }

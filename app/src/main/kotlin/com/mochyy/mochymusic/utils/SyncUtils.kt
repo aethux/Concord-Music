@@ -400,7 +400,7 @@ class SyncUtils @Inject constructor(
 
     /** Songs imported from another service, when the user keeps those off YouTube. */
     private fun excludedFromYouTube(): Set<String> {
-        if (!context.dataStore.get(YtExcludeImportsKey, false)) return emptySet()
+        if (!context.dataStore.get(YtExcludeImportsKey, true)) return emptySet()
         return database.importedSongIdsExcept(ImportSource.YOUTUBE_MUSIC.key).toSet()
     }
 

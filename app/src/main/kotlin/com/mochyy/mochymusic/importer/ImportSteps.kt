@@ -54,7 +54,7 @@ internal class ImportSteps(
     suspend fun runImport(parsed: ParsedImport, options: ImportOptions) {
         val matcher = newMatcher()
         val signedIn = context.isUserLoggedIn()
-        val keepOffYouTube = context.dataStore.get(YtExcludeImportsKey, false)
+        val keepOffYouTube = context.dataStore.get(YtExcludeImportsKey, true)
         val mirror = options.mirrorToYouTube && signedIn && !keepOffYouTube
 
         if (parsed.likedSongs.isNotEmpty()) importLiked(matcher, parsed.likedSongs, mirror)

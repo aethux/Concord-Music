@@ -106,7 +106,7 @@ class YouTubeSyncManager @Inject constructor(
 
     fun uploadLocalPlaylists() = launchTask("Creating playlists on YouTube…") {
         requireSignedIn()
-        val keepOffYouTube = context.dataStore.get(YtExcludeImportsKey, false)
+        val keepOffYouTube = context.dataStore.get(YtExcludeImportsKey, true)
         val locals = database.playlistsByNameAsc().first().filter {
             // Concord: an Apple playlist is not a local one to copy up. Its songs are AM_ ids, which
             // createPlaylist + addVideos cannot take, so the attempt leaves an empty YouTube playlist

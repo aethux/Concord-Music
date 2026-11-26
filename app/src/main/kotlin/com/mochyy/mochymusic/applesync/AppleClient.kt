@@ -235,6 +235,73 @@ class AppleClient(
     }
 
     /**
+     * Concord: Apple's search page in one call — every kind of result at once, which is what Cider
+     * asks for and what Apple's own app draws. Not read through the page cache: two terms never
+     * share a URL, and a remembered answer would draw a catalogue that has moved on.
+     */
+    suspend fun searchPage(term: String, limit: Int = 10): JsonObject {
+        val storefront = storefront()
+        val query = java.net.URLEncoder.encode(term, "UTF-8")
+        return read(
+            "/v1/catalog/$storefront/search?term=$query" +
+                "&types=songs,albums,artists,playlists&limit=$limit" +
+                SearchFields,
+        ) ?: throw AppleSyncException("Apple Music answered that search with nothing.")
+    }
+
+    /**
+     * Concord: music videos for the same term, on a call of their own.
+     *
+     * Probed 2026-11-26: Apple **silently drops** `music-videos` from any search that also asks for
+     * `songs` (`songs,music-videos` answers songs only; `music-videos,stations,curators` answers the
+     * videos). So the page asks for them separately instead of paying for a type that never arrives.
+     */
+    suspend fun searchVideos(term: String, limit: Int = 10): JsonObject? {
+        val storefront = storefront()
+        val query = java.net.URLEncoder.encode(term, "UTF-8")
+        return read(
+            "/v1/catalog/$storefront/search?term=$query&types=music-videos&limit=$limit" + VideoFields,
+        )
+    }
+
+    /**
+     * The dropdown under the typed text.
+     *
+     * Both `kinds` and `types` are mandatory: either one alone is a 400, which is the one trap
+     * `cider/AUDIT.md` records for this path. Only `terms` are asked for — a `topResults` entry's
+     * shape was never captured, and a half-guessed row is worse than a word.
+     */
+    suspend fun searchSuggestions(term: String): JsonObject? {
+        val storefront = storefront()
+        val query = java.net.URLEncoder.encode(term, "UTF-8")
+        return read(
+            "/v1/catalog/$storefront/search/suggestions?term=$query&kinds=terms&types=songs&limit=10",
+        )
+    }
+
+    /**
+     * The empty field's landing: "Browse Categories" on this account, one group of `apple-curators`
+     * genre tiles. `platform` is sent because the web player sends it; the captured call answered
+     * 200 without it, so a 400 here would be news, not the known behaviour the reference claims.
+     */
+    suspend fun searchLanding(): JsonObject? =
+        read(
+            "/v1/recommendations/${storefront()}" +
+                "?types=editorial-items,apple-curators,activities&name=search-landing&platform=web",
+        )
+
+    /**
+     * Concord: the playlists one genre curator publishes — what a "Browse Categories" tile opens.
+     *
+     * Not cached: the page is cheap, one call, and a genre's picks are exactly the thing that should
+     * not be a day old. The reference's §J names this path for a curator's own list.
+     */
+    suspend fun curatorPlaylists(id: String, limit: Int = 25): JsonObject? {
+        val storefront = storefront()
+        return read("/v1/catalog/$storefront/apple-curators/$id/playlists?limit=$limit")
+    }
+
+    /**
      * A catalogue song's covers: its still artwork and, when the album has one, the motion loop.
      *
      * One request, `include=albums`, because the animated artwork belongs to the album and asking
@@ -881,3 +948,17 @@ internal fun withKeptParams(next: String, kept: List<String>): String {
     if (missing.isEmpty()) return next
     return next + (if ('?' in next) "&" else "?") + missing.joinToString("&")
 }
+
+/**
+ * Concord: Cider's per-kind field lists for a search row — the fields a row draws, nothing else.
+ * Brackets go out encoded, the way the rest of this client spells `fields[…]`.
+ */
+private const val SearchFields =
+    "&fields%5Bsongs%5D=name,artistName,albumName,artwork,durationInMillis" +
+        "&fields%5Balbums%5D=name,artistName,artwork" +
+        "&fields%5Bartists%5D=name,artwork" +
+        "&fields%5Bplaylists%5D=name,curatorName,artwork"
+
+/** the videos-only call's own list: a still, a name, the artist and the length */
+private const val VideoFields =
+    "&fields%5Bmusic-videos%5D=name,artistName,artwork,durationInMillis"

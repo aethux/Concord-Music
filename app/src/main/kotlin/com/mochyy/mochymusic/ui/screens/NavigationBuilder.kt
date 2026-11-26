@@ -317,14 +317,26 @@ fun NavGraphBuilder.navigationBuilder(
         com.mochyy.mochymusic.ui.screens.AppleShelfScreen(navController = navController)
     }
 
+    // a "Browse Categories" genre: the playlists Apple publishes for it
+    coverSourceComposable(
+        route = "apple_curator/{curatorId}?title={title}",
+        arguments = listOf(
+            navArgument("curatorId") { type = NavType.StringType },
+            navArgument("title") { type = NavType.StringType; defaultValue = "" },
+        ),
+    ) {
+        com.mochyy.mochymusic.ui.screens.AppleCuratorScreen(navController = navController)
+    }
+
     // Apple's Replay: the years it keeps a summary for, each one a playlist
     coverSourceComposable("apple_replay") {
         com.mochyy.mochymusic.ui.screens.AppleReplayScreen(navController = navController)
     }
 
     coverSourceComposable(Screens.Search.route) {
-        // YouTube's browse and suggestions were this whole page; hidden, so the tab says so
-        com.mochyy.mochymusic.ui.screens.search.AppleSearchPlaceholder(navController = navController)
+        // Apple's catalogue: the empty field's landing, the terms under the typed text, and one
+        // answer per submitted term, drawn in Apple's own order
+        com.mochyy.mochymusic.ui.screens.search.AppleSearchScreen(navController = navController)
     }
 
     composable(

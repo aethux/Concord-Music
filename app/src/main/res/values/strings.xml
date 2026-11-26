@@ -208,6 +208,19 @@
     <string name="playlist_collaborative">Collaborative playlist</string>
     <string name="playlist_collaborative_tag">Collaborative</string>
     <string name="apple_profile_no_playlists">No shared playlists</string>
+
+    <!-- the Search tab's Apple half: the landing's genre tiles, the chip row and section titles,
+         the library mark on a catalogue row, and the two ways a read can come back empty -->
+    <string name="apple_search_browse_categories">Browse Categories</string>
+    <string name="apple_search_in_library">In your library</string>
+    <string name="apple_search_songs">Songs</string>
+    <string name="apple_search_albums">Albums</string>
+    <string name="apple_search_artists">Artists</string>
+    <string name="apple_search_playlists">Playlists</string>
+    <string name="apple_search_videos">Videos</string>
+    <string name="apple_search_failed">Apple Music didn\'t answer that search.</string>
+    <string name="apple_search_signed_out">Sign in to Apple Music to search its catalogue.</string>
+    <string name="apple_curator_empty">Apple has nothing in this category right now.</string>
     <plurals name="apple_profile_playlists">
         <item quantity="one">%d shared playlist</item>
         <item quantity="other">%d shared playlists</item>

@@ -180,6 +180,11 @@ fun HomeSectionTitle(
     label: String? = null,
     thumbnail: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
+    /**
+     * The row's own left and right inset. Home's 36 dp grid by default; the search page passes its
+     * own, so a title there lines up with the rows under it instead of sitting 12 dp inside them.
+     */
+    contentInset: Dp = HomeContentInset,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -197,10 +202,10 @@ fun HomeSectionTitle(
                     Modifier
                 }
             )
-            // the text still starts on the 36dp inset, inside the wider tap area
+            // the text still starts on the inset, inside the wider tap area
             .padding(
-                start = HomeContentInset - SectionTapMargin,
-                end = HomeContentInset - SectionTapMargin,
+                start = contentInset - SectionTapMargin,
+                end = contentInset - SectionTapMargin,
                 top = 4.dp,
                 bottom = 4.dp,
             ),

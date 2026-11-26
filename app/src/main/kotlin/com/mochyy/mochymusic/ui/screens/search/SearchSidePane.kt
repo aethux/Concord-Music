@@ -52,8 +52,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 // the search pages on its side: the field and its history at the left, the categories or the results beside it
+// (the Apple search tab draws its own field on one page, so it takes the whole window instead)
 fun showsSearchPane(currentRoute: String?): Boolean =
-    currentRoute == Screens.Search.route || currentRoute?.startsWith("search/") == true
+    currentRoute?.startsWith("search/") == true
 
 // the pane's width for a window this wide: a phone's column, never more than a third and a bit of a tablet
 fun searchPaneWidth(windowWidth: Dp): Dp = (windowWidth * 0.4f).coerceIn(300.dp, 420.dp)

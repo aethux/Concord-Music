@@ -545,7 +545,7 @@ internal fun SearchActiveContent(
 }
 
 @Composable
-private fun RowGlyph(icon: Int, onClick: () -> Unit) {
+internal fun RowGlyph(icon: Int, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(28.dp)

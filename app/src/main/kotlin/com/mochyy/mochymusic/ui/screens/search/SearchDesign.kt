@@ -5,6 +5,7 @@ package com.mochyy.mochymusic.ui.screens.search
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -113,6 +115,9 @@ object SearchColors {
     val Primary = Color.White
     val Secondary = Color(0xFF9A9AA0)
     val Placeholder = Color(0xFF77777D)
+
+    /** the title of the row that is playing now, as Mochy draws it */
+    val ActiveTitle = Color(0xFF7FD1FF)
 
     fun page(pureBlack: Boolean): Color = Color.Black
 }
@@ -810,6 +815,277 @@ fun SearchSimpleRow(
             Spacer(modifier = Modifier.width(12.dp))
             trailing()
         }
+    }
+}
+
+/**
+ * One result row: artwork, a title, a secondary line, and — for a catalogue row the library already
+ * holds — the library mark.
+ *
+ * This is the search results' single row, shared by the catalogue results of the Search tab and by
+ * the library hits above them, so one list reads as one list. Geometry, type and the press highlight
+ * are Mochy's own; only the data differs.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun SearchResultRow(
+    title: String,
+    subtitle: String,
+    artworkUrl: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isActive: Boolean = false,
+    circle: Boolean = false,
+    inLibrary: Boolean = false,
+    sharedElementKey: String? = null,
+    horizontalPadding: Dp = SearchHorizontalPadding,
+    onLongClick: (() -> Unit)? = null,
+    /** the overflow dots are drawn only when there is a menu to open */
+    onMenu: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                interactionSource = null,
+                indication = SearchRowHighlight,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
+            .padding(horizontal = horizontalPadding, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SearchArtwork(
+            url = artworkUrl,
+            size = 46.dp,
+            circle = circle,
+            sharedElementKey = sharedElementKey,
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = if (isActive) SearchColors.ActiveTitle else SearchColors.Primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                color = SearchColors.Secondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (inLibrary) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                painter = painterResource(R.drawable.library_add_check),
+                contentDescription = stringResource(R.string.apple_search_in_library),
+                tint = SearchColors.Secondary,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        if (onMenu != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            SearchOverflowDots(onClick = onMenu)
+        }
+    }
+}
+
+/**
+ * The search page's top result: the artwork blurred behind its own card, the cover on top, and a
+ * play button when the tap plays instead of opening a page.
+ *
+ * Mochy's card, verbatim; only [title] and [detail] are built by the caller, because Apple's kinds
+ * and YouTube's kinds read differently.
+ */
+@Composable
+fun SearchTopResultCard(
+    title: String,
+    detail: String,
+    artworkUrl: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    circle: Boolean = false,
+    isActive: Boolean = false,
+    isPlaying: Boolean = false,
+    playable: Boolean = true,
+    sharedElementKey: String? = null,
+    onLongClick: (() -> Unit)? = null,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = SearchHorizontalPadding)
+            .clip(RoundedCornerShape(16.dp))
+            .background(SearchColors.Tile)
+            .searchCardBorder(16.dp)
+            .then(
+                if (onLongClick != null) {
+                    Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                } else {
+                    Modifier.clickable(onClick = onClick)
+                }
+            ),
+    ) {
+        if (artworkUrl != null) {
+            AsyncImage(
+                model = artworkUrl.resize(256, 256),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        alpha = 0.55f
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                            renderEffect = com.mochyy.mochymusic.ui.component.BlurEffectCache.get(
+                                70f,
+                                android.graphics.Shader.TileMode.CLAMP
+                            )
+                        }
+                    },
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.35f),
+                            0.55f to Color.Black.copy(alpha = 0.62f),
+                            1f to Color.Black.copy(alpha = 0.88f),
+                        )
+                    )
+            )
+        }
+
+        Column(modifier = Modifier.padding(16.dp)) {
+            SearchArtwork(
+                url = artworkUrl,
+                size = 108.dp,
+                circle = circle,
+                corner = 8.dp,
+                sharedElementKey = sharedElementKey,
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = SearchColors.Primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = SearchColors.Secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                if (playable) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                            .clickable(onClick = onClick),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(
+                                if (isActive && isPlaying) R.drawable.ic_untitled_pause else R.drawable.play
+                            ),
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** pressing a result lights a pill from one side of the screen to the other */
+private val SearchRowHighlight = com.mochyy.mochymusic.ui.component.RoundedHighlight(
+    cornerRadius = 100.dp,
+    spillX = (-10).dp,
+)
+
+/**
+ * A music video's card: Apple's still at its own 16:9 shape with a play mark. The title and the
+ * artist sit under the picture, not on it, and each is one line so a long name cannot grow the row.
+ *
+ * A video is not a row: its still is widescreen, and a 46 dp square would crop it to a stamp. Cards
+ * sit two to a line, the way Apple draws its video shelves.
+ */
+@Composable
+fun SearchVideoCard(
+    title: String,
+    subtitle: String?,
+    artworkUrl: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.clickable(onClick = onClick)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(SearchColors.TileHigh),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (artworkUrl != null) {
+                AsyncImage(
+                    model = artworkUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Icon(
+                painter = painterResource(R.drawable.play),
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.92f),
+                modifier = Modifier.size(30.dp),
+            )
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = SearchColors.Primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 8.dp),
+        )
+        if (!subtitle.isNullOrBlank()) {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                color = SearchColors.Secondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 2.dp),
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
     }
 }
 

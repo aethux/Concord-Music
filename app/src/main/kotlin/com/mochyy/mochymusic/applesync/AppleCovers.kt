@@ -29,10 +29,16 @@ object AppleCovers {
      * {c} (crop) and {f} (format) — left in, the URL answers 400 and the picture silently stays
      * blank (found on a social-profile avatar: `300x300{c}.jpg`).
      */
-    fun sized(template: String?, size: Int = 300): String? =
+    fun sized(template: String?, size: Int = 300): String? = sized(template, size, size)
+
+    /**
+     * The same template at its own shape: a music video's card is 16:9, and asking for a square
+     * would letterbox a widescreen still into a square picture.
+     */
+    fun sized(template: String?, width: Int, height: Int): String? =
         template
-            ?.replace("{w}", size.toString())
-            ?.replace("{h}", size.toString())
+            ?.replace("{w}", width.toString())
+            ?.replace("{h}", height.toString())
             ?.replace("{c}", "bb")
             ?.replace("{f}", "jpg")
 

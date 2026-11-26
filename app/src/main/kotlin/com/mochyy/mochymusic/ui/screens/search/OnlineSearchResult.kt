@@ -274,10 +274,16 @@ fun OnlineSearchResult(
                             }
                             item(key = "top_card") {
                                 val active = mediaMetadata?.id == top.id
-                                TopResultCard(
-                                    item = top,
+                                // Mochy's own card, fed the words YouTube's kinds need
+                                SearchTopResultCard(
+                                    title = top.title,
+                                    detail = topDetail(top),
+                                    artworkUrl = top.thumbnail,
+                                    circle = top is ArtistItem,
                                     isActive = active,
                                     isPlaying = active && isPlaying,
+                                    playable = top !is ArtistItem,
+                                    sharedElementKey = com.mochyy.mochymusic.ui.component.coverTransitionKey(top),
                                     onClick = { onItemClick(top) },
                                     onLongClick = { onItemLongClick(top) },
                                 )
@@ -471,22 +477,16 @@ private fun searchWords(text: String): List<String> =
 private val AccentMarks = Regex("\\p{M}+")
 private val WordBreaks = Regex("[^\\p{L}\\p{N}]+")
 
+/** The top card's second line: the kind, then the credit, then the length — Mochy's wording. */
 @Composable
-private fun TopResultCard(
-    item: YTItem,
-    isActive: Boolean,
-    isPlaying: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+private fun topDetail(item: YTItem): String {
     val kind = when (item) {
         is SongItem -> if (item.isVideoSong) stringResource(R.string.item_kind_video) else stringResource(R.string.item_kind_song)
         is AlbumItem -> stringResource(R.string.item_kind_album)
         is ArtistItem -> stringResource(R.string.item_kind_artist)
         is PlaylistItem -> stringResource(R.string.item_kind_playlist)
     }
-    val detail = when (item) {
+    return when (item) {
         is SongItem -> listOfNotNull(
             kind,
             item.artists.joinToString { it.name }.takeIf { it.isNotBlank() }?.let { stringResource(R.string.search_by_artist, it) },
@@ -502,101 +502,6 @@ private fun TopResultCard(
         is ArtistItem -> kind
         is PlaylistItem -> listOfNotNull(kind, item.author?.name?.let { stringResource(R.string.search_by_artist, it) }, item.songCountText)
             .joinToString("  •  ")
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = SearchHorizontalPadding)
-            .clip(RoundedCornerShape(16.dp))
-            .background(SearchColors.Tile)
-            .searchCardBorder(16.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-    ) {
-
-        if (item.thumbnail != null) {
-            AsyncImage(
-                model = item.thumbnail?.resize(256, 256),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .matchParentSize()
-                    .graphicsLayer {
-                        alpha = 0.55f
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            renderEffect = com.mochyy.mochymusic.ui.component.BlurEffectCache.get(
-                                70f,
-                                android.graphics.Shader.TileMode.CLAMP
-                            )
-                        }
-                    },
-            )
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to Color.Black.copy(alpha = 0.35f),
-                            0.55f to Color.Black.copy(alpha = 0.62f),
-                            1f to Color.Black.copy(alpha = 0.88f),
-                        )
-                    )
-            )
-        }
-
-        Column(modifier = Modifier.padding(16.dp)) {
-        SearchArtwork(
-            url = item.thumbnail,
-            size = 108.dp,
-            circle = item is ArtistItem,
-            corner = 8.dp,
-            sharedElementKey = com.mochyy.mochymusic.ui.component.coverTransitionKey(item),
-        )
-        Spacer(modifier = Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                    ),
-                    color = SearchColors.Primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = detail,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                    color = SearchColors.Secondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            if (item !is ArtistItem) {
-                Spacer(modifier = Modifier.width(12.dp))
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .clickable(onClick = onClick),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        painter = painterResource(
-                            if (isActive && isPlaying) R.drawable.ic_untitled_pause else R.drawable.play
-                        ),
-                        contentDescription = null,
-                        tint = Color.Black,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
-        }
-        }
     }
 }
 
@@ -672,48 +577,18 @@ private fun ResultRow(
     }
 
     val row: @Composable () -> Unit = {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(
-                    interactionSource = null,
-                    indication = ResultRowHighlight,
-                    onClick = onClick,
-                    onLongClick = onLongClick,
-                )
-                .padding(horizontal = horizontalPadding, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SearchArtwork(
-                url = item.thumbnail,
-                size = 46.dp,
-                circle = item is ArtistItem,
-                sharedElementKey = com.mochyy.mochymusic.ui.component.coverTransitionKey(item),
-            )
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    ),
-
-                    color = if (isActive) Color(0xFF7FD1FF) else SearchColors.Primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                    color = SearchColors.Secondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            SearchOverflowDots(onClick = onMenu)
-        }
+        SearchResultRow(
+            title = item.title,
+            subtitle = subtitle,
+            artworkUrl = item.thumbnail,
+            onClick = onClick,
+            isActive = isActive,
+            circle = item is ArtistItem,
+            sharedElementKey = com.mochyy.mochymusic.ui.component.coverTransitionKey(item),
+            horizontalPadding = horizontalPadding,
+            onLongClick = onLongClick,
+            onMenu = onMenu,
+        )
     }
 
     Column(modifier = modifier) {
@@ -731,9 +606,6 @@ private fun ResultRow(
         SearchRule(horizontalPadding = horizontalPadding)
     }
 }
-
-// pressing a result lights a pill from one side of the screen to the other
-private val ResultRowHighlight = RoundedHighlight(cornerRadius = 100.dp, spillX = (-10).dp)
 
 private fun formatDuration(seconds: Int): String {
     val minutes = seconds / 60

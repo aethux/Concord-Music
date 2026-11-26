@@ -1,18 +1,26 @@
-// Concord: new — the two folder sheets, in the same shape as the playlist and collaborator menus.
+// Concord: new — the folder sheets, in the same shape as the playlist and collaborator menus.
 //
-// Mochy's sheets are one Column: the header row, a row of headline cards, then MenuRows on the
-// sheet's own surface. Both of these follow that, so nothing here looks like a dialog dropped into a
-// sheet-shaped app.
+// Mochy's sheets are one Column: a header, headline action cards, then rows on the sheet's own
+// surface. Everything here follows that, including the two list sheets, which draw the playlists
+// with their covers the way the library does.
 package com.mochyy.mochymusic.ui.menu
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -23,71 +31,156 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.systemBars
+import coil3.compose.AsyncImage
+import com.mochyy.mochymusic.LocalDatabase
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.applesync.ApplePlaylistWrites
 import com.mochyy.mochymusic.applesync.PlaylistFolders
 import com.mochyy.mochymusic.db.entities.Playlist
 import com.mochyy.mochymusic.ui.component.DefaultDialog
+import com.mochyy.mochymusic.ui.component.LocalMenuState
+import com.mochyy.mochymusic.ui.component.PopupSheetState
 import com.mochyy.mochymusic.ui.component.SheetActionCard
-import com.mochyy.mochymusic.ui.component.DefaultDialog
 import com.mochyy.mochymusic.ui.component.SheetActionCardRow
 import com.mochyy.mochymusic.ui.component.SheetHeader
-import com.mochyy.mochymusic.ui.component.PopupSheetHandle
-import com.mochyy.mochymusic.ui.component.PopupSheetState
 import com.mochyy.mochymusic.ui.component.SheetLabel
 import com.mochyy.mochymusic.ui.component.SheetPillButton
 import com.mochyy.mochymusic.ui.component.SheetTextField
 import com.mochyy.mochymusic.ui.component.TextFieldDialog
 import com.mochyy.mochymusic.ui.component.TopToaster
 import com.mochyy.mochymusic.ui.player.menu.MenuRow
+import com.mochyy.mochymusic.ui.utils.resize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Apple's folders, and the two moves worth offering: into one, or back out to the library. */
+/**
+ * Apple's folders. A folder is not a one-tap move any more: tapping it opens the folder's own
+ * playlists (covers and all), and the pill down there does the move, so the person sees what
+ * they are joining before they join it.
+ */
 @Composable
 fun FolderPickerSheet(playlist: Playlist, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val menuState = LocalMenuState.current
     var naming by remember { mutableStateOf(false) }
 
-    val tree by produceState(PlaylistFolders.Tree(emptyList(), emptyMap()), playlist.id) {
-        val dao = runCatching {
-            dagger.hilt.android.EntryPointAccessors.fromApplication(
-                context.applicationContext,
-                com.mochyy.mochymusic.applesync.di.ApplePlaylistEntryPoint::class.java,
-            ).dao()
-        }.getOrNull() ?: return@produceState
-        dao.stateFlow().collect { rows ->
-            rows.firstOrNull { it.key == PlaylistFolders.KEY }?.value?.let { value = PlaylistFolders.decode(it) }
+    val tree by folderTree(playlist.id)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 24.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()),
+    ) {
+        SheetHeader(
+            thumbnailUrl = playlist.thumbnails.firstOrNull(),
+            title = playlist.playlist.name,
+            subtitle = stringResource(R.string.playlist_add_to_folder),
+        )
+        Spacer(Modifier.height(16.dp))
+        val counts = tree.parentOf.values.groupingBy { it }.eachCount()
+        SheetActionCardRow {
+            SheetActionCard(
+                icon = R.drawable.ic_folder_add,
+                title = stringResource(R.string.folder_new),
+                onClick = { naming = true },
+                modifier = Modifier.weight(1f),
+            )
+            // one card, half the sheet: a lone card stretched full width reads as a bar
+            Spacer(Modifier.weight(1f))
         }
+        Spacer(Modifier.height(10.dp))
+        tree.folders.forEach { folder ->
+            MenuRow(
+                icon = R.drawable.ic_folder_small,
+                title = folder.name,
+                onClick = {
+                    // the list replaces this sheet: close it outright, so its top edge cannot peek
+                    // above a shorter sheet
+                    menuState.dismissAll()
+                    menuState.show {
+                        FolderContentsSheet(
+                            folderId = folder.id,
+                            folderName = folder.name,
+                            playlist = playlist,
+                            onDismiss = menuState::dismiss,
+                        )
+                    }
+                },
+                trailing = {
+                    Text(
+                        text = (counts[folder.id] ?: 0).toString(),
+                        style = TextStyle(fontSize = 13.sp),
+                        color = Color.White.copy(alpha = 0.55f),
+                    )
+                },
+            )
+        }
+        Spacer(Modifier.height(12.dp))
     }
 
-    fun move(folderId: String?) {
+    if (naming) {
+        TextFieldDialog(
+            title = { Text(stringResource(R.string.folder_new)) },
+            placeholder = { Text(stringResource(R.string.folder_name_hint)) },
+            onDismiss = { naming = false },
+            onDone = { name ->
+                naming = false
+                scope.launch(Dispatchers.IO) {
+                    val folderId = ApplePlaylistWrites.createFolder(context, name.trim())
+                    if (folderId != null) withContext(Dispatchers.Main) { onDismiss() }
+                }
+            },
+        )
+    }
+}
+
+/** One folder's playlists, with the pill that puts this playlist in — or takes it back out. */
+@Composable
+private fun FolderContentsSheet(
+    folderId: String,
+    folderName: String,
+    playlist: Playlist,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val database = LocalDatabase.current
+    val scope = rememberCoroutineScope()
+    val tree by folderTree(folderId)
+    val playlists by database.playlistsByCreateDateAsc().collectAsState(emptyList())
+    val inside = tree.parentOf[playlist.id] == folderId
+    val inIt = playlists.filter { tree.parentOf[it.id] == folderId }
+
+    fun move() {
         scope.launch(Dispatchers.IO) {
             val done = ApplePlaylistWrites.movePlaylist(
                 context = context,
                 localId = playlist.id,
                 remoteId = playlist.id.removePrefix("AM_PL_"),
-                folderId = folderId,
+                folderId = if (inside) null else folderId,
             )
-            if (done) {
-                withContext(Dispatchers.Main) {
-                    onDismiss()
+            withContext(Dispatchers.Main) {
+                onDismiss()
+                if (done) {
                     TopToaster.show(
                         context.getString(
-                            if (folderId == null) R.string.playlist_remove_from_folder
+                            if (inside) R.string.playlist_remove_from_folder
                             else R.string.playlist_add_to_folder,
                         ),
                     )
@@ -100,71 +193,34 @@ fun FolderPickerSheet(playlist: Playlist, onDismiss: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 28.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()),
+            .padding(bottom = 24.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()),
     ) {
-        SheetHeader(
-            thumbnailUrl = playlist.thumbnails.firstOrNull(),
-            title = playlist.playlist.name,
-            subtitle = stringResource(R.string.playlist_add_to_folder),
-        )
-        Spacer(Modifier.height(16.dp))
-        val inFolder = tree.parentOf.containsKey(playlist.id)
-        SheetActionCardRow {
-            SheetActionCard(
-                icon = R.drawable.ic_folder_add,
-                title = stringResource(R.string.folder_new),
-                onClick = { naming = true },
-                modifier = Modifier.weight(1f),
+        Column(modifier = Modifier.padding(horizontal = 2.dp)) {
+            Text(
+                text = folderName,
+                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold),
             )
-            if (inFolder) {
-                // the way back out sits beside it rather than under the folder list
-                SheetActionCard(
-                    icon = R.drawable.ic_folder_small,
-                    title = stringResource(R.string.playlist_remove_from_folder),
-                    onClick = { move(null) },
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                // one card, half the sheet: a lone card stretched full width reads as a bar
-                Spacer(Modifier.weight(1f))
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        val counts = tree.parentOf.values.groupingBy { it }.eachCount()
-        tree.folders.forEach { folder ->
-            MenuRow(
-                icon = R.drawable.ic_folder_small,
-                title = folder.name,
-                onClick = { move(folder.id) },
-                trailing = {
-                    Text(
-                        text = (counts[folder.id] ?: 0).toString(),
-                        style = TextStyle(fontSize = 13.sp),
-                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.55f),
-                    )
-                },
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = pluralStringResource(R.plurals.folder_playlist_count, inIt.size, inIt.size),
+                style = TextStyle(fontSize = 13.sp),
+                color = Color.White.copy(alpha = 0.6f),
             )
         }
+        Spacer(Modifier.height(12.dp))
+        inIt.forEach { item -> PlaylistPickRow(playlist = item, trailing = null, onClick = null) }
         Spacer(Modifier.height(16.dp))
-    }
-
-    if (naming) {
-        TextFieldDialog(
-            title = { Text(stringResource(R.string.folder_new)) },
-            placeholder = { Text(stringResource(R.string.folder_name_hint)) },
-            onDismiss = { naming = false },
-            onDone = { name ->
-                naming = false
-                scope.launch(Dispatchers.IO) {
-                    val folderId = ApplePlaylistWrites.createFolder(context, name.trim())
-                    if (folderId != null) move(folderId)
-                }
-            },
+        SheetPillButton(
+            text = stringResource(
+                if (inside) R.string.playlist_remove_from_folder else R.string.folder_add_this,
+            ),
+            onClick = { move() },
         )
+        Spacer(Modifier.height(8.dp))
     }
 }
 
-/** One folder's own sheet: rename it, put a new playlist in it, or delete it. */
+/** One folder's own sheet: a new playlist in it, its edit screen, or delete. */
 @Composable
 fun FolderMenuSheet(
     folderId: String,
@@ -174,10 +230,9 @@ fun FolderMenuSheet(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val menuState = LocalMenuState.current
     var creating by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf(false) }
-    val menuState = com.mochyy.mochymusic.ui.component.LocalMenuState.current
 
     Column(
         modifier = Modifier
@@ -193,23 +248,11 @@ fun FolderMenuSheet(
             Text(
                 text = pluralStringResource(R.plurals.folder_playlist_count, playlistCount, playlistCount),
                 style = TextStyle(fontSize = 13.sp),
-                color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f),
+                color = Color.White.copy(alpha = 0.6f),
             )
         }
         Spacer(Modifier.height(16.dp))
         SheetActionCardRow {
-            val sheetState = com.mochyy.mochymusic.ui.component.LocalMenuState.current
-            SheetActionCard(
-                icon = R.drawable.edit,
-                title = stringResource(R.string.folder_rename),
-                onClick = {
-                    // from its own height, not the folder sheet's: a pushed sheet would match the
-                    // taller menu behind it and open with half a screen of empty space
-                    onDismiss()
-                    sheetState.showRenameFolderSheet(folderId, folderName)
-                },
-                modifier = Modifier.weight(1f),
-            )
             SheetActionCard(
                 icon = R.drawable.playlist_add,
                 title = stringResource(R.string.folder_add_playlist),
@@ -217,9 +260,12 @@ fun FolderMenuSheet(
                 modifier = Modifier.weight(1f),
             )
             SheetActionCard(
-                icon = R.drawable.add_circle,
-                title = stringResource(R.string.folder_edit_lists),
-                onClick = { editing = true },
+                icon = R.drawable.edit,
+                title = stringResource(R.string.folder_edit),
+                onClick = {
+                    menuState.dismissAll()
+                    menuState.showEditFolderSheet(folderId, folderName)
+                },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -246,14 +292,7 @@ fun FolderMenuSheet(
         )
     }
 
-    if (editing) {
-        editing = false
-        menuState.show {
-            FolderEditSheet(folderId = folderId, folderName = folderName, onDismiss = menuState::dismiss)
-        }
-    }
-
-    if (creating) {
+    if (deleting) {
         DefaultDialog(
             onDismiss = { deleting = false },
             title = { Text(stringResource(R.string.folder_delete)) },
@@ -274,86 +313,12 @@ fun FolderMenuSheet(
     }
 }
 
-/** The folder's own playlist list: tap one to put it in the folder, tap again to take it out. */
-@Composable
-fun FolderEditSheet(folderId: String, folderName: String, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val database = com.mochyy.mochymusic.LocalDatabase.current
-    val scope = rememberCoroutineScope()
-
-    val tree by produceState(PlaylistFolders.Tree(emptyList(), emptyMap()), folderId) {
-        val dao = runCatching {
-            dagger.hilt.android.EntryPointAccessors.fromApplication(
-                context.applicationContext,
-                com.mochyy.mochymusic.applesync.di.ApplePlaylistEntryPoint::class.java,
-            ).dao()
-        }.getOrNull() ?: return@produceState
-        dao.stateFlow().collect { rows ->
-            rows.firstOrNull { it.key == PlaylistFolders.KEY }?.value?.let { value = PlaylistFolders.decode(it) }
-        }
-    }
-    val playlists by database.playlistsByCreateDateAsc().collectAsState(emptyList())
-
-    fun toggle(localId: String, inside: Boolean) {
-        if (!localId.startsWith("AM_PL_")) return
-        scope.launch(Dispatchers.IO) {
-            ApplePlaylistWrites.movePlaylist(
-                context = context,
-                localId = localId,
-                remoteId = localId.removePrefix("AM_PL_"),
-                folderId = if (inside) null else folderId,
-            )
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 28.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 2.dp)) {
-            Text(
-                text = folderName,
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-            )
-            Spacer(Modifier.height(3.dp))
-            Text(
-                text = stringResource(R.string.folder_edit_hint),
-                style = TextStyle(fontSize = 13.sp),
-                color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f),
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        playlists.forEach { playlist ->
-            val localId = playlist.id
-            val inside = tree.parentOf[localId] == folderId
-            MenuRow(
-                icon = R.drawable.queue_music,
-                title = playlist.playlist.name,
-                enabled = localId.startsWith("AM_PL_"),
-                onClick = { toggle(localId, inside) },
-                trailing = {
-                    androidx.compose.material3.Icon(
-                        painter = androidx.compose.ui.res.painterResource(
-                            if (inside) R.drawable.check else R.drawable.add_circle,
-                        ),
-                        contentDescription = null,
-                        tint = androidx.compose.ui.graphics.Color.White.copy(alpha = if (inside) 0.9f else 0.5f),
-                        modifier = Modifier.height(20.dp).width(20.dp),
-                    )
-                },
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-    }
-}
-
 /**
- * Renaming a folder, in the shape of the create-playlist sheet: one field on the sheet, one pill at
- * the bottom, no dialog. The sheet closes itself once Apple has the new name.
+ * A folder's edit screen, one sheet: the name (saved by the pill), then every playlist with its
+ * cover. Tapping a playlist puts it in the folder or takes it out — no separate rename screen, and
+ * no list of names with no pictures.
  */
-fun PopupSheetState.showRenameFolderSheet(folderId: String, currentName: String) {
+fun PopupSheetState.showEditFolderSheet(folderId: String, currentName: String) {
     val name = mutableStateOf(currentName)
     showWithHandle(
         buttonBar = {
@@ -361,31 +326,137 @@ fun PopupSheetState.showRenameFolderSheet(folderId: String, currentName: String)
             val scope = rememberCoroutineScope()
             var busy by remember { mutableStateOf(false) }
             SheetPillButton(
-                text = stringResource(R.string.save),
+                text = stringResource(R.string.done),
                 enabled = name.value.isNotBlank() && !busy,
                 onClick = {
                     busy = true
                     scope.launch(Dispatchers.IO) {
-                        val ok = ApplePlaylistWrites.renameFolder(context, folderId, name.value.trim())
-                        withContext(Dispatchers.Main) { if (ok) dismiss() else busy = false }
+                        val failedRename = name.value.trim() != currentName &&
+                            !ApplePlaylistWrites.renameFolder(context, folderId, name.value.trim())
+                        withContext(Dispatchers.Main) { if (failedRename) busy = false else dismiss() }
                     }
                 },
             )
         },
     ) {
+        val context = LocalContext.current
+        val database = LocalDatabase.current
+        val scope = rememberCoroutineScope()
+        val tree by folderTree(folderId)
+        val playlists by database.playlistsByCreateDateAsc().collectAsState(emptyList())
+
+        fun toggle(localId: String, inside: Boolean) {
+            if (!localId.startsWith("AM_PL_")) return
+            scope.launch(Dispatchers.IO) {
+                ApplePlaylistWrites.movePlaylist(
+                    context = context,
+                    localId = localId,
+                    remoteId = localId.removePrefix("AM_PL_"),
+                    folderId = if (inside) null else folderId,
+                )
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 12.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 20.dp),
         ) {
-            SheetLabel(stringResource(R.string.folder_rename))
-            Spacer(Modifier.height(16.dp))
+            SheetLabel(stringResource(R.string.folder_name))
+            Spacer(Modifier.height(8.dp))
             SheetTextField(
                 value = name.value,
                 onValueChange = { name.value = it.take(60) },
                 placeholder = stringResource(R.string.folder_name_hint),
             )
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(18.dp))
+            SheetLabel(stringResource(R.string.folder_playlists_title))
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = stringResource(R.string.folder_edit_hint),
+                style = TextStyle(fontSize = 12.sp),
+                color = Color.White.copy(alpha = 0.55f),
+            )
+            Spacer(Modifier.height(6.dp))
+            playlists.forEach { playlist ->
+                val localId = playlist.id
+                val inside = tree.parentOf[localId] == folderId
+                PlaylistPickRow(
+                    playlist = playlist,
+                    trailing = if (inside) R.drawable.check else R.drawable.add_circle,
+                    onClick = if (localId.startsWith("AM_PL_")) {
+                        { toggle(localId, inside) }
+                    } else {
+                        null
+                    },
+                )
+            }
+            // room under the last cover, clear of the pill
+            Spacer(Modifier.height(40.dp))
+        }
+    }
+}
+
+/** A playlist row with its cover, the way the library draws one, plus an optional icon at the end. */
+@Composable
+private fun PlaylistPickRow(
+    playlist: Playlist,
+    trailing: Int?,
+    onClick: (() -> Unit)?,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 6.dp, vertical = 7.dp),
+    ) {
+        AsyncImage(
+            model = playlist.thumbnails.firstOrNull()?.resize(240, 240),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(10.dp)),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = playlist.playlist.name,
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+            color = Color.White.copy(alpha = 0.92f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (trailing != null) {
+            Icon(
+                painter = painterResource(trailing),
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+/** The folder tree, observed: a write made on one of these sheets lands on the page behind it. */
+@Composable
+private fun folderTree(key: String): androidx.compose.runtime.State<PlaylistFolders.Tree> {
+    val app = LocalContext.current.applicationContext
+    return produceState(
+        initialValue = PlaylistFolders.Tree(emptyList(), emptyMap()),
+        key1 = key,
+    ) {
+        val dao = runCatching {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            app,
+            com.mochyy.mochymusic.applesync.di.ApplePlaylistEntryPoint::class.java,
+            ).dao()
+        }.getOrNull() ?: return@produceState
+        dao.stateFlow().collect { rows ->
+            rows.firstOrNull { it.key == PlaylistFolders.KEY }?.value?.let { value = PlaylistFolders.decode(it) }
         }
     }
 }

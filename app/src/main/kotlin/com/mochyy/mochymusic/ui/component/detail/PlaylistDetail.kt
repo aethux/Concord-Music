@@ -46,6 +46,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.statusBars
+import com.mochyy.mochymusic.applesync.AppleSyncService
+import com.mochyy.mochymusic.applesync.AppleSyncStatus
+import com.mochyy.mochymusic.ui.screens.search.SearchColors
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -312,6 +320,10 @@ fun PlaylistDetailScaffold(
     cover: (@Composable (Modifier) -> Unit)? = null,
     /** the theme colour for a drawn [cover], which has no picture to sample one from */
     coverThemeColor: Color? = null,
+    /** True while [onRefresh]'s work runs: the ring holds until it is done. */
+    isRefreshing: Boolean = false,
+    /** What a pull down means on this page; null leaves the page without the gesture. */
+    onRefresh: (() -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     // A bar that replaces the top bar (the list's own song search) sits over the list rather than
@@ -411,6 +423,21 @@ fun PlaylistDetailScaffold(
     }
     val glassState = remember { GlassState() }
     val scope = rememberCoroutineScope()
+
+    // A pull on the page refreshes *this page*, the way Cider's does: the caller says what that means
+    // (a playlist reads its own playlist, an artist its own artist, a library page the library). No
+    // callback, no pull. The list is what moves; the ring sits under the status bar, over the cover.
+    val refreshState = rememberPullToRefreshState()
+    val refreshHold by animateFloatAsState(
+        targetValue = if (isRefreshing) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = if (isRefreshing) 180 else 320,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "refreshHold",
+    )
+    val refreshProgress = if (onRefresh != null) maxOf(refreshState.distanceFraction, refreshHold) else 0f
+    val refreshShift = RefreshPullTravel * refreshProgress
     // the Edit order pill is frosted even with the cover still showing, so the glass has to run
     // before the bar collapses
     val pillNeedsGlass = rememberUpdatedState(modeBar is PlaylistModeBar.EditOrder)
@@ -491,7 +518,18 @@ fun PlaylistDetailScaffold(
             LazyColumn(
                 state = lazyListState,
                 contentPadding = listPadding,
-                modifier = Modifier.fillMaxSize(),
+                modifier = if (onRefresh != null) {
+                    Modifier
+                        .fillMaxSize()
+                        .pullToRefresh(
+                            state = refreshState,
+                            isRefreshing = isRefreshing,
+                            onRefresh = onRefresh,
+                        )
+                        .graphicsLayer { translationY = refreshShift.toPx() }
+                } else {
+                    Modifier.fillMaxSize()
+                },
                 content = content,
             )
         }
@@ -520,9 +558,31 @@ fun PlaylistDetailScaffold(
         }
 
         overlay()
+
+        if (refreshProgress > 0f) {
+            val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = statusBar + 12.dp)
+                    .size(RefreshPullClearance)
+                    .alpha(refreshProgress.coerceIn(0f, 1f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = SearchColors.Secondary,
+                    strokeWidth = 2.dp,
+                )
+            }
+        }
     }
     }
 }
+
+/** How far the header list follows the pull, and the room the ring takes. */
+private val RefreshPullTravel = 72.dp
+private val RefreshPullClearance = 40.dp
 
 // the backdrop is pinned behind the list, so it has to travel most of the way up on its own
 private const val CoverFollow = 0.8f

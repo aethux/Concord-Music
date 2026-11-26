@@ -53,6 +53,9 @@ import com.mochyy.mochymusic.ui.component.detail.TrackSubtitleStyle
 import com.mochyy.mochymusic.ui.component.detail.TrackTitleStyle
 import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.utils.resize
+import androidx.compose.ui.platform.LocalContext
+import com.mochyy.mochymusic.applesync.AppleSyncService
+import com.mochyy.mochymusic.applesync.AppleSyncStatus
 import com.mochyy.mochymusic.ui.component.GlassState
 import com.mochyy.mochymusic.ui.screens.search.SearchColors
 import com.mochyy.mochymusic.ui.screens.search.SearchHorizontalPadding
@@ -96,6 +99,9 @@ fun LibraryGridScreen(
     // its rule and empty state in it loses the position it was left at
     val listState = rememberRestoredListState(hasContent = rows.isNotEmpty())
     val collapse = rememberCollapseProgress(listState)
+    // Cider's library refresh, on every library grid: pull down and Apple's library is read again.
+    val appleSync = AppleSyncStatus.progress
+    val context = LocalContext.current
 
     LibraryScaffold(
         title = title,
@@ -109,6 +115,8 @@ fun LibraryGridScreen(
         pureBlack = pureBlack,
         bottomInset = bottomInset,
         modifier = modifier,
+        isRefreshing = appleSync.running,
+        onRefresh = { AppleSyncService.start(context, light = true) },
     ) {
         item(key = "rule") {
             LibraryRule()

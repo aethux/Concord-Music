@@ -61,6 +61,7 @@ import com.mochyy.mochymusic.LocalSyncUtils
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.HideExplicitKey
 import com.mochyy.mochymusic.constants.HideVideoSongsKey
+import com.mochyy.mochymusic.applesync.AppleSongWrites
 import com.mochyy.mochymusic.db.entities.Album
 import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.playback.queues.ListQueue
@@ -110,6 +111,7 @@ fun AlbumScreen(
     val menuState = LocalMenuState.current
     val database = LocalDatabase.current
     val syncUtils = LocalSyncUtils.current
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val playerConnection = LocalPlayerConnection.current ?: return
 
@@ -224,8 +226,13 @@ fun AlbumScreen(
         )
     }
 
+    // this page's own pull: Apple's album page (or the local row) is re-read, nothing else is
+    val refreshing by viewModel.refreshing.collectAsState()
+
     PlaylistDetailScaffold(
         sharedElementKey = "album-${viewModel.albumId}",
+        isRefreshing = refreshing,
+        onRefresh = viewModel::refresh,
         coverUrl = album?.album?.thumbnailUrl,
         lazyListState = lazyListState,
         onBackClick = { navController.navigateUp() },
@@ -398,9 +405,14 @@ fun AlbumScreen(
                     selected = inSelectMode && song.id in selection,
                     liked = song.song.liked,
                     onLikeClick = {
-                        val updated = song.song.toggleLike()
-                        database.query { update(updated) }
-                        syncUtils.likeSong(updated)
+                        // an Apple row's heart belongs to Apple; the YouTube push is for YouTube rows
+                        if (song.id.startsWith("AM_")) {
+                            creatorScope.launch { AppleSongWrites.pushLike(context, song.song, !song.song.liked) }
+                        } else {
+                            val updated = song.song.toggleLike()
+                            database.query { update(updated) }
+                            syncUtils.likeSong(updated)
+                        }
                     },
                     trailing = if (inSelectMode) {
                         { PlaylistSelectTick(checked = song.id in selection) }

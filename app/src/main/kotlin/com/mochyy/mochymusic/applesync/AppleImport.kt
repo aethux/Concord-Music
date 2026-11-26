@@ -39,6 +39,15 @@ class AppleImport(
 
     data class Result(val added: Int, val skipped: Int, val liked: Int, val albums: Int = 0)
 
+    /** One row's picture, held back so the whole library's are written in a single transaction. */
+    private class ThumbnailWrite(val songId: String, val url: String, val kind: Int) {
+        companion object {
+            const val MISSING = 0
+            const val EXPIRED = 1
+            const val UPLOAD = 2
+        }
+    }
+
     /** A song that is not in the library yet, resolved as far as the reads allow. */
     private class NewSong(
         val song: SongEntity,
@@ -78,7 +87,11 @@ class AppleImport(
     private val batchSize = 100
 
     /** [alreadyRead] is what the pull just fetched; without it this would read the library again. */
-    suspend fun run(alreadyRead: List<RemoteSong>? = null): Result {
+    suspend fun run(
+        alreadyRead: List<RemoteSong>? = null,
+        /** What the pull already read. Reading it again here was one more set of requests per refresh. */
+        alreadyRated: Map<String, Long>? = null,
+    ): Result {
         val pair = tokens.read() ?: throw AppleSyncException("Sign in to Apple Music first.")
         val client = AppleClient(pair)
 
@@ -90,7 +103,8 @@ class AppleImport(
         }
 
         AppleSyncStatus.update(phase = "Reading your favourites…", songs = songs.size, totalSongs = songs.size)
-        val rated = runCatching { client.ratings(songs.mapNotNull { it.catalogId }) }.getOrDefault(emptyMap())
+        val rated = alreadyRated
+            ?: runCatching { client.ratings(songs.mapNotNull { it.catalogId }) }.getOrDefault(emptyMap())
 
         // One read each, up front. What this fork already imported is known before the loop, which is
         // also what makes a refresh cheap once the library has been imported once.
@@ -136,6 +150,7 @@ class AppleImport(
 
         val pendingTracks = ArrayList<AppleTrackEntity>(songs.size)
         val pendingCovers = ArrayList<CoverCacheEntity>()
+        val pendingThumbnails = ArrayList<ThumbnailWrite>()
         val newSongs = ArrayList<NewSong>()
         val artistIds = HashMap<String, String>()
 
@@ -181,19 +196,23 @@ class AppleImport(
          * same question — a cover must come from the newest library payload — and both leave a
          * permanent `is1-ssl.mzstatic.com` template exactly as it is.
          */
-        suspend fun noteArtwork(songId: String, song: RemoteSong) {
+        fun noteArtwork(songId: String, song: RemoteSong) {
             val url = artwork(song.artworkUrl) ?: return
             // an uploaded item's library row carries the uploader's own signed artwork, and that
             // outranks the catalogue template a row picks up from a playlist or an album read
             val uploadArt = url.contains("blobstore", true) || url.contains("X-Amz", true)
             if (songId !in withoutArtwork && songId !in signedArtwork && !uploadArt) return
-            runCatching {
-                when {
-                    songId in withoutArtwork -> database.appleSongDao.setSongThumbnailIfMissing(songId, url)
-                    songId in signedArtwork -> database.appleSongDao.setSongThumbnailWhenExpired(songId, url)
-                    else -> database.appleSongDao.setSongThumbnailFromUpload(songId, url)
-                }
-            }
+            // Collected, not written: one update per song is one transaction per song, and a library
+            // whose rows all lack artwork spent ninety seconds committing them one at a time.
+            pendingThumbnails += ThumbnailWrite(
+                songId = songId,
+                url = url,
+                kind = when {
+                    songId in withoutArtwork -> ThumbnailWrite.MISSING
+                    songId in signedArtwork -> ThumbnailWrite.EXPIRED
+                    else -> ThumbnailWrite.UPLOAD
+                },
+            )
         }
 
         songs.forEachIndexed { index, song ->
@@ -331,6 +350,22 @@ class AppleImport(
             skipped += batch.size - written.size
         }
 
+        if (pendingThumbnails.isNotEmpty()) {
+            runCatching {
+                database.withTransaction {
+                    pendingThumbnails.forEach { write ->
+                        when (write.kind) {
+                            ThumbnailWrite.MISSING ->
+                                database.appleSongDao.setSongThumbnailIfMissing(write.songId, write.url)
+                            ThumbnailWrite.EXPIRED ->
+                                database.appleSongDao.setSongThumbnailWhenExpired(write.songId, write.url)
+                            ThumbnailWrite.UPLOAD ->
+                                database.appleSongDao.setSongThumbnailFromUpload(write.songId, write.url)
+                        }
+                    }
+                }
+            }
+        }
         if (pendingCovers.isNotEmpty()) runCatching { dao.saveCovers(pendingCovers) }
         if (pendingTracks.isNotEmpty()) runCatching { dao.saveTracks(pendingTracks) }
 

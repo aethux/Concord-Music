@@ -127,8 +127,12 @@ fun LibrarySongsScreen(
         )
     }
 
+    val (libraryRefreshing, libraryRefresh) = rememberLibraryRefresh()
+
     GeneratedPlaylistPage(
         title = title,
+        isRefreshing = libraryRefreshing,
+        onRefresh = libraryRefresh,
         coverUrl = songs.firstOrNull { !it.song.thumbnailUrl.isNullOrEmpty() }?.song?.thumbnailUrl,
         stats = stringResource(
             R.string.lib_stats_in_library_time,

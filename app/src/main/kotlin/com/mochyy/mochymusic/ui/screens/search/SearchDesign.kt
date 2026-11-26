@@ -98,6 +98,12 @@ val SearchTitleBlockHeight = 62.dp
 
 val SearchTopClearance = 18.dp
 
+/**
+ * The bar's own bottom padding, under the field. Named because the pull-to-refresh spinner centres
+ * itself in the gap the pull opens, and that gap starts at the *field's* bottom, not the bar's.
+ */
+val SearchBarBottomPadding = 32.dp
+
 object SearchColors {
     val Field = Color(0xFF141416)
     val FieldFocused = Color(0xFF1E1E21)
@@ -192,7 +198,7 @@ fun searchTopBarHeight(
     val statusBar = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     return statusBar + SearchTopClearance +
         (if (withTitle) titleBlockHeight else 0.dp) +
-        SearchFieldHeight + extra + 32.dp
+        SearchFieldHeight + extra + SearchBarBottomPadding
 }
 
 @Composable

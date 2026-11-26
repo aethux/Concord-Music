@@ -106,8 +106,13 @@ fun ApplePlaylistScreen(
         )
     }
 
+    // this page's own pull: the playlist is re-read from Apple, nothing else is
+    val refreshing by viewModel.refreshing.collectAsState()
+
     PlaylistDetailScaffold(
         sharedElementKey = "apple_playlist-${viewModel.playlistId}",
+        isRefreshing = refreshing,
+        onRefresh = viewModel::refresh,
         coverUrl = current?.artworkUrl,
         lazyListState = lazyListState,
         onBackClick = { navController.navigateUp() },

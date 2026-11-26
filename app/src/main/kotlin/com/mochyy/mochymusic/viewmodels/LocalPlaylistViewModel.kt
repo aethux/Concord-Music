@@ -41,9 +41,36 @@ constructor(
     @ApplicationContext context: Context,
     database: MusicDatabase,
     private val syncUtils: SyncUtils,
+    private val tokens: com.mochyy.mochymusic.applesync.AppleTokens,
+    private val pageCache: com.mochyy.mochymusic.applesync.ApplePageCache,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+    private val database = database
+
     val playlistId = savedStateHandle.get<String>("playlistId")!!
+
+    /** True while a pull is re-reading this playlist from Apple: the page's own ring. */
+    private val _refreshing = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val refreshing: kotlinx.coroutines.flow.StateFlow<Boolean> = _refreshing
+
+    /**
+     * A pull on this page re-reads this playlist and nothing else, Cider's per-page refresh: Apple's
+     * copy of it is fetched again and this playlist's own rows are rewritten in Apple's order.
+     */
+    fun refreshFromApple(remoteId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (_refreshing.value) return@launch
+            _refreshing.value = true
+            try {
+                com.mochyy.mochymusic.applesync.ApplePlaylistRefresh(database, tokens, pageCache)
+                    .run(playlistId, remoteId)
+            } catch (e: Exception) {
+                timber.log.Timber.tag("PlaylistRefresh").w(e, "could not re-read %s", remoteId)
+            } finally {
+                _refreshing.value = false
+            }
+        }
+    }
     val playlist =
         database
             .playlist(playlistId)

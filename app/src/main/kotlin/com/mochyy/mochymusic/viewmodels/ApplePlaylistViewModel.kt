@@ -18,8 +18,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.mochyy.mochymusic.applesync.PageKind
 
 @HiltViewModel
 class ApplePlaylistViewModel @Inject constructor(
@@ -67,8 +69,28 @@ class ApplePlaylistViewModel @Inject constructor(
         load()
     }
 
-    private fun load() {
+    /** True while a pull is re-reading this playlist: the page's own ring, not the library's. */
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
+
+    /** Re-reads this playlist and nothing else: its cache row goes, then the loader runs again. */
+    fun refresh() {
         viewModelScope.launch(Dispatchers.IO) {
+            if (_refreshing.value) return@launch
+            _refreshing.value = true
+            try {
+                runCatching {
+                    pageCache.invalidate(PageKind.PLAYLIST, listOf(playlistId, playlistId.removePrefix("l.")))
+                }
+                _failed.value = false
+                load().join()
+            } finally {
+                _refreshing.value = false
+            }
+        }
+    }
+
+    private fun load(): Job = viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
             _signedOut.value = pair == null
             val remote = pair?.let { runCatching { AppleClient(it, pageCache).playlistPage(playlistId) }.getOrNull() }
@@ -106,6 +128,5 @@ class ApplePlaylistViewModel @Inject constructor(
                 addedBy = remote.addedBy,
                 shared = remote.shared,
             )
-        }
     }
 }

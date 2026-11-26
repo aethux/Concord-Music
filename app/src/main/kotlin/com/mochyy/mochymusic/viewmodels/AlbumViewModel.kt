@@ -28,11 +28,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import com.mochyy.mochymusic.utils.Wikipedia
 import com.mochyy.mochymusic.utils.AppleMusicAboutAlbum
 import javax.inject.Inject
+import com.mochyy.mochymusic.applesync.PageKind
+import kotlinx.coroutines.flow.asStateFlow
 
 @HiltViewModel
 class AlbumViewModel
@@ -115,9 +118,9 @@ constructor(
      * No YouTube call is made on this path. `YouTube.album("AM_ALB_…")` cannot answer, and its
      * NOT_FOUND branch deletes the album row — which is exactly what hiding YouTube has to stop.
      */
-    private fun loadApple() {
-        val remoteId = appleRemoteId ?: return
-        viewModelScope.launch(Dispatchers.IO) {
+    private fun loadApple(): Job? {
+        val remoteId = appleRemoteId ?: return null
+        return viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
             val page = pair?.let { runCatching { AppleClient(it, pageCache).catalogAlbum(remoteId) }.getOrNull() }
             if (page == null) {
@@ -169,6 +172,34 @@ constructor(
             loadFailed.value = false
             appleArtistIdFlow.value = page.artistId
             appleAlbum.value = AlbumWithSongs(album = album, artists = listOf(artist), songs = songs)
+        }
+    }
+
+    /** True while a pull is re-reading this album: the page's own ring, not the library's. */
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
+
+    /**
+     * Re-reads this album and nothing else. An Apple album drops its page cache row first, so the
+     * loader cannot answer itself from disk; a local album has nothing upstream and only re-reads.
+     */
+    fun refresh() {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (_refreshing.value) return@launch
+            _refreshing.value = true
+            try {
+                val remoteId = appleRemoteId
+                if (remoteId != null) {
+                    runCatching {
+                        pageCache.invalidate(PageKind.ALBUM, listOf(remoteId, remoteId.removePrefix("l.")))
+                    }
+                    loadFailed.value = false
+                    loadApple()?.join()
+                }
+                if (remoteId == null) load()
+            } finally {
+                _refreshing.value = false
+            }
         }
     }
 

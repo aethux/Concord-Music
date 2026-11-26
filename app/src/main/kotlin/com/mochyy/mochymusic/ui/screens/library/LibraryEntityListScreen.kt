@@ -20,8 +20,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.mochyy.mochymusic.LocalPlayerAwareWindowInsets
 import com.mochyy.mochymusic.LocalPlayerConnection
+import com.mochyy.mochymusic.applesync.AppleSyncService
+import com.mochyy.mochymusic.applesync.AppleSyncStatus
 import com.mochyy.mochymusic.ui.component.GlassState
 import com.mochyy.mochymusic.ui.component.rememberRestoredListState
 import com.mochyy.mochymusic.ui.screens.search.rememberCollapseProgress
@@ -99,6 +102,10 @@ fun <T> LibraryEntityListScreen(
     val listState = rememberRestoredListState(hasContent = rows.isNotEmpty())
     val collapse = rememberCollapseProgress(listState)
 
+    // Cider's library refresh, on every library list: pull down and Apple's library is read again.
+    val appleSync = AppleSyncStatus.progress
+    val context = LocalContext.current
+
     val sectionIndex = remember(rows) {
         buildMap {
             rows.forEachIndexed { index, row ->
@@ -121,6 +128,8 @@ fun <T> LibraryEntityListScreen(
             pureBlack = pureBlack,
             bottomInset = bottomInset,
             trailing = trailing,
+            isRefreshing = appleSync.running,
+            onRefresh = { AppleSyncService.start(context, light = true) },
         ) {
             item(key = "top_rule") {
                 LibraryRule()

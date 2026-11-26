@@ -539,9 +539,17 @@ fun LocalPlaylistScreen(
         }
     }
 
+    // a pull here re-reads *this* playlist from Apple, never the library
+    val refreshing by viewModel.refreshing.collectAsState()
+    val appleRemoteId = imported
+        ?.takeIf { it.source == com.mochyy.mochymusic.importer.ImportSource.APPLE_MUSIC.key }
+        ?.remoteId
+
     PlaylistDetailScaffold(
         sharedElementKey = "playlist-${viewModel.playlistId}",
         coverUrl = coverUrl,
+        isRefreshing = refreshing,
+        onRefresh = appleRemoteId?.let { remote -> { viewModel.refreshFromApple(remote) } },
         lazyListState = lazyListState,
         onBackClick = { navController.navigateUp() },
         onBackLongClick = { navController.backToMain() },

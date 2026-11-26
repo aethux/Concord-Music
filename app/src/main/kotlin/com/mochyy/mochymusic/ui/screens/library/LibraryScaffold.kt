@@ -5,17 +5,31 @@
 
 package com.mochyy.mochymusic.ui.screens.library
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
@@ -33,6 +47,9 @@ import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.playback.queues.YouTubeQueue
 import com.mochyy.mochymusic.ui.component.GlassState
 import com.mochyy.mochymusic.ui.component.glassRoot
+import com.mochyy.mochymusic.applesync.AppleSyncService
+import com.mochyy.mochymusic.applesync.AppleSyncStatus
+import com.mochyy.mochymusic.ui.screens.search.SearchBarBottomPadding
 import com.mochyy.mochymusic.ui.screens.search.SearchColors
 import com.mochyy.mochymusic.ui.screens.search.SearchField
 import com.mochyy.mochymusic.ui.screens.search.SearchGlassTopBar
@@ -45,6 +62,26 @@ import com.music.innertube.models.ArtistItem
 import com.music.innertube.models.PlaylistItem
 import com.music.innertube.models.SongItem
 import com.music.innertube.models.YTItem
+
+/**
+ * The library's own pull: the light Apple read, the same one the settings button starts. Every
+ * library page passes this down to its scaffold, so "refresh" means the library there and the page's
+ * own subject everywhere else.
+ */
+@Composable
+fun rememberLibraryRefresh(): Pair<Boolean, () -> Unit> {
+    val running = AppleSyncStatus.progress.running
+    val context = LocalContext.current
+    val refresh = remember(context) {
+        { AppleSyncService.start(context, light = true) }
+    }
+    return running to refresh
+}
+
+/** How far the list slides down on a pull, and the room the spinner takes in the gap. */
+private val RefreshTravel = 72.dp
+private val IndicatorClearance = 40.dp
+
 
 /**
  * Shared page frame for every Library screen: collapsing title/subtitle, a pinned search pill, and
@@ -67,8 +104,27 @@ fun LibraryScaffold(
     bottomInset: Dp,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
+    /** Pull-to-refresh, the same gesture Cider's library has; null leaves the list alone. */
+    isRefreshing: Boolean = false,
+    onRefresh: (() -> Unit)? = null,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
+    // M3's pull modifier owns the gesture; it is the one that fires on this screen. The list is what
+    // moves: everything under the search bar slides down while the refresh runs and slides back up
+    // when it finishes. The spinner is ours — M3's indicator picks up this app's pentagon shape.
+    val pullState = rememberPullToRefreshState()
+    // The spinner follows the finger while the pull is open, then holds while the refresh runs.
+    val hold by animateFloatAsState(
+        targetValue = if (isRefreshing) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = if (isRefreshing) 180 else 320,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "refreshHold",
+    )
+    val refreshable = onRefresh != null
+    val progress = maxOf(if (refreshable) pullState.distanceFraction else 0f, hold)
+    val shift = RefreshTravel * progress
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -86,7 +142,14 @@ fun LibraryScaffold(
         ) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = if (refreshable) {
+                    Modifier
+                        .fillMaxSize()
+                        .pullToRefresh(state = pullState, isRefreshing = isRefreshing, onRefresh = onRefresh!!)
+                        .graphicsLayer { translationY = shift.toPx() }
+                } else {
+                    Modifier.fillMaxSize()
+                },
                 contentPadding = PaddingValues(
                     top = searchTopBarHeight(
                         withTitle = true,
@@ -113,6 +176,39 @@ fun LibraryScaffold(
                 onSearch = {},
                 placeholder = searchPlaceholder,
             )
+        }
+
+        // Drawn after the glass bar, or the bar's blur sits on top of it. It rides the gap the pull
+        // opens between the bar and the first row.
+        if (refreshable && progress > 0f) {
+            val barHeight = searchTopBarHeight(
+                withTitle = true,
+                titleBlockHeight = if (subtitle != null) LibraryTitleBlockHeight else 62.dp,
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    // Centred in the gap as it looks, not as it measures: the gap starts under the
+                    // search field, and the bar keeps SearchBarBottomPadding below that, so using
+                    // barHeight alone left visibly more air above the ring than below it.
+                    .padding(
+                        top = (
+                            barHeight - SearchBarBottomPadding +
+                                (shift + SearchBarBottomPadding - IndicatorClearance) / 2
+                            ).coerceAtLeast(0.dp),
+                    )
+                    .size(IndicatorClearance)
+                    .alpha(progress.coerceIn(0f, 1f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    // Secondary, not the page colour: page(!pureBlack) is black in the dark theme, so
+                    // the ring drew black on black and the pull looked like it had no spinner at all.
+                    color = SearchColors.Secondary,
+                    strokeWidth = 2.dp,
+                )
+            }
         }
     }
 }

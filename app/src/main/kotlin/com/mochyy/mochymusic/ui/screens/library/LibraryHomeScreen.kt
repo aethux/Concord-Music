@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -42,6 +43,8 @@ import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.models.TransferBatch
 import com.mochyy.mochymusic.playback.queues.ListQueue
+import com.mochyy.mochymusic.applesync.AppleSyncService
+import com.mochyy.mochymusic.applesync.AppleSyncStatus
 import com.mochyy.mochymusic.ui.component.GlassState
 import com.mochyy.mochymusic.ui.component.LikedCover
 import com.mochyy.mochymusic.ui.component.LocalMenuState
@@ -69,6 +72,7 @@ fun LibraryHomeScreen(
     val importViewModel: LibraryImportViewModel = hiltViewModel()
     val playerConnection = LocalPlayerConnection.current
     val menuState = LocalMenuState.current
+    val context = LocalContext.current
 
     val pinnedItems by viewModel.pinnedItems.collectAsState()
     val songs by viewModel.songs.collectAsState()
@@ -129,6 +133,10 @@ fun LibraryHomeScreen(
     val resyncAll = rememberResyncAll(navController)
     val openTransfer = { kind: TransferKind -> menuState.showTransferSheet(kind, importViewModel) }
 
+    // Cider's library refresh: pull down and Apple's library is read again, through the one refresh
+    // the app already has (the foreground service), so the gesture and the settings' button agree.
+    val appleSync = AppleSyncStatus.progress
+
     Box(modifier = modifier.fillMaxSize()) {
         LibraryScaffold(
             title = stringResource(R.string.filter_library),
@@ -151,6 +159,8 @@ fun LibraryHomeScreen(
                 )
             },
             bottomInset = bottomInset,
+            isRefreshing = appleSync.running,
+            onRefresh = { AppleSyncService.start(context, light = true) },
         ) {
             item(key = "tabs") {
                 LibraryTabChips(

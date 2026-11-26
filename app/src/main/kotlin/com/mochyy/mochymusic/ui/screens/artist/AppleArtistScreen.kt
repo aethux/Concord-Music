@@ -32,7 +32,15 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.statusBars
+import com.mochyy.mochymusic.ui.screens.search.SearchColors
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -98,6 +106,7 @@ import com.mochyy.mochymusic.ui.theme.rememberCoverThemeColor
 import com.mochyy.mochymusic.viewmodels.AppleArtistViewModel
 import com.mochyy.mochymusic.viewmodels.ArtistRelease
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.WindowInsets
 
 @Composable
 fun AppleArtistScreen(
@@ -161,6 +170,17 @@ fun AppleArtistScreen(
     }
     val glassState = remember { GlassState() }
 
+    // Cider's per-page pull: this artist is re-read, and nothing else in the library is touched.
+    val refreshing by viewModel.refreshing.collectAsState()
+    val refreshState = rememberPullToRefreshState()
+    val refreshHold by animateFloatAsState(
+        targetValue = if (refreshing) 1f else 0f,
+        animationSpec = tween(durationMillis = if (refreshing) 180 else 320, easing = FastOutSlowInEasing),
+        label = "refreshHold",
+    )
+    val refreshProgress = maxOf(refreshState.distanceFraction, refreshHold)
+    val refreshShift = 72.dp * refreshProgress
+
     // the loop only starts once the page has opened and only runs while the banner sits still, the
     // way Mochy's does: every frame of it repaints the banner and both blur bands
     var opened by remember { mutableStateOf(false) }
@@ -203,6 +223,14 @@ fun AppleArtistScreen(
         LazyColumn(
             state = lazyListState,
             contentPadding = LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Bottom).asPaddingValues(),
+            modifier = Modifier
+                .fillMaxSize()
+                .pullToRefresh(
+                    state = refreshState,
+                    isRefreshing = refreshing,
+                    onRefresh = viewModel::refresh,
+                )
+                .graphicsLayer { translationY = refreshShift.toPx() },
         ) {
             item(key = "header", contentType = "header") {
                 val landscape = com.mochyy.mochymusic.ui.utils.isLandscapeLayout()
@@ -452,6 +480,24 @@ fun AppleArtistScreen(
             onBackLongClick = { navController.backToMain() },
             onProfileClick = {},
         )
+
+        if (refreshProgress > 0f) {
+            val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = statusBar + 12.dp)
+                    .size(40.dp)
+                    .alpha(refreshProgress.coerceIn(0f, 1f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = SearchColors.Secondary,
+                    strokeWidth = 2.dp,
+                )
+            }
+        }
     }
 }
 

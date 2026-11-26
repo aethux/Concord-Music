@@ -92,6 +92,8 @@ fun GeneratedPlaylistPage(
     sortControl: (@Composable () -> Unit)? = null,
     modeBar: PlaylistModeBar? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
+    isRefreshing: Boolean = false,
+    onRefresh: (() -> Unit)? = null,
     rows: LazyListScope.() -> Unit,
 ) {
     // the round search button beside shuffle jumps to the capsule under the buttons and opens the keyboard
@@ -111,6 +113,8 @@ fun GeneratedPlaylistPage(
         contentPadding = contentPadding,
         modeBar = modeBar,
         overlay = overlay,
+        isRefreshing = isRefreshing,
+        onRefresh = onRefresh,
     ) {
         item(key = "generated_header", contentType = "header") {
             PlaylistHeader(

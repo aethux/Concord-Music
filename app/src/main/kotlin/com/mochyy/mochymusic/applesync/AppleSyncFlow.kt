@@ -52,7 +52,11 @@ object AppleSyncFlow {
      * Runs a full refresh. The caller decides where it runs: the button starts it in the service,
      * the service keeps the process alive and reports it in the shade.
      */
-    suspend fun run(context: Context, onPlaylistProgress: (Int, Int) -> Unit = { _, _ -> }): Summary =
+    suspend fun run(
+        context: Context,
+        light: Boolean = false,
+        onPlaylistProgress: (Int, Int) -> Unit = { _, _ -> },
+    ): Summary =
         withContext(Dispatchers.IO) {
             val startedAt = System.currentTimeMillis()
             val entry = EntryPointAccessors.fromApplication(
@@ -64,13 +68,22 @@ object AppleSyncFlow {
                 .getOrDefault(true)
 
             // the songs, and the album rows and motion covers AppleImport queues itself
-            val pulled = AppleLibraryPull(dao, entry.tokens()).run()
-            val songs = AppleImport(entry.database(), dao, entry.tokens(), animatedCovers).run(pulled.remote)
+            AppleSyncStatus.start("Reading Apple's library…")
+            val pulled = AppleLibraryPull(dao, entry.tokens(), light = light).run()
+            val songs = AppleImport(entry.database(), dao, entry.tokens(), animatedCovers)
+                .run(pulled.remote, pulled.rated)
 
-            // the playlists come with it, so one refresh leaves nothing behind - and it says so,
-            // because a silent third phase looked like a stuck refresh
-            AppleSyncStatus.start("Importing playlists…")
-            val playlists = ApplePlaylistImport.run(context.applicationContext, onPlaylistProgress)
+            // A light refresh is the library and its favourites, nothing else: the pull-to-refresh
+            // gesture. Reading 25 playlists and their 1,000 songs made the whole thing take a
+            // minute (measured 1m 4s), where the library read alone is a handful of pages.
+            val playlists = if (light) {
+                null
+            } else {
+                // the playlists come with it, so one refresh leaves nothing behind - and it says so,
+                // because a silent third phase looked like a stuck refresh
+                AppleSyncStatus.start("Importing playlists…")
+                runCatching { ApplePlaylistImport.run(context.applicationContext, onPlaylistProgress) }.getOrNull()
+            }
 
             // what this library still holds on Apple, but Apple no longer has
             runCatching {
@@ -83,8 +96,10 @@ object AppleSyncFlow {
 
             // Apple wins a duplicate, so the refresh itself folds any it can find instead of leaving
             // that until someone opens the review screen. Capped, and never fatal to the refresh.
-            AppleSyncStatus.start("Matching what Apple has…")
-            runCatching { AppleReconcile.run(context.applicationContext, limit = 10) }
+            if (!light) {
+                AppleSyncStatus.start("Matching what Apple has…")
+                runCatching { AppleReconcile.run(context.applicationContext, limit = 10) }
+            }
 
             val tookMs = System.currentTimeMillis() - startedAt
             val message = describe(songs, playlists, tookMs)
@@ -98,10 +113,10 @@ object AppleSyncFlow {
                 added = songs.added,
                 alreadyThere = songs.skipped,
                 albums = songs.albums,
-                playlists = playlists.playlists,
-                playlistSongs = playlists.songs,
-                changedPlaylists = playlists.playlists - playlists.unchanged,
-                unchangedPlaylists = playlists.unchanged,
+                playlists = playlists?.playlists ?: 0,
+                playlistSongs = playlists?.songs ?: 0,
+                changedPlaylists = (playlists?.playlists ?: 0) - (playlists?.unchanged ?: 0),
+                unchangedPlaylists = playlists?.unchanged ?: 0,
                 tookMs = tookMs,
                 message = message,
             )
@@ -112,7 +127,7 @@ object AppleSyncFlow {
      * new" is a better sentence than "1494 songs imported", and the counts that did not change say
      * so in words, which is what makes it possible to tell a no-op refresh from a stuck one.
      */
-    private fun describe(songs: AppleImport.Result, playlists: ApplePlaylistImport.Result, tookMs: Long): String {
+    private fun describe(songs: AppleImport.Result, playlists: ApplePlaylistImport.Result?, tookMs: Long): String {
         val parts = mutableListOf<String>()
         if (songs.added > 0) {
             parts += "${songs.added} new ${if (songs.added == 1) "song" else "songs"}"
@@ -123,17 +138,19 @@ object AppleSyncFlow {
         }
         if (songs.albums > 0) parts += "${songs.albums} albums"
 
-        val changed = playlists.playlists - playlists.unchanged
-        // read and rebuilt the rows is not the same as "the membership changed": a playlist whose
-        // stamp is unknown is read every run, and saying "updated" then would be a lie
-        val listPart = when {
-            playlists.playlists == 0 -> null
-            playlists.written == 0 -> "${playlists.playlists} playlists unchanged"
-            playlists.written == changed -> "$changed of ${playlists.playlists} playlists updated"
-            else -> "$changed of ${playlists.playlists} playlists checked"
+        if (playlists != null) {
+            val changed = playlists.playlists - playlists.unchanged
+            // read and rebuilt the rows is not the same as "the membership changed": a playlist whose
+            // stamp is unknown is read every run, and saying "updated" then would be a lie
+            val listPart = when {
+                playlists.playlists == 0 -> null
+                playlists.written == 0 -> "${playlists.playlists} playlists unchanged"
+                playlists.written == changed -> "$changed of ${playlists.playlists} playlists updated"
+                else -> "$changed of ${playlists.playlists} playlists checked"
+            }
+            listPart?.let { parts += it }
+            if (playlists.songs > 0) parts += "${playlists.songs} playlist songs"
         }
-        listPart?.let { parts += it }
-        if (playlists.songs > 0) parts += "${playlists.songs} playlist songs"
 
         return parts.joinToString(" · ") + " · took ${took(tookMs)}"
     }

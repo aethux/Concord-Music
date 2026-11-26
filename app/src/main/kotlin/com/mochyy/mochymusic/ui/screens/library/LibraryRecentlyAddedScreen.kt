@@ -165,9 +165,14 @@ fun LibraryRecentlyAddedScreen(
         )
     }
 
+    // a pull here is the library's refresh: this page is the library's newest rows
+    val (libraryRefreshing, libraryRefresh) = rememberLibraryRefresh()
+
     GeneratedPlaylistPage(
         title = title,
         coverUrl = songs.firstOrNull { !it.song.thumbnailUrl.isNullOrEmpty() }?.song?.thumbnailUrl,
+        isRefreshing = libraryRefreshing,
+        onRefresh = libraryRefresh,
         stats = stringResource(
             R.string.lib_stats_in_library_time,
             pluralStringResource(R.plurals.n_song, songs.size, songs.size),

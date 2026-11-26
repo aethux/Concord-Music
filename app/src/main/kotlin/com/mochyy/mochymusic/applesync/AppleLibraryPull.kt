@@ -18,9 +18,21 @@ import com.mochyy.mochymusic.applesync.db.AppleSyncDao
 class AppleLibraryPull(
     private val dao: AppleSyncDao,
     private val tokens: AppleTokens,
+    /**
+     * A light read is the pull gesture's: the songs and their favourites, and nothing else. The
+     * playlists are 25 more requests and their rows are not touched by a refresh of the list itself,
+     * the way Cider's library refresh leaves the playlist pages to their own cache.
+     */
+    private val light: Boolean = false,
 ) {
 
-    data class Result(val songs: Int, val playlists: Int, val remote: List<RemoteSong>)
+    data class Result(
+        val songs: Int,
+        val playlists: Int,
+        val remote: List<RemoteSong>,
+        /** catalogue id -> Apple's rating, read here so the import does not read it again */
+        val rated: Map<String, Long> = emptyMap(),
+    )
 
     suspend fun run(): Result {
         AppleSyncStatus.start("Reading your Apple Music library…")
@@ -65,13 +77,17 @@ class AppleLibraryPull(
             dao.replaceLibrarySongs(rows)
 
             AppleSyncStatus.update(phase = "Reading your playlists…", songs = rows.size, totalSongs = rows.size)
-            val playlists = client.playlists { read ->
-                AppleSyncStatus.update(
-                    phase = "Reading your playlists…",
-                    songs = rows.size,
-                    playlists = read,
-                    totalSongs = rows.size,
-                )
+            val playlists = if (light) {
+                emptyList()
+            } else {
+                client.playlists { read ->
+                    AppleSyncStatus.update(
+                        phase = "Reading your playlists…",
+                        songs = rows.size,
+                        playlists = read,
+                        totalSongs = rows.size,
+                    )
+                }
             }
             AppleSyncStatus.update(
                 phase = "Saving ${playlists.size} playlists…",
@@ -80,22 +96,24 @@ class AppleLibraryPull(
                 totalSongs = rows.size,
                 totalPlaylists = playlists.size,
             )
-            dao.replacePlaylists(
-                playlists.map {
-                    ApplePlaylistEntity(
-                        remoteId = it.id,
-                        name = it.name,
-                        trackCount = 0,
-                        canEdit = it.canEdit,
-                        pulledAt = now,
-                    )
-                },
-            )
+            if (playlists.isNotEmpty()) {
+                dao.replacePlaylists(
+                    playlists.map {
+                        ApplePlaylistEntity(
+                            remoteId = it.id,
+                            name = it.name,
+                            trackCount = 0,
+                            canEdit = it.canEdit,
+                            pulledAt = now,
+                        )
+                    },
+                )
+            }
 
             AppleSyncStatus.setSynced(dao.syncedSongIds().toSet())
             // the songs go back to the caller: the import needs the same list, and reading it twice
             // is what looked like a sync that finished and then started over
-            return Result(songs = rows.size, playlists = playlists.size, remote = songs)
+            return Result(songs = rows.size, playlists = playlists.size, remote = songs, rated = rated)
         } catch (e: Exception) {
             AppleSyncStatus.fail(e.message ?: "Couldn't reach Apple Music")
             throw e

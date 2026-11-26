@@ -25,6 +25,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import com.mochyy.mochymusic.applesync.PageKind
 
 @HiltViewModel
 class AppleArtistViewModel @Inject constructor(
@@ -83,6 +84,29 @@ class AppleArtistViewModel @Inject constructor(
         load()
     }
 
+    /** True while a pull is re-reading this artist: the page's own ring, not the library's. */
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
+
+    /**
+     * Re-reads this artist and nothing else, the way a pull on a page works in Cider: the page cache
+     * row and the ten-minute memory are dropped first, then the same loader runs again.
+     */
+    fun refresh() {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (_refreshing.value) return@launch
+            _refreshing.value = true
+            try {
+                runCatching { pageCache.invalidate(PageKind.ARTIST, listOf(artistId)) }
+                AppleClient.forgetArtist(artistId)
+                _failed.value = false
+                load().join()
+            } finally {
+                _refreshing.value = false
+            }
+        }
+    }
+
     /** the artist's radio: a station seeded from the artist itself */
     suspend fun stationQueue(): AppleStationQueue? = withContext(Dispatchers.IO) {
         val pair = tokens.read() ?: return@withContext null
@@ -123,8 +147,7 @@ class AppleArtistViewModel @Inject constructor(
         }
     }
 
-    private fun load() {
-        viewModelScope.launch(Dispatchers.IO) {
+    private fun load(): Job = viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
             _signedOut.value = pair == null
             val artist = pair?.let { runCatching { AppleClient(it, pageCache).artistPage(artistId) }.getOrNull() }
@@ -152,6 +175,5 @@ class AppleArtistViewModel @Inject constructor(
             observeLibrary(artist.name)
             // the banner's hero video, logo and bio came with this same payload
             _editorial.value = artist.editorial
-        }
     }
 }

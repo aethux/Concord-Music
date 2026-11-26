@@ -38,10 +38,13 @@ class AppleSyncService : Service() {
         private const val NOTIFICATION_ID = 4211
 
         /** Starts the refresh in the service, or does nothing if one is already running. */
-        fun start(context: Context) {
-            val intent = Intent(context, AppleSyncService::class.java)
+        fun start(context: Context, light: Boolean = false) {
+            val intent = Intent(context, AppleSyncService::class.java).putExtra(EXTRA_LIGHT, light)
             ContextCompat.startForegroundService(context, intent)
         }
+
+        /** A light refresh is the library and its favourites only — what the pull gesture asks for. */
+        private const val EXTRA_LIGHT = "light"
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -56,8 +59,9 @@ class AppleSyncService : Service() {
 
         // something is already syncing: report on that one rather than start a second
         if (job?.isActive != true) {
+            val light = intent?.getBooleanExtra(EXTRA_LIGHT, false) ?: false
             job = scope.launch {
-                runCatching { AppleSyncFlow.run(applicationContext) }
+                runCatching { AppleSyncFlow.run(applicationContext, light = light) }
                     .onFailure { AppleSyncStatus.fail(it.message ?: "The sync stopped.") }
             }
         } else {

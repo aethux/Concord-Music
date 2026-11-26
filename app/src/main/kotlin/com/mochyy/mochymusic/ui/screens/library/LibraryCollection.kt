@@ -227,9 +227,14 @@ fun <T> LibraryCollectionPage(
         }
     }.orEmpty()
 
+    // a pull here is the library's refresh: this page *is* a slice of the library
+    val (libraryRefreshing, libraryRefresh) = rememberLibraryRefresh()
+
     PlaylistDetailScaffold(
         sharedElementKey = null,
         coverUrl = shown?.coverUrl,
+        isRefreshing = libraryRefreshing,
+        onRefresh = libraryRefresh,
         lazyListState = listState,
         onBackClick = { navController.navigateUp() },
         onBackLongClick = { navController.backToMain() },

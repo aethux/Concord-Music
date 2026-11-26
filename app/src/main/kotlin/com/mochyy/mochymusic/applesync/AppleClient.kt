@@ -10,6 +10,12 @@ import com.mochyy.mochymusic.importer.idString
 import com.mochyy.mochymusic.importer.long
 import com.mochyy.mochymusic.importer.obj
 import com.mochyy.mochymusic.importer.string
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -116,15 +122,41 @@ class AppleClient(
     suspend fun librarySongs(
         maxPages: Int = 400,
         onPage: (Int) -> Unit = {},
-    ): List<RemoteSong> = all(
-        first = "/v1/me/library/songs?limit=100&include=albums",
-        maxPages = maxPages,
-        parse = AppleLibrary::songs,
-        onPage = onPage,
-        // Apple's next page is an offset URL without the include: without these only the first
-        // hundred songs come back with their album, and every page after it answers 25 rows
-        keep = "include=albums&limit=100",
-    )
+    ): List<RemoteSong> {
+        // The first page carries `meta.total`, which is every offset the library has: the rest are
+        // read at once instead of one `next` URL after another. Eight at a time; a 429 costs one
+        // `Retry-After` wait and the read carries on. Measured on 1488 songs: fifteen pages in a row
+        // took 26 s, four at a time 10 s, eight at a time most of that again.
+        val query = "include=albums&limit=100"
+        val first = page("/v1/me/library/songs?$query") ?: return emptyList()
+        val songs = AppleLibrary.songs(first).toMutableList()
+        onPage(songs.size)
+
+        val total = first["meta"].obj()?.long("total")?.toInt() ?: return songs
+        if (total <= songs.size) return songs
+
+        val gate = Semaphore(8)
+        val rest = coroutineScope {
+            (songs.size until total step 100)
+                .take((maxPages - 1).coerceAtLeast(0))
+                .map { offset ->
+                    async(Dispatchers.IO) {
+                        gate.withPermit {
+                            runCatching {
+                                page("/v1/me/library/songs?$query&offset=$offset")
+                            }.getOrNull()
+                        }
+                    }
+                }
+                .awaitAll()
+        }
+        for (response in rest) {
+            if (response == null) continue
+            songs += AppleLibrary.songs(response)
+            onPage(songs.size)
+        }
+        return songs
+    }
 
     /** Catalog ids for a search term, best match first. Reads only; used to pick sandbox songs. */
     suspend fun searchSongs(term: String, limit: Int = 10): List<String> {
@@ -201,15 +233,30 @@ class AppleClient(
      */
     suspend fun ratings(catalogIds: List<String>): Map<String, Long> {
         if (catalogIds.isEmpty()) return emptyMap()
+        // Cider reads its favourites in more than one request at a time; one after another here put
+        // fifteen round trips in a row in front of the pull-to-refresh. Six at once, still under the
+        // rate limit that costs a `Retry-After` wait.
+        val gate = Semaphore(6)
+        val pages = kotlinx.coroutines.coroutineScope {
+            catalogIds.chunked(100)
+                .map { chunk ->
+                    async(Dispatchers.IO) {
+                        gate.withPermit {
+                            // Concord: Mocha addressed ratings on api.music.apple.com. From this app that
+                            // host refuses the page's own token pair ("Failed to fetch" — CORS/DNS, not
+                            // auth), while amp-api answers the same path 200. Verified from the
+                            // signed-in page 2026-11-22. Left absolute, this made every chunk retry
+                            // with backoff and the read look like a hang.
+                            runCatching { page("/v1/me/ratings/songs?ids=${chunk.joinToString(",")}") }
+                                .getOrNull()
+                        }
+                    }
+                }
+                .awaitAll()
+        }
         val out = mutableMapOf<String, Long>()
-        for (chunk in catalogIds.chunked(100)) {
-            // Concord: Mocha addressed ratings on api.music.apple.com. From this app that host refuses
-            // the page's own token pair ("Failed to fetch" — CORS/DNS, not auth), while amp-api answers
-            // the same path 200. Verified from the signed-in page 2026-11-22. Left absolute, this made
-            // every chunk retry with backoff and the read look like a hang.
-            val page = page("/v1/me/ratings/songs?ids=${chunk.joinToString(",")}")
-                ?: continue
-            for (item in page["data"].array()) {
+        for (response in pages) {
+            for (item in response?.get("data").array()) {
                 val obj = item.obj() ?: continue
                 val id = obj.idString("id") ?: continue
                 obj["attributes"].obj()?.long("value")?.let { out[id] = it }
@@ -392,33 +439,65 @@ class AppleClient(
         // representation only: a library playlist's resource carries no views
         val twin = if (inLibrary) ApplePlaylistReader.catalogueTwin(page) else id
         var social = twin?.let { runCatching { playlistSocial(it, storefront) }.getOrNull() }
-        // a playlist shared with the account is not always on the catalogue twin's views; the library
-        // resource answers `include=collaborators` for exactly that case
-        if (inLibrary && social?.collaborators.isNullOrEmpty()) {
-            social = runCatching { libraryPlaylistSocial(id) }.getOrNull() ?: social
+        // A playlist shared with the account is not always on the catalogue twin's views, and when it
+        // is, the view can still answer with the owner alone on a playlist that is in fact shared
+        // ("Faith" answers one person while Apple flags the playlist as collaborative). The library
+        // resource answers `include=collaborators` for exactly that case, so it is asked whenever the
+        // catalogue read came back with fewer than two people — not only when it came back empty.
+        if (inLibrary) {
+            val known = (listOfNotNull(social?.owner) + social?.collaborators.orEmpty())
+                .map { it.id ?: it.handle ?: it.name }
+                .distinct()
+                .size
+            if (known < 2) {
+                val fromLibrary = runCatching { libraryPlaylistSocial(id) }.getOrNull()
+                if (fromLibrary != null) social = mergedSocial(social, fromLibrary)
+                // Still one person on a playlist Apple itself flags as collaborative: the `fields`
+                // trim drops a collaborator whose profile is private, because a trimmed row with no
+                // `name` parses as nobody. The same view, asked for everything, is the last door.
+                val peopleNow = (listOfNotNull(social?.owner) + social?.collaborators.orEmpty())
+                    .map { it.id ?: it.handle ?: it.name }
+                    .distinct()
+                    .size
+                if (peopleNow < 2) {
+                    val untrimmed = twin?.let {
+                        runCatching { playlistSocial(it, storefront, trim = false) }.getOrNull()
+                    }
+                    if (untrimmed != null) social = mergedSocial(social, untrimmed)
+                }
+            }
         }
         // more than one person on the playlist: the owner Apple lists plus anyone in collaborators
-        val shared = (listOfNotNull(social?.owner ?: playlist.owner) + social?.collaborators.orEmpty())
+        val people = (listOfNotNull(social?.owner ?: playlist.owner) + social?.collaborators.orEmpty())
             .map { it.id ?: it.name }
             .distinct()
-            .size > 1
+        // Apple can say a playlist is shared while naming only one person ("Faith": collaborators
+        // answers Faizaan alone, and the second profile is not disclosed to this app). The
+        // per-track associations are still worth asking for on a playlist Apple itself flags, and
+        // they are what names the other adder.
+        val flaggedShared = page["data"].array().firstOrNull()?.obj()
+            ?.get("attributes").obj()?.get("hasCollaboration")
+            .let { it is kotlinx.serialization.json.JsonPrimitive && it.content == "true" }
+        val shared = people.size > 1 || flaggedShared
         timber.log.Timber.tag("ApplePlaylist").d(
             "page %s library=%s twin=%s collaborators=%d",
             id, inLibrary, twin, social?.collaborators?.size ?: -1,
         )
+        // who added each song: only the catalogue representation says so, and only a playlist with
+        // someone else on it can have an answer worth drawing, so one read and only then
+        val addedBy = if (twin != null && shared) {
+            runCatching { playlistAddedBy(twin, storefront) }.getOrNull().orEmpty()
+        } else {
+            emptyMap()
+        }
         return playlist.copy(
             songs = songs,
             url = playlist.url ?: social?.url,
             owner = social?.owner ?: playlist.owner,
             collaborators = social?.collaborators.orEmpty(),
-            shared = shared,
-            // who added each song: only the catalogue representation says so, and only a shared
-            // playlist can have an answer worth drawing, so one read and only then
-            addedBy = if (twin != null && shared) {
-                runCatching { playlistAddedBy(twin, storefront) }.getOrNull().orEmpty()
-            } else {
-                emptyMap()
-            },
+            // the associations can name a second adder the collaborators view would not
+            shared = shared || addedBy.values.map { it.id ?: it.handle ?: it.name }.distinct().size > 1,
+            addedBy = addedBy,
         )
     }
 
@@ -452,6 +531,19 @@ class AppleClient(
     )
 
     /** `/v1/me/library/playlists/{id}?include=collaborators,curator` — the library's own answer. */
+    /** The same playlist read through two doors: one person from each, one list, no duplicates. */
+    private fun mergedSocial(first: PlaylistSocial?, second: PlaylistSocial): PlaylistSocial =
+        if (first == null) {
+            second
+        } else {
+            PlaylistSocial(
+                url = first.url ?: second.url,
+                owner = first.owner ?: second.owner,
+                collaborators = (first.collaborators + second.collaborators)
+                    .distinctBy { it.id ?: it.handle ?: it.name },
+            )
+        }
+
     private suspend fun libraryPlaylistSocial(id: String): PlaylistSocial? {
         val social = page("/v1/me/library/playlists/$id?include=collaborators,curator") ?: return null
         val row = social["data"].array().firstOrNull()?.obj() ?: return null
@@ -463,11 +555,16 @@ class AppleClient(
     }
 
     /** The catalogue twin, asked for the two things the library resource cannot answer. */
-    private suspend fun playlistSocial(catalogId: String, storefront: String): PlaylistSocial? {
+    private suspend fun playlistSocial(
+        catalogId: String,
+        storefront: String,
+        /** false asks for every attribute Apple has; see the fallback in [playlistPage] */
+        trim: Boolean = true,
+    ): PlaylistSocial? {
         val social = page(
             "/v1/catalog/$storefront/playlists/$catalogId" +
                 "?include=curator&views=collaborators&with=lightProfiles" +
-                "&fields[collaborators]=name,handle,artwork,url,isVerified",
+                if (trim) "&fields[collaborators]=name,handle,artwork,url,isVerified" else "",
         ) ?: return null
         val row = social["data"].array().firstOrNull()?.obj() ?: return null
         return PlaylistSocial(
@@ -706,11 +803,19 @@ class AppleClient(
             throw AppleSyncException(e.message ?: "Apple Music answered with an error.", signedOut = e.signedOut)
         }
 
-    private companion object {
+    internal companion object {
         const val Host = "https://amp-api.music.apple.com"
 
         /** playback's own host, not amp-api: the call every Apple player makes for a stream */
         const val WebPlaybackUrl = "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback"
+
+        /**
+         * Forget one artist's page. The map is a ten-minute memory on top of the page cache, and a
+         * pull on an artist's page has to outrun both or the refresh would read its own copy back.
+         */
+        fun forgetArtist(id: String) {
+            artistCache.remove(id)
+        }
 
         /** the artist pages read this run, with the moment they expire */
         val artistCache = java.util.concurrent.ConcurrentHashMap<String, Pair<AppleArtist, Long>>()

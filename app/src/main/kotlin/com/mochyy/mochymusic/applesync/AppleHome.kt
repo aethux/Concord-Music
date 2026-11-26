@@ -32,6 +32,15 @@ data class AppleHomeItem(
     val motionUrl: String?,
     /** the page Apple sends for an editorial card — Replay, Concerts — or null */
     val url: String?,
+    /**
+     * The artist behind this card, when the card is an artist's.
+     *
+     * An `artists` card carries its own id here. Apple's "Favourite Artists" shelf, though, sends
+     * `stations` with `attributes.kind = "artistOnly"` and the id `ra.a-<artistId>` — a card drawn
+     * with the artist's face and name, whose favourite and page are the artist's, not the station's.
+     * Null for every other card.
+     */
+    val artistId: String? = null,
 ) {
     enum class Kind { Album, Playlist, Station, Artist, Editorial }
 }
@@ -157,6 +166,15 @@ object AppleHomeReader {
         val artwork = attributes?.get("artwork").obj()?.string("url")
             ?: listOf("brandLogo", "subscriptionCover", "superHeroWide", "superHeroTall")
                 .firstNotNullOfOrNull { editorialArt?.get(it).obj()?.string("url") }
+        // an artist's own card is an `artists` row; Apple's artist stations are `stations` whose
+        // `kind` says `artistOnly` and whose id carries the artist's (`ra.a-<artistId>`)
+        val artistId = when {
+            kind == AppleHomeItem.Kind.Artist -> id
+            kind == AppleHomeItem.Kind.Station && attributes?.string("kind") == ArtistOnlyStation ->
+                id.removePrefix(ArtistStationPrefix)
+                    .takeIf { it != id && it.isNotBlank() }
+            else -> null
+        }
         return AppleHomeItem(
             id = id,
             kind = kind,
@@ -165,6 +183,11 @@ object AppleHomeReader {
             artworkUrl = artwork,
             motionUrl = motion,
             url = attributes?.string("url"),
+            artistId = artistId,
         )
     }
+
+    /** Apple's marker on a station that exists to be one artist's radio (and to draw as their card). */
+    private const val ArtistOnlyStation = "artistOnly"
+    private const val ArtistStationPrefix = "ra.a-"
 }

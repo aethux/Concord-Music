@@ -17,6 +17,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 /**
  * Reads only, on purpose.
@@ -692,6 +694,27 @@ class AppleClient(
         val page = page("/v1/catalog/$storefront/artists/$id?fields%5Bartists%5D=name,artwork") ?: return null
         return page["data"].array().orEmpty().firstOrNull()?.obj()
             ?.get("attributes").obj()?.get("artwork").obj()?.string("url")
+    }
+
+    /**
+     * Apple's `inFavorites` for one artist, album or playlist — the only read a favourite has.
+     *
+     * Cider's set and clear are the whole favourites surface (`cider/apple-api-reference.md` §C/D):
+     * a `GET` on `/v1/me/favorites` answers 404, so the state comes from the resource itself, asked
+     * for with `extend=inFavorites`. A playlist the account holds is a `p.` id and answers on the
+     * library path; every other card is catalogue. Null means Apple sent no answer — the caller
+     * draws the default and lets the write decide.
+     */
+    suspend fun favorite(type: String, id: String): Boolean? {
+        val path = if (id.startsWith("p.")) {
+            "/v1/me/library/playlists/$id?extend=inFavorites"
+        } else {
+            "/v1/catalog/${storefront()}/$type/$id?extend=inFavorites"
+        }
+        val page = page(path) ?: return null
+        val attributes = page["data"].array().orEmpty().firstOrNull()?.obj()
+            ?.get("attributes").obj() ?: return null
+        return (attributes["inFavorites"] as? JsonPrimitive)?.booleanOrNull
     }
 
     /** the years Apple keeps a Replay for, newest first */

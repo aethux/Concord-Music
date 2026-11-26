@@ -36,6 +36,10 @@ enum class AppleWrite {
     SET_RATING,
     CLEAR_RATING,
 
+    /** an artist / album / playlist favourite: a mark on a catalogue object, nothing replaced */
+    SET_FAVORITE,
+    CLEAR_FAVORITE,
+
     /** folders are the container itself: nothing of the person's is replaced, only the folder */
     CREATE_FOLDER,
     RENAME_FOLDER,

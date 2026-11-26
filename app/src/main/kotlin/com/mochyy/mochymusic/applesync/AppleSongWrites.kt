@@ -407,8 +407,12 @@ object AppleSongWrites {
      *
      * A heart tap cannot reach it. When something else does, refusing and saying so is the honest
      * answer — queueing would make the app look stuck instead.
+     *
+     * Shared by every write class — a heart, a favourite and a playlist edit draw from the same
+     * window, because the limit is the account's, not the op's. `internal` rather than private so a
+     * second write file can reuse it instead of keeping its own copy.
      */
-    private object WriteBudget {
+    internal object WriteBudget {
         private const val Limit = 10
         private const val WindowMs = 60_000L
         private val stamps = ArrayDeque<Long>()
@@ -422,7 +426,8 @@ object AppleSongWrites {
         }
     }
 
-    private suspend fun request(
+    /** The wire: `AccountHttp`, one wait on 429. Shared by the other write files. */
+    internal suspend fun request(
         tokens: AppleTokens.Pair,
         verb: String,
         path: String,
@@ -454,7 +459,8 @@ object AppleSongWrites {
         return row["attributes"].obj()?.long("value")
     }
 
-    private fun audit(
+    /** One audit row. Shared by the other write files, so every op logs the same columns. */
+    internal fun audit(
         op: String,
         target: String?,
         decision: String,

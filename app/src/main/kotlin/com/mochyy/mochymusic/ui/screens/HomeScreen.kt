@@ -184,6 +184,7 @@ import com.mochyy.mochymusic.ui.component.containerTransformSource
 import com.mochyy.mochymusic.ui.component.rememberRevealSeenState
 import com.mochyy.mochymusic.ui.component.revealOnAppear
 import com.mochyy.mochymusic.ui.menu.AlbumMenu
+import com.mochyy.mochymusic.ui.menu.AppleItemMenu
 import com.mochyy.mochymusic.ui.menu.ArtistMenu
 import com.mochyy.mochymusic.ui.menu.SongMenu
 import com.mochyy.mochymusic.ui.menu.YouTubeAlbumMenu
@@ -840,6 +841,27 @@ fun HomeScreen(
         }
     }
 
+    // Apple's own cards, on a long press: the menu Cider puts behind its hover button. A card's
+    // favourite is Apple's own, written against the account, so nothing local is touched.
+    val showAppleItemMenu: (AppleHomeItem) -> Unit = { item ->
+        // an editorial card has no entity behind it: its tap already opens the page Apple serves
+        if (item.kind != AppleHomeItem.Kind.Editorial) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            menuState.show {
+                AppleItemMenu(
+                    item = item,
+                    navController = navController,
+                    onOpen = { openAppleItem(item) },
+                    readFavorite = appleHomeViewModel::favorite,
+                    onStartRadio = { artistId ->
+                        appleHomeViewModel.artistRadio(artistId)?.let { playerConnection.playQueue(it) }
+                    },
+                    onDismiss = menuState::dismiss,
+                )
+            }
+        }
+    }
+
     // Apple draws its hero shelves (Top Picks, Playlists Made for You) big; every other shelf keeps
     // Mochy's card size
     val appleHeroSize = 186.dp
@@ -908,7 +930,7 @@ fun HomeScreen(
                 interactionSource = null,
                 indication = HomeCardHighlight,
                 onClick = { openAppleItem(item) },
-                onLongClick = {},
+                onLongClick = { showAppleItemMenu(item) },
             ),
         )
     }
@@ -1237,6 +1259,23 @@ fun HomeScreen(
                 group.artistId?.let {
                     com.mochyy.mochymusic.utils.ArtistPageCache.putPicks(it, group)
                     navController.navigate("artist/$it/similar")
+                }
+            },
+            // the card is named after one Apple artist, so its menu is that artist's
+            onLongClick = {
+                group.artistId?.let { id ->
+                    showAppleItemMenu(
+                        AppleHomeItem(
+                            id = id,
+                            kind = AppleHomeItem.Kind.Artist,
+                            title = group.artistName,
+                            subtitle = null,
+                            artworkUrl = group.artistThumbnailUrl,
+                            motionUrl = null,
+                            url = null,
+                            artistId = id,
+                        )
+                    )
                 }
             },
             onItemClick = { item ->

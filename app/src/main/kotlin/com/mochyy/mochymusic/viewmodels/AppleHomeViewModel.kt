@@ -62,6 +62,21 @@ class AppleHomeViewModel @Inject constructor(
         runCatching { AppleClient(pair).replayYears() }.getOrNull().orEmpty()
     }
 
+    /**
+     * One card's favourite state, read when its menu opens. Apple has no favourites read endpoint
+     * (a `GET` answers 404), so this asks the resource itself; null when the read did not answer.
+     *
+     * No page cache: the sheet needs Apple's current answer, not a copy a day old.
+     */
+    suspend fun favorite(type: String, id: String): Boolean? = withContext(Dispatchers.IO) {
+        val pair = tokens.read() ?: return@withContext null
+        runCatching { AppleClient(pair).favorite(type, id) }.getOrNull()
+    }
+
+    /** An artist's radio: the same seeded station the artist page starts. */
+    suspend fun artistRadio(artistId: String): AppleStationQueue? =
+        AppleStationQueue.seeded(tokens, "ra.$artistId")
+
     override suspend fun replayPlaylistId(year: AppleReplayYear): String? = withContext(Dispatchers.IO) {
         val pair = tokens.read() ?: return@withContext null
         runCatching { AppleClient(pair).replayPlaylistId(year.summaryId) }.getOrNull()

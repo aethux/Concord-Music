@@ -2,8 +2,9 @@
 
 package com.mochyy.mochymusic.ui.component
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,12 +39,15 @@ import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.models.ArtistGroup
 import com.music.innertube.models.YTItem
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ArtistListCard(
     group: ArtistGroup,
     onClick: () -> Unit,
     onItemClick: (YTItem) -> Unit,
     modifier: Modifier = Modifier,
+    /** the card's menu on a long press: the artist it is named after */
+    onLongClick: () -> Unit = {},
 ) {
     val tintCovers = remember(group) {
         listOfNotNull(group.artistThumbnailUrl) + group.items.take(2).mapNotNull { it.thumbnail }
@@ -54,7 +58,10 @@ fun ArtistListCard(
             .width(276.dp)
             .height(344.dp)
             .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
     ) {
         Box(
             modifier = Modifier

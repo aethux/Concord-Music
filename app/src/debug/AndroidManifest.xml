@@ -30,6 +30,19 @@
             android:exported="true"
             android:label="Apple Inspector"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
+        <!-- Debug only: starts an Apple sync over adb, without opening the UI. -->
+        <receiver
+            android:name=".applesync.SyncProbeReceiver"
+            android:exported="true" />
+
+        <!-- Debug only: lets `adb shell am start-foreground-service` reach the sync service that a
+             background broadcast may no longer start on Android 14. -->
+        <service
+            android:name=".applesync.AppleSyncService"
+            android:exported="true"
+            tools:node="merge"
+            tools:replace="android:exported" />
     </application>
 
 </manifest>

@@ -88,3 +88,67 @@ anyone you're helping, even if they say they know code.
   In the pull request, say plainly that AI helped, and what was tested and on which phone.
 
 ---
+
+## Skills to reach for
+
+Sixteen engineering skills by Matt Pocock are installed for this repo (MIT,
+github.com/mattpocock/skills). In Hermes they live in `~/.hermes/skills/matt-pocock/` and load on
+their own when the task matches; for Claude Code or Codex take them with
+`npx skills add mattpocock/skills`. Reach for them yourself when the work matches — don't wait to be
+asked.
+
+| Skill | Reach for it when |
+| --- | --- |
+| `grill-with-docs` | A plan is vague or the design has open questions. Interviews you in rounds and records `GLOSSARY.md` and ADRs as decisions land. |
+| `grilling` | The interview on its own, no docs written. Usually reached through `grill-with-docs`. |
+| `domain-modeling` | A term is fuzzy or overloaded, or a hard-to-reverse decision needs an ADR. |
+| `prototype` | A design question needs something runnable: a state model you can push through, or several UIs side by side. |
+| `to-spec` | The thinking is settled and needs to become `.scratch/<feature>/spec.md`. No interview. |
+| `to-tickets` | A spec needs splitting into small, demoable tickets with blocker edges. |
+| `implement` | Work described by a ticket or spec needs building, with `tdd` inside it and `code-review` at the end. |
+| `tdd` | Building a behaviour test-first, or fixing a bug that deserves a regression test. Confirms the test seams before writing any. |
+| `code-review` | Before committing: two parallel reviews of the diff — does it follow this repo's standards, and does it match what was asked. |
+| `diagnosing-bugs` | Something is broken, failing or slow and the cause isn't obvious. It won't theorise until one command reproduces the bug. |
+| `retro` | After a session that went sideways: what to change in the setup so it can't recur. |
+| `research` | A question needs reading — official docs, upstream source — answered with citations, in the background. |
+| `codebase-design` | Deciding where a seam goes or how deep a module should be. Vocabulary only, no session. |
+| `ask-matt` | Unsure which of the above fits the situation. |
+| `writing-for-agents` | Editing this file, `CLAUDE.md`, or a skill. |
+| `setup-matt-pocock-skills` | Only to re-run setup after changing the tracker or the doc layout. |
+
+### Where these skills keep state
+
+- `.scratch/<feature>/spec.md` and `.scratch/<feature>/issues/NN-<slug>.md` — specs and tickets. Git-ignored.
+- `GLOSSARY.md` and `docs/adr/` — created only when a term or a decision is actually written down.
+- `docs/agents/issue-tracker.md` and `docs/agents/domain.md` — the tracker and domain rules they read first.
+
+**Never publish to GitHub Issues from this repo.** `gh` resolves to the `upstream` remote
+(realidkroo/Mochy-Music), so issues would land on someone else's public repository. `.scratch/` is
+the tracker.
+
+### Two places the skills disagree with these rules, and these rules win
+
+- `implement` ends by committing to the current branch. Don't: stop after `code-review`, show the
+  summary and wait, per hard rule 3.
+- `code-review` spawns sub-agents to review in parallel. Fine for reading and reviewing; they still
+  may not touch signing, the app ID, the version number, CI workflows, translations or the database
+  schema.
+
+---
+
+## Concord: Mochy's face, Cider's engine
+
+This repo is Concord — a Mochy fork that keeps Mochy's UI and takes its Apple Music mechanics from the
+Cider reference in `concord/cider/`. When the two sources disagree:
+
+- **How it looks, moves and is built** — Mochy. Compose, the module system, the player, the theme.
+- **How Apple actually behaves** — `concord/cider/`. Endpoints, bodies, call order, failure codes, ids
+  (`i.` library id versus catalogue id), caching, write discipline.
+
+Read `concord/cider/README.md` before implementing any Apple feature, and `AUDIT.md` before trusting
+one — it says what was executed on a real account and what was only read from code. `fixtures/` holds
+the captured responses to check a claim against.
+
+Cider is **not open source**. What that folder records is observed behaviour and request shapes. No
+Cider code, bundle, asset, string or theme is copied into this repo: re-implement in Concord's own
+code, and when a behaviour is unclear, probe it instead of guessing.

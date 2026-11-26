@@ -48,12 +48,16 @@ apk-generated/
 plan.md
 implementation_plan.md
 transcript_*.txt
+# local-markdown issue tracker used by the agent skills (see docs/agents/issue-tracker.md)
+.scratch/
 docs/*
 !docs/index.html
 !docs/.nojekyll
 !docs/assets/
 !docs/wiki/
 !docs/modules/
+# agent-skills setup is part of the repo, not generated docs
+!/docs/agents/
 
 # Logs, crash dumps & API response dumps
 *.log

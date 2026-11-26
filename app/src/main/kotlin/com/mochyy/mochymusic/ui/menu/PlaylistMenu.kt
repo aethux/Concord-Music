@@ -31,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -68,6 +69,11 @@ import com.mochyy.mochymusic.ui.component.NewAction
 import com.mochyy.mochymusic.ui.component.NewActionGrid
 import com.mochyy.mochymusic.ui.component.PlaylistListItem
 import com.mochyy.mochymusic.ui.component.TextFieldDialog
+import com.mochyy.mochymusic.ui.component.ListDialog
+import com.mochyy.mochymusic.ui.player.menu.MenuRow
+import com.mochyy.mochymusic.applesync.ApplePlaylistWrites
+import com.mochyy.mochymusic.applesync.PlaylistFolders
+import com.mochyy.mochymusic.ui.component.TopToaster
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -115,6 +121,47 @@ fun PlaylistMenu(
 
     val isPinned by remember(database, playlist.id) { database.speedDialDao.isPinned(playlist.id) }.collectAsState(initial = false)
     val resync = rememberPlaylistResync(playlist.id, playlist.playlist.browseId, navController, onDismiss)
+
+
+    // Apple's folders are a small, live table: read them once per sheet, never from a cache
+    val isApplePlaylist = playlist.id.startsWith("AM_PL_")
+    var showFolderPicker by remember { mutableStateOf(false) }
+    var showNewFolder by remember { mutableStateOf(false) }
+    val folderTree by produceState(
+        initialValue = PlaylistFolders.Tree(emptyList(), emptyMap()),
+        key1 = isApplePlaylist,
+    ) {
+        if (!isApplePlaylist) return@produceState
+        val entry = runCatching {
+            dagger.hilt.android.EntryPointAccessors.fromApplication(
+                context.applicationContext,
+                com.mochyy.mochymusic.applesync.di.ApplePlaylistEntryPoint::class.java,
+            )
+        }.getOrNull() ?: return@produceState
+        entry.dao().stateFlow().collect { rows ->
+            rows.firstOrNull { it.key == PlaylistFolders.KEY }?.value?.let { value = PlaylistFolders.decode(it) }
+        }
+    }
+
+    fun moveToFolder(folderId: String?) {
+        coroutineScope.launch(Dispatchers.IO) {
+            val done = ApplePlaylistWrites.movePlaylist(
+                context = context,
+                localId = playlist.id,
+                remoteId = playlist.id.removePrefix("AM_PL_"),
+                folderId = folderId,
+            )
+            if (done) {
+                withContext(Dispatchers.Main) {
+                    TopToaster.show(
+                        context.getString(
+                            if (folderId == null) R.string.playlist_remove_from_folder else R.string.playlist_add_to_folder,
+                        ),
+                    )
+                }
+            }
+        }
+    }
 
     LaunchedEffect(songs) {
         if (songs.isEmpty()) return@LaunchedEffect
@@ -396,6 +443,21 @@ fun PlaylistMenu(
         item {
             Material3MenuGroup(
                 items = buildList {
+                    if (isApplePlaylist) {
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.playlist_add_to_folder)) },
+                                description = { Text(text = stringResource(R.string.playlist_add_to_folder_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_folder_small),
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = { showFolderPicker = true }
+                            )
+                        )
+                    }
                     if (editable && autoPlaylist != true) {
                         add(
                             Material3MenuItemData(
@@ -565,4 +627,60 @@ fun PlaylistMenu(
             )
         }
     }
+
+    if (showFolderPicker) {
+        ListDialog(onDismiss = { showFolderPicker = false }) {
+            item {
+                MenuRow(
+                    title = stringResource(R.string.folder_new),
+                    icon = R.drawable.ic_folder_small,
+                    onClick = {
+                        showFolderPicker = false
+                        showNewFolder = true
+                    },
+                )
+            }
+            folderTree.folders.forEach { folder ->
+                item(key = folder.id) {
+                    MenuRow(
+                        title = folder.name,
+                        icon = R.drawable.ic_folder_small,
+                        onClick = {
+                            showFolderPicker = false
+                            moveToFolder(folder.id)
+                        },
+                    )
+                }
+            }
+            if (folderTree.parentOf.containsKey(playlist.id)) {
+                item {
+                    MenuRow(
+                        title = stringResource(R.string.playlist_remove_from_folder),
+                        icon = R.drawable.ic_folder_small,
+                        onClick = {
+                            showFolderPicker = false
+                            moveToFolder(null)
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    if (showNewFolder) {
+        TextFieldDialog(
+            title = { Text(stringResource(R.string.folder_new)) },
+            placeholder = { Text(stringResource(R.string.folder_name_hint)) },
+            onDismiss = { showNewFolder = false },
+            onDone = { name ->
+                showNewFolder = false
+                coroutineScope.launch(Dispatchers.IO) {
+                    val folderId = ApplePlaylistWrites.createFolder(context, name.trim())
+                    if (folderId != null) moveToFolder(folderId)
+                }
+            },
+        )
+    }
+
 }
+

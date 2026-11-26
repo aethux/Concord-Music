@@ -53,6 +53,25 @@ object PlaylistFolders {
         return json.toString()
     }
 
+
+    /** The same document back out, for the writes that add, rename, empty or move a folder. */
+    fun encode(tree: Tree): String {
+        val json = buildJsonObject {
+            putJsonArray("folders") {
+                tree.folders.forEach { folder ->
+                    addJsonObject {
+                        put("id", folder.id)
+                        put("name", folder.name)
+                    }
+                }
+            }
+            putJsonObject("parents") {
+                tree.parentOf.forEach { (playlistId, folderId) -> put(playlistId, folderId) }
+            }
+        }
+        return json.toString()
+    }
+
     fun decode(raw: String?): Tree {
         if (raw.isNullOrBlank()) return Tree(emptyList(), emptyMap())
         return runCatching {

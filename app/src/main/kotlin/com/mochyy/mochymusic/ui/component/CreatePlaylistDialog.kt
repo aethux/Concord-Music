@@ -88,6 +88,23 @@ fun CreatePlaylistDialog(
                         scope.launch(Dispatchers.IO) {
                             try {
                                 val name = form.name.trim()
+                                // Apple first: a playlist made here is Apple's, so the person's other
+                                // clients see it and the songs added to it land there
+                                val apple = runCatching {
+                                    com.mochyy.mochymusic.applesync.ApplePlaylistWrites
+                                        .createPlaylist(appContext, name)
+                                }.getOrNull()
+                                if (apple != null) {
+                                    withContext(Dispatchers.Main) {
+                                        currentOnCreated?.invoke(apple.localId)
+                                        sheet?.dismiss()
+                                        TopToaster.show(
+                                            toastContext.getString(R.string.pc_playlist_created),
+                                            iconRes = R.drawable.playlist_add,
+                                        )
+                                    }
+                                    return@launch
+                                }
                                 val browseId = when {
                                     form.sync && signedIn ->
                                         // a failed YouTube create still leaves the user a local playlist

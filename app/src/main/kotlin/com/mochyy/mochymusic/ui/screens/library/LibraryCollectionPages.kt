@@ -9,8 +9,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -35,6 +37,16 @@ import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.playback.PlayerConnection
 import com.mochyy.mochymusic.playback.queues.ListQueue
+import com.mochyy.mochymusic.ui.component.DefaultDialog
+import com.mochyy.mochymusic.ui.component.ListDialog
+import com.mochyy.mochymusic.ui.component.TextFieldDialog
+import com.mochyy.mochymusic.ui.player.menu.MenuRow
+import com.mochyy.mochymusic.applesync.ApplePlaylistWrites
+import com.mochyy.mochymusic.applesync.PlaylistFolders
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.input.TextFieldValue
 import com.mochyy.mochymusic.ui.component.LocalMenuState
 import com.mochyy.mochymusic.ui.component.detail.PlaylistSortControl
 import com.mochyy.mochymusic.ui.menu.AlbumMenu
@@ -211,16 +223,18 @@ internal fun LibraryPlaylistsPage(navController: NavController) {
         }
     }
     // Apple's folders, from the tree the playlist import keeps: a header per folder, opened in place
+    // observed, so a folder made, renamed, emptied or deleted from the folder's own menu is on the
+    // page before the person lifts their finger off it
     val folderTree by produceState<com.mochyy.mochymusic.applesync.PlaylistFolders.Tree?>(null, playlists) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val dao = dagger.hilt.android.EntryPointAccessors
-                    .fromApplication(context.applicationContext, com.mochyy.mochymusic.applesync.di.ApplePlaylistEntryPoint::class.java)
-                    .dao()
-                com.mochyy.mochymusic.applesync.PlaylistFolders.decode(
-                    dao.state(com.mochyy.mochymusic.applesync.PlaylistFolders.KEY),
-                )
-            }.getOrNull()
+        val dao = runCatching {
+            dagger.hilt.android.EntryPointAccessors
+                .fromApplication(context.applicationContext, com.mochyy.mochymusic.applesync.di.ApplePlaylistEntryPoint::class.java)
+                .dao()
+        }.getOrNull() ?: return@produceState
+        dao.stateFlow().collect { rows ->
+            rows.firstOrNull { it.key == com.mochyy.mochymusic.applesync.PlaylistFolders.KEY }?.value?.let { raw ->
+                value = com.mochyy.mochymusic.applesync.PlaylistFolders.decode(raw)
+            }
         }
     }
     val folderSections = remember(playlists, folderTree) {
@@ -262,6 +276,11 @@ internal fun LibraryPlaylistsPage(navController: NavController) {
         )
     }
 
+    var folderMenu by remember { mutableStateOf<PlaylistFolders.Folder?>(null) }
+    var folderRename by remember { mutableStateOf<PlaylistFolders.Folder?>(null) }
+    var folderNewPlaylist by remember { mutableStateOf<PlaylistFolders.Folder?>(null) }
+    var folderDelete by remember { mutableStateOf<PlaylistFolders.Folder?>(null) }
+
     LibraryCollectionPage(
         title = title,
         pageKey = "playlists",
@@ -291,7 +310,79 @@ internal fun LibraryPlaylistsPage(navController: NavController) {
         navController = navController,
         sort = sort,
         folders = folderSections,
+        onFolderMenu = { id, name -> folderMenu = PlaylistFolders.Folder(id, name) },
     )
+
+    // ---- a folder's own menu: rename it, put a new playlist in it, or delete it -----------------
+    folderMenu?.let { folder ->
+        ListDialog(onDismiss = { folderMenu = null }) {
+            item {
+                MenuRow(
+                    title = stringResource(R.string.folder_rename),
+                    icon = R.drawable.edit,
+                    onClick = { folderMenu = null; folderRename = folder },
+                )
+            }
+            item {
+                MenuRow(
+                    title = stringResource(R.string.folder_add_playlist),
+                    icon = R.drawable.playlist_add,
+                    onClick = { folderMenu = null; folderNewPlaylist = folder },
+                )
+            }
+            item {
+                MenuRow(
+                    title = stringResource(R.string.folder_delete),
+                    icon = R.drawable.delete,
+                    onClick = { folderMenu = null; folderDelete = folder },
+                )
+            }
+        }
+    }
+
+    folderRename?.let { folder ->
+        TextFieldDialog(
+            title = { Text(stringResource(R.string.folder_rename)) },
+            initialTextFieldValue = TextFieldValue(folder.name),
+            onDismiss = { folderRename = null },
+            onDone = { name ->
+                folderRename = null
+                scope.launch(Dispatchers.IO) { ApplePlaylistWrites.renameFolder(context, folder.id, name.trim()) }
+            },
+        )
+    }
+
+    folderNewPlaylist?.let { folder ->
+        TextFieldDialog(
+            title = { Text(stringResource(R.string.folder_add_playlist)) },
+            placeholder = { Text(stringResource(R.string.playlist_name_hint)) },
+            onDismiss = { folderNewPlaylist = null },
+            onDone = { name ->
+                folderNewPlaylist = null
+                scope.launch(Dispatchers.IO) {
+                    ApplePlaylistWrites.createPlaylist(context, name.trim(), folder.id)
+                }
+            },
+        )
+    }
+
+    folderDelete?.let { folder ->
+        DefaultDialog(
+            onDismiss = { folderDelete = null },
+            title = { Text(stringResource(R.string.folder_delete)) },
+            buttons = {
+                TextButton(onClick = { folderDelete = null }) { Text(stringResource(R.string.cancel)) }
+                TextButton(
+                    onClick = {
+                        folderDelete = null
+                        scope.launch(Dispatchers.IO) { ApplePlaylistWrites.deleteFolder(context, folder.id) }
+                    },
+                ) { Text(stringResource(R.string.delete)) }
+            },
+        ) {
+            Text(stringResource(R.string.folder_delete_confirm, folder.name))
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

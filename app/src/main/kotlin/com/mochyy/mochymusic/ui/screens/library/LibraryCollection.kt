@@ -19,6 +19,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -335,6 +336,8 @@ fun <T> LibraryCollectionPage(
     sort: CollectionSorting<T>,
     /** Apple's folders: when present, the page draws each as a header that opens in place. */
     folders: List<CollectionFolder<T>> = emptyList(),
+    /** a folder's long press, for pages that can change folders (the playlists page) */
+    onFolderMenu: ((id: String, name: String) -> Unit)? = null,
     roundCovers: Boolean = false,
     secondsOf: ((T) -> Int)? = null,
     rowWrapper: @Composable (item: T, row: @Composable () -> Unit) -> Unit = { _, row -> row() },
@@ -508,6 +511,7 @@ fun <T> LibraryCollectionPage(
                     },
                     onOpen = { item -> onOpen(item, shown.ordered) },
                     onMenu = onMenu,
+                    onLongPress = onFolderMenu?.let { handler -> { handler(row.id, row.name) } },
                 )
                 is CollectionRow.Single -> listRow(row.item, row.entry)
                 is CollectionRow.Tiles -> Row(
@@ -683,6 +687,7 @@ private fun <T> CollectionFolderCard(
     onToggle: () -> Unit,
     onOpen: (T) -> Unit,
     onMenu: (T) -> Unit,
+    onLongPress: (() -> Unit)? = null,
 ) {
     val chevron by animateFloatAsState(
         targetValue = if (folder.expanded) 180f else 0f,
@@ -701,7 +706,7 @@ private fun <T> CollectionFolderCard(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onToggle)
+                .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
                 .padding(horizontal = 16.dp, vertical = 17.dp),
         ) {
             Icon(

@@ -35,6 +35,12 @@ enum class AppleWrite {
     REMOVE_FROM_LIBRARY,
     SET_RATING,
     CLEAR_RATING,
+
+    /** folders are the container itself: nothing of the person's is replaced, only the folder */
+    CREATE_FOLDER,
+    RENAME_FOLDER,
+    DELETE_FOLDER,
+    MOVE_PLAYLIST,
 }
 
 data class AppleOp(
@@ -103,6 +109,15 @@ object AppleGuard {
 
     fun decide(op: AppleOp, context: AppleGuardContext): AppleDecision {
         if (!context.writesEnabled) return AppleDecision.Refused(AppleRefusal.WRITES_DISABLED)
+
+        // a folder holds playlists but is not one: its own objects carry no epoch, so a person's yes
+        // on delete is the whole rule, and a create or rename only needs writes to be on
+        when (op.write) {
+            AppleWrite.CREATE_FOLDER, AppleWrite.RENAME_FOLDER -> return AppleDecision.Allowed
+            AppleWrite.DELETE_FOLDER ->
+                return if (op.confirmed) AppleDecision.Allowed else AppleDecision.Refused(AppleRefusal.NOT_OWNED)
+            else -> Unit
+        }
 
         if (op.playlistId != null) {
             val name = op.playlistName?.trim()?.lowercase()

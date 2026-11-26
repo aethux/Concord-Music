@@ -698,12 +698,10 @@ private fun <T> CollectionFolderCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp)
+            // the same 30 dp the grid's tiles hold, so the card sits on their columns
+            .padding(start = 30.dp, end = 30.dp, top = 2.dp, bottom = 16.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(
-                if (folder.expanded) MaterialTheme.colorScheme.surfaceContainerHigh
-                else MaterialTheme.colorScheme.surfaceContainer,
-            )
+            .background(Color.White.copy(alpha = if (folder.expanded) 0.06f else 0.035f))
             .animateContentSize(animationSpec = tween(240)),
     ) {
         Row(
@@ -716,14 +714,14 @@ private fun <T> CollectionFolderCard(
             Icon(
                 painter = painterResource(R.drawable.ic_folder_small),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = Color.White.copy(alpha = 0.78f),
                 modifier = Modifier.size(18.dp),
             )
             Spacer(Modifier.width(10.dp))
             Text(
                 text = folder.name,
                 style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color.White.copy(alpha = 0.92f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -731,13 +729,13 @@ private fun <T> CollectionFolderCard(
             Text(
                 text = folder.items.size.toString(),
                 style = TextStyle(fontSize = 12.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.5f),
             )
             Spacer(Modifier.width(8.dp))
             Icon(
                 painter = painterResource(R.drawable.expand_more),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = Color.White.copy(alpha = 0.6f),
                 modifier = Modifier
                     .size(16.dp)
                     .graphicsLayer { rotationZ = chevron },

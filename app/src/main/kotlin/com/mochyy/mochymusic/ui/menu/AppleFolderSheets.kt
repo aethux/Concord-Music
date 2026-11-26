@@ -94,7 +94,7 @@ fun FolderPickerSheet(playlist: Playlist, onDismiss: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()),
+            .padding(bottom = 28.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()),
     ) {
         SheetHeader(
             thumbnailUrl = playlist.thumbnails.firstOrNull(),
@@ -102,13 +102,26 @@ fun FolderPickerSheet(playlist: Playlist, onDismiss: () -> Unit) {
             subtitle = stringResource(R.string.playlist_add_to_folder),
         )
         Spacer(Modifier.height(16.dp))
+        val inFolder = tree.parentOf.containsKey(playlist.id)
         SheetActionCardRow {
             SheetActionCard(
-                icon = R.drawable.ic_folder_small,
+                icon = R.drawable.ic_folder_add,
                 title = stringResource(R.string.folder_new),
                 onClick = { naming = true },
                 modifier = Modifier.weight(1f),
             )
+            if (inFolder) {
+                // the way back out sits beside it rather than under the folder list
+                SheetActionCard(
+                    icon = R.drawable.ic_folder_small,
+                    title = stringResource(R.string.playlist_remove_from_folder),
+                    onClick = { move(null) },
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                // one card, half the sheet: a lone card stretched full width reads as a bar
+                Spacer(Modifier.weight(1f))
+            }
         }
         Spacer(Modifier.height(10.dp))
         tree.folders.forEach { folder ->
@@ -118,15 +131,7 @@ fun FolderPickerSheet(playlist: Playlist, onDismiss: () -> Unit) {
                 onClick = { move(folder.id) },
             )
         }
-        if (tree.parentOf.containsKey(playlist.id)) {
-            Spacer(Modifier.height(10.dp))
-            MenuRow(
-                icon = R.drawable.ic_folder_small,
-                title = stringResource(R.string.playlist_remove_from_folder),
-                onClick = { move(null) },
-            )
-        }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
     }
 
     if (naming) {
@@ -162,7 +167,7 @@ fun FolderMenuSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()),
+            .padding(bottom = 28.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()),
     ) {
         Column(modifier = Modifier.padding(horizontal = 2.dp)) {
             Text(
@@ -197,6 +202,7 @@ fun FolderMenuSheet(
             title = stringResource(R.string.folder_delete),
             onClick = { deleting = true },
         )
+        Spacer(Modifier.height(16.dp))
     }
 
     if (renaming) {

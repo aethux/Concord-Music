@@ -53,12 +53,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import com.music.innertube.YouTube
-import com.music.innertube.models.WatchEndpoint
 import com.mochyy.mochymusic.applesync.AppleVideoReference
-import com.mochyy.mochymusic.models.toMediaMetadata
 import com.mochyy.mochymusic.playback.queues.ListQueue
-import com.mochyy.mochymusic.playback.queues.YouTubeQueue
 import com.mochyy.mochymusic.ui.component.TopToaster
 import com.mochyy.mochymusic.ui.player.studio.playHoldRamp
 import androidx.compose.ui.draw.clip
@@ -335,6 +331,8 @@ private fun PlayerSheet(
     // Concord: which Apple song's video is up, so the same button can put the song back
     var appleVideoSource by remember { mutableStateOf<String?>(null) }
     var appleVideoId by remember { mutableStateOf<String?>(null) }
+    // Concord: the song whose video had no YouTube match, so the picker can be opened for it
+    var pickVideoFor by remember { mutableStateOf<com.mochyy.mochymusic.models.MediaMetadata?>(null) }
     // a youtube video is playing on the cover, so the chevron offers the full video mode
     var videoShowing by remember { mutableStateOf(false) }
     var showSleepTimer by remember { mutableStateOf(false) }
@@ -973,41 +971,23 @@ private fun PlayerSheet(
                                 if (videoId == null) {
                                     // Timber never reaches logcat here, so every outcome is said out loud
                                     TopToaster.show(appleVideoContext.getString(R.string.apple_video_none))
+                                    // and the person can put it right there: Mochy's own video picker
+                                    // writes the hand pick that youtubeIdFor reads next time
+                                    pickVideoFor = playerConnection.mediaMetadata.value
                                 } else {
-                                    YouTube.queue(listOf(videoId)).onSuccess { found ->
-                                        val item = found.firstOrNull()
-                                        if (item == null) {
-                                            TopToaster.show(appleVideoContext.getString(R.string.apple_video_failed))
-                                            return@onSuccess
-                                        }
-                                        playerConnection.playQueue(
-                                            YouTubeQueue(
-                                                WatchEndpoint(videoId = item.id),
-                                                item.toMediaMetadata(),
-                                            ),
-                                        )
-                                        // Mochy's provider order asks every module first, and Apple
-                                        // answers any song it can match — even a music video, with AAC.
-                                        // Once the video is the current item, pin it to YouTube: that is
-                                        // also what lets the player draw it as video instead of a still.
-                                        for (waited in 0 until 12) {
-                                            if (playerConnection.mediaMetadata.value?.id == item.id) {
-                                                playerConnection.service.providerSwitch.force(
-                                                    com.mochyy.mochymusic.modules.SourceModules.YouTubeId,
-                                                )
-                                                break
-                                            }
-                                            kotlinx.coroutines.delay(200)
-                                        }
-                                        // Concord: no style change. Mochy draws a video song's picture in
-                                        // the cover of the player that is already open (the full-screen
-                                        // style stays behind Mochy's own "Full video" action).
-                                        appleVideoSource = mediaId
-                                        appleVideoId = item.id
-                                        TopToaster.show(appleVideoContext.getString(R.string.apple_video_playing))
-                                    }.onFailure {
-                                        TopToaster.show(appleVideoContext.getString(R.string.apple_video_unreachable))
-                                    }
+                                    playYouTubeVideo(playerConnection, videoId).fold(
+                                        onSuccess = { played ->
+                                            // Concord: no style change. Mochy draws a video song's picture
+                                            // in the cover of the player that is already open (the
+                                            // full-screen style stays behind Mochy's own "Full video")
+                                            appleVideoSource = mediaId
+                                            appleVideoId = played
+                                            TopToaster.show(appleVideoContext.getString(R.string.apple_video_playing))
+                                        },
+                                        onFailure = {
+                                            TopToaster.show(appleVideoContext.getString(R.string.apple_video_unreachable))
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -1977,6 +1957,15 @@ private fun PlayerSheet(
                 },
                 onReveal = { menuReveal.floatValue = it },
                 modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        pickVideoFor?.let { song ->
+            com.mochyy.mochymusic.ui.menu.songedit.VideoPickerSheet(
+                songId = song.id,
+                title = song.title,
+                artist = song.artists.joinToString { it.name },
+                onDismiss = { pickVideoFor = null },
             )
         }
 

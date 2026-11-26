@@ -51,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -93,8 +94,11 @@ import com.mochyy.mochymusic.ui.component.GlassState
 import com.mochyy.mochymusic.ui.component.HomeSectionTitle
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
 import com.mochyy.mochymusic.ui.component.RemoteFocus
+import com.mochyy.mochymusic.ui.component.TopToaster
 import com.mochyy.mochymusic.ui.component.glassRoot
 import com.mochyy.mochymusic.ui.component.navigateToTab
+import com.mochyy.mochymusic.ui.player.findOfficialMusicVideoId
+import com.mochyy.mochymusic.ui.player.playYouTubeVideo
 import com.mochyy.mochymusic.ui.screens.library.showLibraryImportSheet
 import com.mochyy.mochymusic.utils.makeTimeString
 import com.mochyy.mochymusic.utils.rememberPreference
@@ -142,6 +146,7 @@ fun AppleSearchScreen(
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -157,6 +162,8 @@ fun AppleSearchScreen(
 
     /** the submitted term whose answer is on screen; null while the field is being used */
     var shown by rememberSaveable { mutableStateOf<String?>(null) }
+    // a video card with no YouTube match: the card, and the media id the hand pick is stored under
+    var pickVideoFor by remember { mutableStateOf<Pair<AppleSearchItem, String>?>(null) }
     var chipIndex by rememberSaveable { mutableIntStateOf(0) }
 
     val categories by viewModel.categories.collectAsState()
@@ -283,9 +290,27 @@ fun AppleSearchScreen(
             AppleSearchItem.Kind.Album -> navController.navigate("album/${item.id}")
             AppleSearchItem.Kind.Artist -> navController.navigate("apple_artist/${item.id}")
             AppleSearchItem.Kind.Playlist -> navController.navigate("apple_playlist/${item.id}")
-            // a music video has no page yet; Apple's card exists and says so, in the app
-            AppleSearchItem.Kind.Video ->
-                navController.navigate("coming_soon/${Uri.encode(item.title)}")
+            // a music video plays the way See video does: its YouTube counterpart in Mochy's own
+            // player. Apple's own video stream can't be decrypted here (concord/STATE.md)
+            AppleSearchItem.Kind.Video -> coroutineScope.launch {
+                val mediaId = "AM_${item.id}"
+                val edit = com.mochyy.mochymusic.songedit.SongEdits.of(mediaId)
+                if (edit?.noVideo == true) {
+                    TopToaster.show(context.getString(R.string.apple_video_none))
+                    return@launch
+                }
+                // a video picked by hand wins, so a card YouTube can't find stays fixed
+                val youtubeId = edit?.videoId ?: findOfficialMusicVideoId(item.title, item.subtitle.orEmpty())
+                if (youtubeId == null) {
+                    TopToaster.show(context.getString(R.string.apple_video_none))
+                    // Mochy's own picker, writing the hand pick read above next time
+                    pickVideoFor = item to mediaId
+                    return@launch
+                }
+                playYouTubeVideo(playerConnection, youtubeId).onFailure {
+                    TopToaster.show(context.getString(R.string.apple_video_unreachable))
+                }
+            }
         }
     }
 
@@ -659,6 +684,15 @@ fun AppleSearchScreen(
                 } else {
                     null
                 },
+            )
+        }
+
+        pickVideoFor?.let { (item, mediaId) ->
+            com.mochyy.mochymusic.ui.menu.songedit.VideoPickerSheet(
+                songId = mediaId,
+                title = item.title,
+                artist = item.subtitle.orEmpty(),
+                onDismiss = { pickVideoFor = null },
             )
         }
     }

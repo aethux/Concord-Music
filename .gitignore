@@ -79,6 +79,7 @@ app/persistent-debug.keystore
 !app/src/main/assets/stage_hrtf.bin
 
 # Scratch files in the repo root (not part of the build)
+/screenshots/
 /test_*
 /Test*.kt
 /fix_*

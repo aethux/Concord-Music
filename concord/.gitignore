@@ -8,3 +8,12 @@ tools/
 GEMINI.md
 IDEA.md
 PLAN.md
+# working reference notes for this fork, kept local like the rest
+apple-endpoints-audit.md
+apple-load-model.md
+apple-pages.md
+apple-surface.md
+engine-port.md
+menu-inventory.md
+playlist-features.md
+prompts/

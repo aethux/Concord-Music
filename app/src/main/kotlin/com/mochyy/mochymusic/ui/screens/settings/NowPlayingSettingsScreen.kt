@@ -107,32 +107,12 @@ private fun badgeItems(): List<SettingsItem> {
 
 @Composable
 private fun lyricsItems(): List<SettingsItem> {
-    val (youtubeTranslations, onYoutubeTranslationsChange) = rememberPreference(YouTubeCaptionTranslationKey, defaultValue = true)
-    val (syncLyricsToVideo, onSyncLyricsToVideoChange) = rememberPreference(SyncLyricsToVideoKey, defaultValue = true)
     val (romanizeAsMain, onRomanizeAsMainChange) = rememberPreference(LyricsRomanizeAsMainKey, defaultValue = false)
     val (highBloom, onHighBloomChange) = rememberPreference(LyricsHighBloomKey, defaultValue = true)
     val (softLight, onSoftLightChange) = rememberPreference(LyricsSoftLightKey, defaultValue = true)
     val (lyricsStyle) = rememberEnumPreference(LyricsMotionStyleKey, defaultValue = LyricsMotionStyle.MOTION)
     val (floatingLyrics, onFloatingLyricsChange) = rememberFloatingLyricsSwitch()
     return listOf(
-        switchItem(
-            key = "Translations from YouTube",
-            title = stringResource(R.string.settings_youtube_translations),
-            description = stringResource(R.string.settings_youtube_translations_desc),
-            detail = stringResource(R.string.settings_youtube_translations_detail),
-            icon = painterResource(R.drawable.translate),
-            checked = youtubeTranslations,
-            onCheckedChange = onYoutubeTranslationsChange,
-        ),
-        switchItem(
-            key = "Sync lyrics to music videos",
-            title = stringResource(R.string.settings_sync_lyrics_video),
-            description = stringResource(R.string.settings_sync_lyrics_video_desc),
-            detail = stringResource(R.string.settings_sync_lyrics_video_detail),
-            icon = painterResource(R.drawable.lyrics),
-            checked = syncLyricsToVideo,
-            onCheckedChange = onSyncLyricsToVideoChange,
-        ),
         switchItem(
             key = "Romanisation as the main line",
             title = stringResource(R.string.settings_romanize_as_main),
@@ -179,7 +159,29 @@ private fun videoItems(): List<SettingsItem> {
     val (lyricsSync, onLyricsSyncChange) = rememberPreference(YtVideoBackgroundLyricsSyncKey, defaultValue = true)
     val (disableVideoAutoplay, onDisableVideoAutoplayChange) = rememberPreference(DisableVideoAutoplayKey, defaultValue = false)
     val (studioForVideos, onStudioForVideosChange) = rememberPreference(StudioForVideosKey, defaultValue = false)
+    // the two lyric switches that only act on a video: they belong with the video ones, not beside the
+    // lyric styles (an Apple song's words come from Apple, not from YouTube's captions)
+    val (youtubeTranslations, onYoutubeTranslationsChange) = rememberPreference(YouTubeCaptionTranslationKey, defaultValue = true)
+    val (syncLyricsToVideo, onSyncLyricsToVideoChange) = rememberPreference(SyncLyricsToVideoKey, defaultValue = true)
     return listOf(
+        switchItem(
+            key = "Translations from YouTube",
+            title = stringResource(R.string.settings_youtube_translations),
+            description = stringResource(R.string.settings_youtube_translations_desc),
+            detail = stringResource(R.string.settings_youtube_translations_detail),
+            icon = painterResource(R.drawable.translate),
+            checked = youtubeTranslations,
+            onCheckedChange = onYoutubeTranslationsChange,
+        ),
+        switchItem(
+            key = "Sync lyrics to music videos",
+            title = stringResource(R.string.settings_sync_lyrics_video),
+            description = stringResource(R.string.settings_sync_lyrics_video_desc),
+            detail = stringResource(R.string.settings_sync_lyrics_video_detail),
+            icon = painterResource(R.drawable.lyrics),
+            checked = syncLyricsToVideo,
+            onCheckedChange = onSyncLyricsToVideoChange,
+        ),
         switchItem(
             key = "Always enable Youtube background",
             title = stringResource(R.string.appearance_youtube_background),

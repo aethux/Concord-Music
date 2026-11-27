@@ -115,7 +115,7 @@
     <string name="settings_section_listening">While you listen</string>
     <string name="settings_section_failures">When a song won\'t play</string>
     <string name="settings_section_lyrics">Lyrics</string>
-    <string name="settings_section_videos">Videos</string>
+    <string name="settings_section_videos">Music videos</string>
     <string name="settings_section_canvas">Canvas</string>
     <string name="settings_playback_link_desc">Background play, Bluetooth, shuffle and skipping</string>
     <string name="settings_now_playing_link_desc">Lyrics, videos, canvas and the format badge</string>

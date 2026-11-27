@@ -61,7 +61,10 @@ internal object CanvasVideoCache {
         cache ?: synchronized(this) {
             cache ?: SimpleCache(
                 java.io.File(context.cacheDir, "canvas_video"),
-                LeastRecentlyUsedCacheEvictor(300L * 1024 * 1024),
+                // Concord: 300 MB was the cap and the phone sat right at it; a canvas is a few MB
+                // and only the current song's plus the prefetched next one are ever played, so 100 MB
+                // still holds dozens. Everything visual is unchanged; the rest is just disk.
+                LeastRecentlyUsedCacheEvictor(100L * 1024 * 1024),
                 StandaloneDatabaseProvider(context),
             ).also { cache = it }
         }

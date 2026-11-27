@@ -352,6 +352,13 @@ internal class CanvasVideoSession(
             player = ExoPlayer.Builder(context)
                 .setLooper(handler.looper)
                 .setMediaSourceFactory(mediaSourceFactory)
+                // Concord: from Mocha. A looping canvas is decoration, not playback: the default 50s
+                // buffer held ~7 MB of sample data per card, ~140 MB across Home's canvases
+                .setLoadControl(
+                    androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                        .setBufferDurationsMs(5000, 8000, 5000, 5000)
+                        .build(),
+                )
                 .build()
                 .apply {
                     applyQuality(bestQuality)

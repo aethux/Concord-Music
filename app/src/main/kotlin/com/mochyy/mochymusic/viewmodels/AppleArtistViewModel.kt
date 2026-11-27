@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -145,7 +146,24 @@ class AppleArtistViewModel @Inject constructor(
     private fun load(): Job = viewModelScope.launch(Dispatchers.IO) {
             val pair = tokens.read()
             _signedOut.value = pair == null
-            val artist = pair?.let { runCatching { AppleClient(it, pageCache).artistPage(artistId) }.getOrNull() }
+            val client = pair?.let { AppleClient(it, pageCache) }
+            // the Library's artist rows carry Apple's *library* artist id (r.…); the page reads
+            // are keyed by the catalogue id, which the library artist's own catalog twin answers
+            val id = if (artistId.startsWith("r.")) {
+                // Apple often answers an empty `catalog` relationship for a library artist (it did
+                // for Adele), so the name is the fallback: the artist's own row still knows it
+                val twin = client?.let { runCatching { it.catalogIdForLibraryArtist(artistId) }.getOrNull() }
+                if (twin != null) {
+                    twin
+                } else {
+                    val name = runCatching { database.artist(artistId).first()?.artist?.name }.getOrNull()
+                    val found = name?.let { n -> client?.let { c -> runCatching { c.artistIdByName(n) }.getOrNull() } }
+                    found ?: artistId
+                }
+            } else {
+                artistId
+            }
+            val artist = client?.let { runCatching { it.artistPage(id) }.getOrNull() }
             if (artist == null) {
                 _failed.value = true
                 return@launch

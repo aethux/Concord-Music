@@ -546,7 +546,8 @@ fun <T> LibraryCollectionPage(
             }
         }
 
-        item(key = "bottom_spacer", contentType = "spacer") { Spacer(Modifier.height(60.dp)) }
+        // clear of the mini player: the last row was sitting under it and could not be tapped
+        item(key = "bottom_spacer", contentType = "spacer") { Spacer(Modifier.height(180.dp)) }
     }
 }
 

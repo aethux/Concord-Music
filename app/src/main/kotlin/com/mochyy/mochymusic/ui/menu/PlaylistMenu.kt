@@ -226,20 +226,23 @@ fun PlaylistMenu(
                     onClick = {
                         showDeletePlaylistDialog = false
                         onDismiss()
-                        database.transaction {
-
-                            if (playlist.playlist.bookmarkedAt != null) {
-
-                                update(playlist.playlist.toggleLike())
-                            }
-
-                            delete(playlist.playlist)
-                        }
-
+                        val target = playlist.playlist
                         coroutineScope.launch(Dispatchers.IO) {
-                            playlist.playlist.browseId?.let { YouTube.deletePlaylist(it) }
+                            // Apple's copy goes first: a refusal keeps both sides as they were
+                            if (target.id.startsWith("AM_PL_") &&
+                                !ApplePlaylistWrites.delete(context, target.id)
+                            ) {
+                                return@launch
+                            }
+                            database.transaction {
+                                if (target.bookmarkedAt != null) {
+                                    update(target.toggleLike())
+                                }
+                                delete(target)
+                            }
+                            target.browseId?.let { YouTube.deletePlaylist(it) }
                             // Its generated or picked cover is no use to anyone now.
-                            PlaylistCoverStore.deleteStale(context.applicationContext, playlist.id, null)
+                            PlaylistCoverStore.deleteStale(context.applicationContext, target.id, null)
                         }
                     }
                 ) {

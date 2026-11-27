@@ -69,6 +69,8 @@ fun ApplePlaylistScreen(
     val page by viewModel.page.collectAsState()
     val failed by viewModel.failed.collectAsState()
     val signedOut by viewModel.signedOut.collectAsState()
+    // whether the account follows this catalogue playlist; the header's save button
+    val saved by viewModel.saved.collectAsState()
 
     // Concord: signing in is Mochy's own import sheet, opened on Apple's sign-in
     val sheets = LocalZoomOutOverlayState.current
@@ -158,6 +160,8 @@ fun ApplePlaylistScreen(
                 isPlaying = isPlaying,
                 onPlayClick = { play(0, shuffled = false) },
                 onShuffleClick = { play(0, shuffled = true) },
+                isSaved = saved,
+                onSaveClick = { viewModel.toggleSaved() },
                 description = current.description,
             )
         }

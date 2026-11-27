@@ -27,9 +27,11 @@ import dagger.hilt.android.EntryPointAccessors
 import java.time.LocalDateTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
 object ApplePlaylistWrites {
@@ -102,6 +104,149 @@ object ApplePlaylistWrites {
             )
         }
         return Made(localId, remoteId)
+    }
+
+    /**
+     * Cider's rename: `PATCH /v1/me/library/playlists/{id}` with `{attributes:{name, description}}`.
+     * The person's Done in the edit sheet is the confirmation the guard asks for; a playlist Apple
+     * says cannot be edited is still refused before the request is built.
+     */
+    suspend fun rename(context: Context, playlistId: String, name: String, description: String?): Boolean {
+        if (!playlistId.startsWith("AM_PL_")) return false
+        val entry = entry(context) ?: return false
+        val remoteId = playlistId.removePrefix("AM_PL_")
+        val current = runCatching { entry.database().playlist(playlistId).first() }
+            .getOrNull()?.playlist ?: return false
+        val tokens = tokens(context, entry) ?: return false
+        if (!AppleWritePrefs.enabled(context)) {
+            refused(context, entry, "RENAME_PLAYLIST", "WRITES_DISABLED")
+            return false
+        }
+        val decision = AppleGuard.decide(
+            AppleOp(
+                write = AppleWrite.RENAME_PLAYLIST,
+                playlistId = playlistId,
+                playlistName = current.name,
+                playlistEditable = current.isEditable,
+                targets = listOf(AppleRef(AppleKind.PLAYLIST, remoteId)),
+                confirmed = true,
+            ),
+            guardContext(context, entry),
+        )
+        if (decision is AppleDecision.Refused) {
+            entry.dao().audit(audit("RENAME_PLAYLIST", remoteId, "REFUSE", reason = decision.reason.name))
+            TopToaster.error(
+                context.getString(
+                    if (decision.reason == AppleRefusal.PLAYLIST_NOT_EDITABLE) R.string.apple_playlist_not_editable
+                    else R.string.apple_write_off,
+                ),
+            )
+            return false
+        }
+        if (!WriteBudget.take()) {
+            TopToaster.error(context.getString(R.string.apple_write_busy))
+            return false
+        }
+
+        val body = buildJsonObject {
+            putJsonObject("attributes") {
+                put("name", name)
+                put("description", description.orEmpty())
+            }
+        }.toString()
+        val answer = request(tokens, "PATCH", "/v1/me/library/playlists/$remoteId", body)
+        val ok = answer.status in 200..299
+        entry.dao().audit(
+            audit(
+                op = "RENAME_PLAYLIST",
+                target = remoteId,
+                decision = if (ok) "ALLOW" else "ERROR",
+                reason = if (ok) null else "Apple answered ${answer.status}",
+                httpStatus = answer.status,
+            ),
+        )
+        if (!ok) {
+            TopToaster.error(context.getString(R.string.apple_playlist_failed))
+            return false
+        }
+        entry.database().update(
+            current.copy(name = name, description = description?.ifBlank { null }, lastUpdateTime = LocalDateTime.now()),
+        )
+        return true
+    }
+
+    /**
+     * Cider's delete: `DELETE /v1/me/library/playlists/{id}`. Only when Apple's own `canDelete` says
+     * the account owns it, and only on the person's confirming tap (the sheet's dialog). The local
+     * rows are the caller's business — this only changes Apple.
+     */
+    suspend fun delete(context: Context, playlistId: String): Boolean {
+        if (!playlistId.startsWith("AM_PL_")) return false
+        val entry = entry(context) ?: return false
+        val remoteId = playlistId.removePrefix("AM_PL_")
+        val meta = entry.dao().playlistMeta(playlistId)
+        val tokens = tokens(context, entry) ?: return false
+        if (meta?.canDelete != true) {
+            // a local copy left over from an older sync can be deleted from this app even though
+            // Apple no longer owns it — but only when Apple confirms it has no such playlist. A
+            // playlist the account follows still answers 200, and is refused as before.
+            val probe = request(tokens, "GET", "/v1/me/library/playlists/$remoteId?fields%5Blibrary-playlists%5D=name", null)
+            if (probe.status == 404) {
+                entry.dao().audit(audit("DELETE_PLAYLIST", remoteId, "ALLOW", reason = "already gone from Apple", httpStatus = 404))
+                return true
+            }
+            entry.dao().audit(audit("DELETE_PLAYLIST", remoteId, "REFUSE", reason = "NOT_OWNED"))
+            TopToaster.error(context.getString(R.string.apple_playlist_not_editable))
+            return false
+        }
+        if (!AppleWritePrefs.enabled(context)) {
+            refused(context, entry, "DELETE_PLAYLIST", "WRITES_DISABLED")
+            return false
+        }
+        val current = runCatching { entry.database().playlist(playlistId).first() }.getOrNull()?.playlist
+        val decision = AppleGuard.decide(
+            AppleOp(
+                write = AppleWrite.DELETE_PLAYLIST,
+                playlistId = playlistId,
+                playlistName = current?.name,
+                playlistEditable = current?.isEditable ?: true,
+                targets = listOf(AppleRef(AppleKind.PLAYLIST, remoteId)),
+                confirmed = true,
+            ),
+            guardContext(context, entry),
+        )
+        if (decision is AppleDecision.Refused) {
+            entry.dao().audit(audit("DELETE_PLAYLIST", remoteId, "REFUSE", reason = decision.reason.name))
+            TopToaster.error(context.getString(R.string.apple_write_off))
+            return false
+        }
+        if (!WriteBudget.take()) {
+            TopToaster.error(context.getString(R.string.apple_write_busy))
+            return false
+        }
+        val answer = request(tokens, "DELETE", "/v1/me/library/playlists/$remoteId", null)
+        // 404 means Apple does not have it any more (a local copy left over from an older sync);
+        // the deletion has nothing left to do, so the local row may go too. A 5xx is checked the
+        // same way: Apple answered 500 for a playlist its API had already deleted
+        val gone = answer.status == 404 ||
+            (answer.status >= 500 &&
+                request(tokens, "GET", "/v1/me/library/playlists/$remoteId?fields%5Blibrary-playlists%5D=name", null).status == 404)
+        val ok = answer.status in 200..299 || gone
+        entry.dao().audit(
+            audit(
+                op = "DELETE_PLAYLIST",
+                target = remoteId,
+                decision = if (ok) "ALLOW" else "ERROR",
+                reason = when {
+                    gone -> "already gone from Apple"
+                    ok -> null
+                    else -> "Apple answered ${answer.status}"
+                },
+                httpStatus = answer.status,
+            ),
+        )
+        if (!ok) TopToaster.error(context.getString(R.string.apple_playlist_failed))
+        return ok
     }
 
     /** A new folder: Apple first, then the stored tree. */
@@ -235,6 +380,220 @@ object ApplePlaylistWrites {
     }
 
     /** The folder to put a fresh folder's playlists in, or null when the tree has no such value. */
+
+    // ---- tracks: Cider's whole-list replace -----------------------------------------------------
+
+    private data class TrackRow(val id: String, val type: String, val catalogId: String?)
+
+    /**
+     * Sends [playlistId]'s songs, in its order, to Apple — Cider's shape (`apple-api-reference.md`
+     * §D): `POST …/tracks` for the songs new here, then one `PUT …/tracks` with the whole list.
+     * The PUT is both the reorder and the removal: a song taken out here is simply not in the list.
+     *
+     * Only songs Apple already holds in this playlist, plus the ones added here since the last
+     * import, are sent. A song Apple no longer has is not put back, and a row with no Apple copy
+     * (a local file) is left out. If anything cannot be named on Apple, nothing is sent — a short
+     * PUT would quietly delete the rest.
+     */
+    suspend fun pushTracks(context: Context, playlistId: String, quiet: Boolean = false): Boolean {
+        if (!playlistId.startsWith("AM_PL_")) return false
+        val entry = entry(context) ?: return false
+        val remoteId = playlistId.removePrefix("AM_PL_")
+        val link = entry.dao().link(playlistId) ?: return false
+        val playlist = runCatching { entry.database().playlist(playlistId).first() }.getOrNull()?.playlist
+        if (playlist == null) return false
+        if (!AppleWritePrefs.enabled(context)) {
+            refused(context, entry, "REPLACE_TRACKS", "WRITES_DISABLED")
+            return false
+        }
+        if (!playlist.isEditable) {
+            entry.dao().audit(audit("REPLACE_TRACKS", remoteId, "REFUSE", reason = "PLAYLIST_NOT_EDITABLE"))
+            if (!quiet) TopToaster.error(context.getString(R.string.apple_playlist_not_editable))
+            return false
+        }
+        val decision = AppleGuard.decide(
+            AppleOp(
+                write = AppleWrite.REPLACE_TRACKS,
+                playlistId = playlistId,
+                playlistName = playlist.name,
+                playlistEditable = playlist.isEditable,
+                targets = listOf(AppleRef(AppleKind.PLAYLIST, remoteId)),
+            ),
+            guardContext(context, entry),
+        )
+        if (decision is AppleDecision.Refused) {
+            entry.dao().audit(audit("REPLACE_TRACKS", remoteId, "REFUSE", reason = decision.reason.name))
+            if (!quiet) TopToaster.error(context.getString(R.string.apple_write_off))
+            return false
+        }
+        if (!WriteBudget.take()) {
+            entry.dao().audit(audit("REPLACE_TRACKS", remoteId, "REFUSE", reason = "RATE_LIMITED"))
+            if (!quiet) TopToaster.error(context.getString(R.string.apple_write_busy))
+            return false
+        }
+        val tokens = tokens(context, entry) ?: return false
+
+        val current = appleTracks(tokens, remoteId)
+        if (current == null) {
+            if (!quiet) TopToaster.error(context.getString(R.string.apple_playlist_unavailable))
+            return false
+        }
+        val byCatalog = current.mapNotNull { row -> row.catalogId?.let { it to row } }.toMap()
+        val byId = current.associateBy { it.id }
+
+        val maps = entry.database().playlistSongMaps(playlistId, 0).sortedBy { it.position }
+        val previous = link.lastSignature.orEmpty().split(",").filter { it.isNotBlank() }.toSet()
+        val addedHere = maps.map { it.songId }.filterNot { it in previous }
+
+        // what Apple already knows, in this order
+        val order = mutableListOf<TrackRow>()
+        // songs added here that Apple does not list yet: catalogue ids, and uploads by their
+        // library id (an upload has no catalogue id, and Apple accepts `i.` here just the same)
+        val unresolved = mutableListOf<TrackRow>()
+        for (map in maps) {
+            val id = map.songId
+            when {
+                id.startsWith("AM_i.") -> {
+                    val appleId = id.removePrefix("AM_")
+                    val row = byId[appleId]
+                    if (row != null) order += row else if (id in addedHere) {
+                        unresolved += TrackRow(appleId, "library-songs", null)
+                    }
+                }
+                id.startsWith("AM_") -> {
+                    val catalog = id.removePrefix("AM_")
+                    val row = byCatalog[catalog]
+                    if (row != null) {
+                        order += row
+                    } else if (id in addedHere) {
+                        unresolved += TrackRow(catalog, "songs", catalog)
+                    }
+                    // else: Apple no longer has it in this playlist and it was not added here
+                }
+                // a local file or a YouTube row: never part of an Apple playlist
+            }
+        }
+
+        if (unresolved.isNotEmpty()) {
+            val added = addTracks(tokens, remoteId, unresolved.distinctBy { it.id })
+            entry.dao().audit(
+                audit(
+                    op = "ADD_TRACKS",
+                    target = remoteId,
+                    decision = if (added) "ALLOW" else "ERROR",
+                    reason = if (added) null else "Apple didn't take the new songs",
+                ),
+            )
+            if (!added) {
+                entry.dao().audit(audit("REPLACE_TRACKS", remoteId, "SKIP", reason = "ADD_FAILED"))
+                if (!quiet) TopToaster.error(context.getString(R.string.apple_playlist_failed))
+                return false
+            }
+            // read again: a new entry's Apple id is only known from the list
+            val after = appleTracks(tokens, remoteId)
+            if (after == null) {
+                if (!quiet) TopToaster.error(context.getString(R.string.apple_playlist_unavailable))
+                return false
+            }
+            val afterCatalog = after.mapNotNull { row -> row.catalogId?.let { it to row } }.toMap()
+            val afterIds = after.mapTo(HashSet()) { it.id }
+            val still = unresolved.filterNot { it.id in afterIds }
+            if (still.isNotEmpty()) {
+                entry.dao().audit(audit("REPLACE_TRACKS", remoteId, "SKIP", reason = "UNRESOLVED ${still.size}"))
+                if (!quiet) TopToaster.error(context.getString(R.string.apple_playlist_failed))
+                return false
+            }
+            // rebuild the order with the ids Apple just gave the new rows
+            val rebuilt = mutableListOf<TrackRow>()
+            for (map in maps) {
+                val id = map.songId
+                when {
+                    id.startsWith("AM_i.") -> after.firstOrNull { it.id == id.removePrefix("AM_") }?.let { rebuilt += it }
+                    id.startsWith("AM_") -> afterCatalog[id.removePrefix("AM_")]?.let { rebuilt += it }
+                }
+            }
+            order.clear()
+            order += rebuilt
+        }
+
+        if (order.isEmpty()) {
+            entry.dao().audit(audit("REPLACE_TRACKS", remoteId, "REFUSE", reason = "EMPTY_REPLACEMENT"))
+            if (!quiet) TopToaster.error(context.getString(R.string.apple_playlist_failed))
+            return false
+        }
+
+        val body = buildJsonObject {
+            putJsonArray("data") {
+                order.forEach { row ->
+                    addJsonObject {
+                        put("id", row.id)
+                        put("type", row.type)
+                    }
+                }
+            }
+        }.toString()
+        val answer = request(tokens, "PUT", "/v1/me/library/playlists/$remoteId/tracks", body)
+        val ok = answer.status in 200..299
+        entry.dao().audit(
+            audit(
+                op = "REPLACE_TRACKS",
+                target = remoteId,
+                decision = if (ok) "ALLOW" else "ERROR",
+                reason = if (ok) null else "Apple answered ${answer.status}",
+                httpStatus = answer.status,
+            ),
+        )
+        if (!ok) {
+            if (!quiet) TopToaster.error(context.getString(R.string.apple_playlist_failed))
+            return false
+        }
+        entry.dao().saveLink(link.copy(lastSignature = maps.joinToString(",") { it.songId }))
+        return true
+    }
+
+    /** Apple's own list for this playlist: the ids it will accept back, and their catalogue ids. */
+    private suspend fun appleTracks(tokens: AppleTokens.Pair, remoteId: String): List<TrackRow>? {
+        val rows = mutableListOf<TrackRow>()
+        var offset = 0
+        while (true) {
+            val answer = request(
+                tokens,
+                "GET",
+                "/v1/me/library/playlists/$remoteId/tracks?limit=100&offset=$offset",
+                null,
+            )
+            if (answer.status !in 200..299) return null
+            val data = AccountHttp.parse(answer.body)?.get("data")?.array() ?: return rows
+            if (data.isEmpty()) return rows
+            for (element in data) {
+                val row = element.obj() ?: continue
+                val id = (row["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: continue
+                val type = (row["type"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "library-songs"
+                val catalog = row["attributes"]?.obj()
+                    ?.get("playParams")?.obj()
+                    ?.get("catalogId")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                rows += TrackRow(id, type, catalog)
+            }
+            if (data.size < 100) return rows
+            offset += data.size
+        }
+    }
+
+    /** `POST …/tracks` — Cider's add, which appends in the order sent. */
+    private suspend fun addTracks(tokens: AppleTokens.Pair, remoteId: String, rows: List<TrackRow>): Boolean {
+        val body = buildJsonObject {
+            putJsonArray("data") {
+                rows.forEach { row ->
+                    addJsonObject {
+                        put("id", row.id)
+                        put("type", row.type)
+                    }
+                }
+            }
+        }.toString()
+        val answer = request(tokens, "POST", "/v1/me/library/playlists/$remoteId/tracks", body)
+        return answer.status in 200..299
+    }
 
     private fun createdId(answer: AccountHttp.Response): String? {
         val data = AccountHttp.parse(answer.body)?.get("data") ?: return null

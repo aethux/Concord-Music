@@ -61,7 +61,12 @@ fun LibraryArtistsScreen(
         },
         thumbnailOf = { it.artist.thumbnailUrl },
         roundThumbnails = true,
-        onClick = { artist -> navController.navigate("artist/${artist.id}") },
+        onClick = { artist ->
+            // an Apple artist has an Apple page; Mochy's artist screen asks YouTube and cannot
+            // answer a catalogue id, so the two kinds open different pages
+            val apple = !artist.artist.isYouTubeArtist && !artist.artist.isLocal
+            navController.navigate(if (apple) "apple_artist/${artist.id}" else "artist/${artist.id}")
+        },
         onLongClick = { artist ->
             menuState.show {
                 ArtistMenu(

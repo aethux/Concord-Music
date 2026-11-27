@@ -131,6 +131,10 @@ internal suspend fun addToPlaylistKeepingSync(
     }
     if (announce) announceAddedToPlaylist(database, playlist, ids, context)
     browseId?.let { ids.forEach { id -> YouTube.addToPlaylist(it, id) } }
+    // an imported Apple playlist is changed on Apple too, in Cider's shape: the whole list
+    if (playlist.id.startsWith("AM_PL_")) {
+        com.mochyy.mochymusic.applesync.ApplePlaylistWrites.pushTracks(context, playlist.id)
+    }
 }
 
 @Composable

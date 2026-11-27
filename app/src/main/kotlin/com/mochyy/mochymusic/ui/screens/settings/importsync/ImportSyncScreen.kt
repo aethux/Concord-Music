@@ -11,9 +11,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -21,6 +27,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.applesync.AppleMatchStatus
+import com.mochyy.mochymusic.applesync.AppleAutoSync
+import com.mochyy.mochymusic.applesync.AppleWritePrefs
 import com.mochyy.mochymusic.ui.component.DefaultDialog
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
 import com.mochyy.mochymusic.ui.component.AppSwitch
@@ -31,6 +39,7 @@ import com.mochyy.mochymusic.ui.component.SubSettingsScaffold
 import com.mochyy.mochymusic.ui.screens.devices.rememberDevicesLink
 import com.mochyy.mochymusic.ui.screens.devices.showDeviceIntegration
 import com.mochyy.mochymusic.viewmodels.ImportSyncViewModel
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 /** experimental hub: import from other services, sync a youtube account, tunemymusic csv, and backup */
@@ -45,6 +54,16 @@ fun ImportSyncScreen(
     // animated-covers switch
     val appleSync = com.mochyy.mochymusic.applesync.AppleSyncStatus.progress
     val appleAnimated by viewModel.appleAnimatedCovers.collectAsState()
+    // Concord: the master switch every write path reads. Nothing here changes Apple while it is off;
+    // it defaulted to on with no way to see or turn it off, which is not something to leave hidden
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var appleWrites by remember { mutableStateOf<Boolean?>(null) }
+    var appleOnOpen by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) {
+        appleWrites = AppleWritePrefs.enabled(context)
+        appleOnOpen = AppleAutoSync.enabled(context)
+    }
     // Concord: the matching run lives in a service, so its state is read from the object both it and
     // this row write to, not from the view model that started it
     val appleMatch = AppleMatchStatus.progress
@@ -210,6 +229,46 @@ fun ImportSyncScreen(
                         AppSwitch(
                             checked = appleAnimated,
                             onCheckedChange = { viewModel.setAppleAnimatedCovers(it) },
+                        )
+                    },
+                ),
+                SettingsItem(
+                    title = { Text(stringResource(R.string.import_sync_apple_writes_title)) },
+                    descriptionText = stringResource(R.string.import_sync_apple_writes_desc),
+                    icon = painterResource(R.drawable.sync),
+                    iconShape = CircleShape,
+                    onClick = {
+                        val next = !(appleWrites ?: true)
+                        appleWrites = next
+                        scope.launch { AppleWritePrefs.set(context, next) }
+                    },
+                    trailingContent = {
+                        AppSwitch(
+                            checked = appleWrites ?: true,
+                            onCheckedChange = { next ->
+                                appleWrites = next
+                                scope.launch { AppleWritePrefs.set(context, next) }
+                            },
+                        )
+                    },
+                ),
+                SettingsItem(
+                    title = { Text(stringResource(R.string.import_sync_apple_on_open_title)) },
+                    descriptionText = stringResource(R.string.import_sync_apple_on_open_desc),
+                    icon = painterResource(R.drawable.sync),
+                    iconShape = CircleShape,
+                    onClick = {
+                        val next = !(appleOnOpen ?: true)
+                        appleOnOpen = next
+                        scope.launch { AppleAutoSync.setEnabled(context, next) }
+                    },
+                    trailingContent = {
+                        AppSwitch(
+                            checked = appleOnOpen ?: true,
+                            onCheckedChange = { next ->
+                                appleOnOpen = next
+                                scope.launch { AppleAutoSync.setEnabled(context, next) }
+                            },
                         )
                     },
                 ),

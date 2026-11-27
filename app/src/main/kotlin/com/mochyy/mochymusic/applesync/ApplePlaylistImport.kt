@@ -177,6 +177,13 @@ object ApplePlaylistImport {
 
         remotes.forEach { remote ->
             val playlistId = localId(remote.id)
+            // Apple keeps a deleted playlist in its list for a while as a nameless tombstone.
+            // Importing that renamed our copy "Untitled playlist" and emptied it; skip it, and
+            // leave the local row alone until the person deletes it (or the refresh notices).
+            if (remote.name.isBlank()) {
+                skipped++
+                return@forEach
+            }
             // a playlist Apple says has not changed since the last import: no read, no write.
             // An unknown stamp is never treated as "unchanged", or its songs would never update.
             if (remote.id !in tracks && metas[playlistId]?.lastModified == remote.lastModified &&
@@ -351,6 +358,27 @@ object ApplePlaylistImport {
                     authorAvatarUrl = avatar,
                     authorUrl = profile.profileUrl,
                 )
+            }
+        }
+
+        // Playlists Apple no longer has: a linked local copy whose remote id is not in this list
+        // (a deleted playlist answers as a nameless tombstone) is removed here, so the library never
+        // keeps something Apple does not. Guarded by a non-empty read, so a failed list cannot wipe
+        // the person's playlists.
+        runCatching {
+            if (remotes.isEmpty()) return@runCatching
+            val present = remotes.filter { it.name.isNotBlank() }.map { localId(it.id) }.toSet()
+            val linked = dao.links().first().map { it.playlistId }
+            for (playlistId in linked.filterNot { it in present }) {
+                database.playlist(playlistId).first()?.let { row ->
+                    database.query { delete(row.playlist) }
+                }
+                dao.unlink(playlistId)
+                dao.deletePlaylistMeta(playlistId)
+            }
+            // a meta row whose local playlist is gone is garbage, whether or not a link survived
+            for (meta in dao.playlistMetas()) {
+                if (database.playlist(meta.playlistId).first() == null) dao.deletePlaylistMeta(meta.playlistId)
             }
         }
 

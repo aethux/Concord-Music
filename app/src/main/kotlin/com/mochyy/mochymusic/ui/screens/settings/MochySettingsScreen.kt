@@ -138,6 +138,7 @@ private val LocalizedSettingsTitles = mapOf(
     "Open with your finger" to R.string.customise_swipe_up_follows,
 )
 private val LocalizedSettingsPages = mapOf(
+    "Apple Music" to R.string.settings_apple_category,
     "App behaviour" to R.string.settings_app_behaviour,
     "Playback" to R.string.settings_playback_category,
     "Now playing" to R.string.settings_now_playing,
@@ -169,6 +170,9 @@ private val SettingsIndex = listOf(
     SettingsEntry("Swipe left", "Customisation", "customisation_settings", "slide song list queue library download play next playlist details action"),
     SettingsEntry("Swipe down anywhere to close", "Customisation", "customisation_settings", "player close dismiss swipe down pull gesture anywhere"),
     SettingsEntry("Open with your finger", "Customisation", "customisation_settings", "player open swipe up mini player follow finger speed velocity gesture"),
+
+    // Apple Music: the source itself, sign-in and the sync page
+    SettingsEntry("Apple Music", "Apple Music", com.mochyy.mochymusic.ui.screens.settings.importsync.ImportSyncRoute, "apple music sign in account library read sync match writes change", R.string.settings_apple_category),
 
     // App behaviour
     SettingsEntry("App behaviour", "App behaviour", "general_settings", "general app language updates network data library privacy"),
@@ -479,6 +483,14 @@ fun MochySettingsScreen(navController: NavController, pane: SettingsPane? = null
                             iconRes = R.drawable.settings,
                             selected = selected == "general_settings",
                             onClick = { open("general_settings") }
+                        )
+
+                        // the content source itself: sign-in, reading, matching, the write switch
+                        CategoryBubble(
+                            title = stringResource(R.string.settings_apple_category),
+                            iconRes = R.drawable.sync,
+                            selected = selected == com.mochyy.mochymusic.ui.screens.settings.importsync.ImportSyncRoute,
+                            onClick = { open(com.mochyy.mochymusic.ui.screens.settings.importsync.ImportSyncRoute) }
                         )
 
                         CategoryBubble(

@@ -69,7 +69,23 @@ fun PopupSheetState.showEditPlaylistSheet(
                             val currentGenerated = PlaylistCoverStore.parse(current.thumbnailUrl)
                             val name = form.name.trim()
                             val titleChanged = name != current.name
+                            val description = form.description.trim().ifBlank { null }
+                            val descriptionChanged = description != current.description
                             var thumbnail = current.thumbnailUrl
+
+                            // Apple's copy is renamed first, as Cider does: its answer is the
+                            // confirmation, and a refused rename leaves both sides as they were
+                            if (current.id.startsWith("AM_PL_") && (titleChanged || descriptionChanged)) {
+                                val renamed = com.mochyy.mochymusic.applesync.ApplePlaylistWrites
+                                    .rename(appContext, current.id, name, description)
+                                if (!renamed) {
+                                    withContext(Dispatchers.Main) {
+                                        form.busy = false
+                                        sheet?.setLocked(false)
+                                    }
+                                    return@launch
+                                }
+                            }
 
                             val choice = form.choice
                             val redraw = when {

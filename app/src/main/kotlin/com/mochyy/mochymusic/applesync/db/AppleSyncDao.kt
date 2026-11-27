@@ -218,6 +218,9 @@ interface AppleSyncDao {
 
     // ---- playlist owners ------------------------------------------------------------------------
 
+    @Query("DELETE FROM playlist_meta WHERE playlistId = :playlistId")
+    suspend fun deletePlaylistMeta(playlistId: String)
+
     @Query("SELECT * FROM playlist_meta WHERE playlistId = :playlistId")
     suspend fun playlistMeta(playlistId: String): PlaylistMetaEntity?
 

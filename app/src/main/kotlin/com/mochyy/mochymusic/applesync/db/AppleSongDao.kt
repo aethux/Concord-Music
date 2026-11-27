@@ -12,6 +12,14 @@ import com.mochyy.mochymusic.db.entities.AlbumEntity
 
 @Dao
 interface AppleSongDao {
+    // the Library's Genres tab groups by this column; the catalogue's genre name fills it
+    @Query("UPDATE song SET genre = :genre WHERE id = :songId AND (genre IS NULL OR genre != :genre)")
+    suspend fun setSongGenre(songId: String, genre: String)
+
+    // rows with no genre, or with a bare Apple genre id ("13") the library endpoint answered
+    @Query("SELECT id FROM song WHERE (genre IS NULL OR genre = '' OR genre NOT GLOB '*[A-Za-z]*') AND id LIKE 'AM_%'")
+    suspend fun appleSongIdsWithoutGenre(): List<String>
+
     // backfill a cover without touching anything else on the row
     @Transaction
     @Query("UPDATE song SET thumbnailUrl = :url WHERE id = :songId AND (thumbnailUrl IS NULL OR thumbnailUrl = '')")

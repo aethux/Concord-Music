@@ -1,19 +1,24 @@
 // Concord: new — Apple's playlist page: one playlist and its tracks, read once, drawn from memory.
 package com.mochyy.mochymusic.viewmodels
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleCollaborator
 import com.mochyy.mochymusic.applesync.AppleCovers
+import com.mochyy.mochymusic.applesync.AppleLibraryFollow
 import com.mochyy.mochymusic.applesync.ApplePageCache
+import com.mochyy.mochymusic.applesync.db.AppleSyncDao
+import com.mochyy.mochymusic.applesync.db.PlaylistMetaEntity
 import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.db.entities.ArtistEntity
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.db.entities.SongEntity
 import com.mochyy.mochymusic.db.entities.SongSource
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +32,8 @@ import com.mochyy.mochymusic.applesync.PageKind
 class ApplePlaylistViewModel @Inject constructor(
     private val tokens: AppleTokens,
     private val pageCache: ApplePageCache,
+    private val dao: AppleSyncDao,
+    @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -60,8 +67,52 @@ class ApplePlaylistViewModel @Inject constructor(
     private val _signedOut = MutableStateFlow(false)
     val signedOut: StateFlow<Boolean> = _signedOut.asStateFlow()
 
+    /** true when this catalogue playlist is one the account follows (it has a library copy) */
+    private val _saved = MutableStateFlow(false)
+    val saved: StateFlow<Boolean> = _saved.asStateFlow()
+    private var catalogueId: String? = null
+    private var libraryId: String? = null
+
     init {
         load()
+        observeFollowing()
+    }
+
+    /** Cider's follow state: a catalogue playlist is saved when the library holds it. */
+    private fun observeFollowing() = viewModelScope.launch(Dispatchers.IO) {
+        val metas = dao.playlistMetas()
+        val catalog = if (playlistId.startsWith("pl.")) {
+            playlistId
+        } else {
+            metas.firstOrNull { it.playlistId == "AM_PL_$playlistId" }?.catalogId
+        }
+        catalogueId = catalog
+        val meta = catalog?.let { c -> metas.firstOrNull { it.catalogId == c } }
+        libraryId = meta?.playlistId?.removePrefix("AM_PL_")
+        _saved.value = meta != null
+    }
+
+    fun toggleSaved() = viewModelScope.launch(Dispatchers.IO) {
+        val catalog = catalogueId ?: return@launch
+        val follow = !_saved.value
+        val result = AppleLibraryFollow.change(context, "playlists", catalog, libraryId, follow)
+        if (!result.ok) return@launch
+        _saved.value = follow
+        if (follow) {
+            // Apple answers the new library id; remembering it here is what lets a second tap
+            // unfollow straight away, without waiting for the next sync to import the playlist
+            result.libraryId?.let { lib ->
+                libraryId = lib
+                runCatching {
+                    dao.savePlaylistMeta(
+                        PlaylistMetaEntity(playlistId = "AM_PL_$lib", canDelete = true, catalogId = catalog),
+                    )
+                }
+            }
+        } else {
+            libraryId?.let { lib -> runCatching { dao.deletePlaylistMeta("AM_PL_$lib") } }
+            libraryId = null
+        }
     }
 
     fun retry() {

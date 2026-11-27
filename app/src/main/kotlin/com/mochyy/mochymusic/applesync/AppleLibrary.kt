@@ -6,6 +6,7 @@ import com.mochyy.mochymusic.importer.idString
 import com.mochyy.mochymusic.importer.long
 import com.mochyy.mochymusic.importer.obj
 import com.mochyy.mochymusic.importer.string
+import com.mochyy.mochymusic.importer.strings
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -36,7 +37,9 @@ internal object AppleLibrary {
             ?.firstOrNull()?.obj()
         RemotePlaylist(
             id = id,
-            name = attributes?.string("name") ?: "Untitled playlist",
+            // a deleted playlist stays in Apple's list as a nameless tombstone; keep it empty here
+            // so the import can skip it instead of importing "Untitled playlist" with no songs
+            name = attributes?.string("name").orEmpty(),
             canEdit = attributes?.bool("canEdit") ?: true,
             // Apple leaves this out for a playlist it has no artwork for; the import then falls
             // back to the first track rather than writing a null over a cover already there
@@ -192,6 +195,7 @@ internal object AppleLibrary {
             album = attributes?.string("albumName"),
             durationMs = attributes?.long("durationInMillis"),
             isrc = attributes?.string("isrc"),
+            genre = attributes?.strings("genreNames")?.firstOrNull(),
             artworkUrl = attributes?.get("artwork").obj()?.string("url"),
             // the catalogue id when the album has one, so the same album is one row everywhere
             albumId = albumObj?.let { row ->

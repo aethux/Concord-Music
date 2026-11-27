@@ -57,9 +57,9 @@ data class AppleOp(
     /** the remote objects this op acts on: a playlist id to delete, a library id to remove */
     val targets: List<AppleRef> = emptyList(),
     /**
-     * A person said yes to this one, after being told what it does. Only a removal of something
-     * already in their library can use it: the epoch still refuses deletes, renames and playlist
-     * rewrites, and an id the app has never seen stays refused whatever is confirmed.
+     * A person said yes to this one, after being told what it does. It is the confirmation for the
+     * writes the epoch otherwise refuses: a song removal, and a linked playlist's rename or delete
+     * (the person owns both, and Cider offers both). Nothing pre-existing is touched without it.
      */
     val confirmed: Boolean = false,
 )
@@ -147,7 +147,12 @@ object AppleGuard {
             op.playlistName?.startsWith(SandboxPrefix) == true
 
         if (op.write in Mutating) {
+            // the person's own confirming tap on a playlist they can change: a rename or a delete
+            // of a linked playlist is theirs to make, even though the playlist predates this app
+            val playlistConfirmed = op.confirmed && op.playlistId != null &&
+                (op.write == AppleWrite.RENAME_PLAYLIST || op.write == AppleWrite.DELETE_PLAYLIST)
             for (target in op.targets) {
+                if (playlistConfirmed) continue
                 // the one exception, and only for the user's own tap: Mocha never removes a
                 // pre-existing song by itself, but it must not refuse the person who owns it -
                 // that goes for a song that predates the sync and for one only Apple ever added

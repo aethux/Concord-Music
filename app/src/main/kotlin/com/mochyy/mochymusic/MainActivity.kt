@@ -417,6 +417,18 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @OptIn(ExperimentalMaterial3Api::class)
+    // the auto-sync is asked once the window is actually resumed: starting a foreground service from
+    // onCreate throws ForegroundServiceStartNotAllowedException on 12+, and the throw was silent
+    private var autoSyncChecked = false
+
+    override fun onPostResume() {
+        super.onPostResume()
+        if (!autoSyncChecked) {
+            autoSyncChecked = true
+            com.mochyy.mochymusic.applesync.AppleAutoSync.maybeStart(this)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen().handOffToLaunchIntro { introPlays }
         super.onCreate(savedInstanceState)

@@ -99,12 +99,14 @@ object AppleSyncFlow {
             // still create an artist row of its own.
             runCatching { entry.database().fillArtistCoversFromSongs() }
 
-            // what this library still holds on Apple, but Apple no longer has
+            // what this library still holds on Apple, but Apple no longer has.
+            // Both id dialects go in: an upload has no catalogue id, and its row here is keyed by
+            // the library one (`AM_i.…`), so passing catalogue ids alone marked every upload gone.
             runCatching {
                 AppleRemoved.record(
                     dao,
                     entry.database(),
-                    pulled.remote.mapNotNull { it.catalogId },
+                    pulled.remote.flatMap { listOfNotNull(it.catalogId, it.libraryId) },
                 )
             }
 

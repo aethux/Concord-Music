@@ -324,15 +324,23 @@ fun LocalPlaylistScreen(
                 TextButton(
                     onClick = {
                         showDeletePlaylistDialog = false
-                        database.query {
-                            playlist?.let { delete(it.playlist) }
-                        }
+                        val target = playlist ?: return@TextButton
                         viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            playlist?.playlist?.browseId?.let { YouTube.deletePlaylist(it) }
+                            // Apple's copy goes first: a refusal keeps both sides as they were
+                            if (target.playlist.id.startsWith("AM_PL_") &&
+                                !com.mochyy.mochymusic.applesync.ApplePlaylistWrites
+                                    .delete(context, target.playlist.id)
+                            ) {
+                                return@launch
+                            }
+                            database.query {
+                                delete(target.playlist)
+                            }
+                            target.playlist.browseId?.let { YouTube.deletePlaylist(it) }
                             // Its generated or picked cover is no use to anyone now.
                             PlaylistCoverStore.deleteStale(context.applicationContext, viewModel.playlistId, null)
+                            withContext(Dispatchers.Main) { navController.popBackStack() }
                         }
-                        navController.popBackStack()
                     }
                 ) {
                     Text(text = stringResource(android.R.string.ok))
@@ -369,6 +377,14 @@ fun LocalPlaylistScreen(
             dragInfo?.let { (from, to) ->
                 database.transaction {
                     move(viewModel.playlistId, from, to)
+                }
+
+                // an imported Apple playlist's order is Apple's too: one whole-list PUT
+                if (viewModel.playlist.value?.playlist?.id?.startsWith("AM_PL_") == true) {
+                    coroutineScope.launch(Dispatchers.IO) {
+                        com.mochyy.mochymusic.applesync.ApplePlaylistWrites
+                            .pushTracks(context, viewModel.playlistId)
+                    }
                 }
 
                 if (viewModel.playlist.value?.playlist?.browseId != null) {
@@ -709,6 +725,13 @@ fun LocalPlaylistScreen(
                         }
                         move(currentItem.map.playlistId, currentItem.map.position, Int.MAX_VALUE)
                         delete(currentItem.map.copy(position = Int.MAX_VALUE))
+                    }
+                    // Apple's copy loses the row too: the whole list minus this song
+                    if (currentItem.map.playlistId.startsWith("AM_PL_")) {
+                        coroutineScope.launch(Dispatchers.IO) {
+                            com.mochyy.mochymusic.applesync.ApplePlaylistWrites
+                                .pushTracks(context, currentItem.map.playlistId)
+                        }
                     }
                 }
 

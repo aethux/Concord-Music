@@ -16,6 +16,8 @@ data class RemoteSong(
     val album: String?,
     val durationMs: Long?,
     val isrc: String?,
+    /** Apple's first genre for the song, so the Library's Genres tab has something to group by. */
+    val genre: String? = null,
     /** Apple's artwork template, with {w}x{h} placeholders; null when the song has no art. */
     val artworkUrl: String? = null,
     /**

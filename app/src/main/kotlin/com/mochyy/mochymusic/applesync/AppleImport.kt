@@ -10,6 +10,11 @@ import com.mochyy.mochymusic.db.entities.ArtistEntity
 import com.mochyy.mochymusic.db.entities.SongArtistMap
 import com.mochyy.mochymusic.db.entities.SongEntity
 import com.mochyy.mochymusic.db.entities.SongSource
+import com.mochyy.mochymusic.importer.account.AccountHttp
+import com.mochyy.mochymusic.importer.array
+import com.mochyy.mochymusic.importer.idString
+import com.mochyy.mochymusic.importer.obj
+import com.mochyy.mochymusic.importer.strings
 import kotlinx.coroutines.flow.first
 import java.time.LocalDateTime
 
@@ -155,6 +160,8 @@ class AppleImport(
         val pendingTracks = ArrayList<AppleTrackEntity>(songs.size)
         val pendingCovers = ArrayList<CoverCacheEntity>()
         val pendingThumbnails = ArrayList<ThumbnailWrite>()
+        // Apple's genre, written once per song: the Library's Genres tab is built from this column
+        val pendingGenres = ArrayList<Pair<String, String>>()
         val newSongs = ArrayList<NewSong>()
         val artistIds = HashMap<String, String>()
         // (song, Apple's artists): applied in one transaction once the loop is done
@@ -415,6 +422,43 @@ class AppleImport(
                             ThumbnailWrite.UPLOAD ->
                                 database.appleSongDao.setSongThumbnailFromUpload(write.songId, write.url)
                         }
+                    }
+                }
+            }
+        }
+        // Cider's Genres tab groups by genre name, and Apple's *library* rows carry genre **ids**
+        // ("13", "3"), not names. The catalogue answer has the names, so they are read in batches of
+        // 100 — about fifteen requests for a whole library, and only for rows that have none yet.
+        runCatching {
+            val storefront = client.storefront()
+            val wanted = database.appleSongDao.appleSongIdsWithoutGenre()
+                .mapNotNull { id -> id.removePrefix("AM_").takeIf { it.isNotBlank() && !it.startsWith("i.") } }
+            val names = HashMap<String, String>()
+            for (batch in wanted.chunked(100)) {
+                val answer = AccountHttp.send(
+                    "GET",
+                    "https://amp-api.music.apple.com/v1/catalog/$storefront/songs?ids=${batch.joinToString(",")}&fields%5Bsongs%5D=genreNames",
+                    pair.headers,
+                    null,
+                    "Apple Music",
+                )
+                if (answer.status !in 200..299) continue
+                val data = AccountHttp.parse(answer.body)?.get("data")?.array() ?: continue
+                for (element in data) {
+                    val row = element.obj() ?: continue
+                    val id = row.idString("id") ?: continue
+                    val genre = row["attributes"].obj()?.strings("genreNames")?.firstOrNull() ?: continue
+                    names[id] = genre
+                }
+            }
+            names.forEach { (id, genre) -> pendingGenres += "AM_$id" to genre }
+        }
+
+        if (pendingGenres.isNotEmpty()) {
+            runCatching {
+                database.withTransaction {
+                    pendingGenres.forEach { (songId, genre) ->
+                        database.appleSongDao.setSongGenre(songId, genre)
                     }
                 }
             }

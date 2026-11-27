@@ -188,7 +188,12 @@ internal fun LibraryArtistsPage(navController: NavController) {
         },
         countText = { pluralStringResource(R.plurals.n_artist, it, it) },
         searchPlaceholder = stringResource(R.string.lib_artists_search),
-        onOpen = { artist, _ -> navController.navigate("artist/${artist.id}") },
+        onOpen = { artist, _ ->
+            // an Apple artist opens Apple's page; Mochy's artist screen asks YouTube and cannot
+            // answer a catalogue (or library artist) id
+            val apple = !artist.artist.isYouTubeArtist && !artist.artist.isLocal
+            navController.navigate(if (apple) "apple_artist/${artist.id}" else "artist/${artist.id}")
+        },
         onMenu = { artist ->
             menuState.show { ArtistMenu(originalArtist = artist, coroutineScope = scope, onDismiss = menuState::dismiss) }
         },

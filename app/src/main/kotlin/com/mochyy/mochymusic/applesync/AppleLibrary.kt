@@ -10,6 +10,7 @@ import com.mochyy.mochymusic.importer.strings
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import java.text.Normalizer
 
 /**
  * Apple's JSON, read leniently. Pure functions, no HTTP: the client below fetches, and the tests
@@ -186,7 +187,13 @@ internal object AppleLibrary {
                     ?: return@mapNotNull null
                 RemoteArtist(id = artistId, name = artistName)
             }
-        val artists = artistRows(catalogObj).ifEmpty { artistRows(obj) }.distinctBy { it.id }
+        val linked = artistRows(catalogObj).ifEmpty { artistRows(obj) }.distinctBy { it.id }
+        // Concord: a twin's artists only stand in for a song they belong to. Apple matches an upload
+        // to a catalogue recording by its title, so a library item by one artist can carry another
+        // recording's artists — `AM_1546780224`, "Kan Ena Tahoun" by Talia Lahoud, answers Cungur
+        // Gede and Wut Pabon. An artist the item's own `artistName` never names is not this song's
+        // artist, and the importer falls back to writing that credit line.
+        val artists = if (namedInCredit(linked, attributes?.string("artistName"))) linked else emptyList()
         RemoteSong(
             libraryId = libraryId,
             catalogId = attributes?.get("playParams").obj()?.string("catalogId"),
@@ -209,6 +216,28 @@ internal object AppleLibrary {
             artists = artists,
         )
     }
+
+    /**
+     * Whether Apple's first linked artist is the artist the song's own credit line names. A bucket
+     * ("Various Artists"), a compilation's grouping artist, or another recording's artists after a
+     * bad upload match never are. Names are compared by their letters and digits only, so `K‐391`
+     * (U+2010), `HUNTR/X` and `Fousheé` all match how the line spells them; a row with no credit line
+     * at all keeps whatever Apple linked.
+     */
+    private fun namedInCredit(artists: List<RemoteArtist>, credit: String?): Boolean {
+        val first = artists.firstOrNull() ?: return false
+        val line = credit?.let(::creditKey).orEmpty()
+        if (line.isEmpty()) return true
+        val name = creditKey(first.name)
+        return name.isNotEmpty() && line.contains(name)
+    }
+
+    private fun creditKey(raw: String): String = Normalizer.normalize(raw, Normalizer.Form.NFKD)
+        .replace(Marks, "")
+        .lowercase()
+        .filter { it.isLetterOrDigit() }
+
+    private val Marks = Regex("\\p{Mn}+")
 
     /** Apple sends booleans as real JSON booleans, which the lenient string reader would drop. */
     private fun JsonObject.bool(key: String): Boolean? =

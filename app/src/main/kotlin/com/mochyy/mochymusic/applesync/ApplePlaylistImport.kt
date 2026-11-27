@@ -423,7 +423,7 @@ object ApplePlaylistImport {
             songs.forEach { song ->
                 val catalogId = song.catalogId ?: return@forEach
                 val songId = "AM_$catalogId"
-                val artistName = song.artist.ifBlank { "Unknown artist" }
+                val artistName = creditArtistName(song.artist).ifEmpty { "Unknown artist" }
                 val artistId = artistIds.getOrPut(artistName) {
                     database.artistByName(artistName)?.id ?: ArtistEntity.generateArtistId()
                 }

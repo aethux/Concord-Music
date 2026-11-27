@@ -168,15 +168,36 @@ class AppleImport(
         val relinks = ArrayList<Pair<String, List<RemoteArtist>>>()
 
         /**
+         * The artists a row gets: Apple's when they belong to the song, its own credit line otherwise
+         * (an upload matched to another recording, a compilation bucket, a row Apple names nobody in).
+         */
+        fun artistsFor(song: RemoteSong): List<RemoteArtist> = song.artists.ifEmpty {
+            val fallbackName = creditArtistName(song.artist).ifEmpty { "Unknown artist" }
+            listOf(
+                RemoteArtist(
+                    id = artistIds.getOrPut(fallbackName) {
+                        database.artistByName(fallbackName)?.id ?: ArtistEntity.generateArtistId()
+                    },
+                    name = fallbackName,
+                ),
+            )
+        }.distinctBy { it.id }
+
+        /**
          * Apple names the artists of every library song. A row written before this read exists
          * carries the combined `artistName` line instead, so it is moved onto Apple's own artists
          * here — the same grouping Apple's and Cider's Artists lists show.
+         *
+         * Concord: when Apple's linked artists are not this song's (an upload matched to another
+         * recording, a compilation bucket), they never reach the row at all and the credit line is
+         * the artist — including for rows that already carry the wrong ones.
          */
         fun noteArtists(songId: String, song: RemoteSong) {
-            if (song.artists.isEmpty()) return
+            if (song.artists.isEmpty() && song.artist.isBlank()) return
+            val wanted = artistsFor(song)
             val current = linksBySong[songId].orEmpty().map { it.artistId }.toSet()
-            if (current == song.artists.map { it.id }.toSet()) return
-            relinks += songId to song.artists.distinctBy { it.id }
+            if (current == wanted.map { it.id }.toSet()) return
+            relinks += songId to wanted
         }
 
         /** Writes the mapping only when one of its fields actually moved. */
@@ -302,26 +323,15 @@ class AppleImport(
 
             // the import writes Apple's artwork only when the person has not chosen one
             val chosenCover = covers[CoverOverrides.key(CoverOverrides.Kind.SONG, songId)]
-            // Apple's own artists for this song, when the read carried them; the combined line is
-            // only the fallback for a row Apple gave no relationship for
-            val artists = song.artists.ifEmpty {
-                val fallbackName = song.artist.ifBlank { "Unknown artist" }
-                listOf(
-                    RemoteArtist(
-                        id = artistIds.getOrPut(fallbackName) {
-                            database.artistByName(fallbackName)?.id ?: ArtistEntity.generateArtistId()
-                        },
-                        name = fallbackName,
-                    ),
-                )
-            }.map { artist ->
+            // Apple's own artists for this song when they belong to it; its credit line otherwise
+            val artists = artistsFor(song).map { artist ->
                 ArtistEntity(
                     id = artist.id,
                     name = artist.name,
                     // an Apple artist carries no artwork here, so a picture chosen by hand is all it has
                     thumbnailUrl = covers[CoverOverrides.key(CoverOverrides.Kind.ARTIST, artist.id)],
                 )
-            }.distinctBy { it.id }
+            }
 
             newSongs += NewSong(
                 song = SongEntity(

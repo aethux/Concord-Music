@@ -3,9 +3,11 @@
 package com.mochyy.mochymusic.ui.player
 
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +27,8 @@ import com.mochyy.mochymusic.ui.theme.InterFontFamily
 /**
  * "OPUS", or "OPUS · 48,0 KHz" with the sample rate on: an outlined tag in the design's proportions,
  * every one of them a fraction of [height], so it reads the same at any size and font scale.
+ *
+ * [leading] is the tag's mark, if it has one: a dot for a live stream, drawn at the same scale.
  */
 @Composable
 fun StreamFormatBadge(
@@ -32,16 +36,21 @@ fun StreamFormatBadge(
     modifier: Modifier = Modifier,
     height: Dp = 20.dp,
     color: Color = Color.White.copy(alpha = 0.55f),
+    leading: (@Composable () -> Unit)? = null,
 ) {
     // the text is sized off the box, not the user's font scale, so the two never drift apart
     val fontSize = with(LocalDensity.current) { (height * 0.5f).toSp() }
-    Box(
-        contentAlignment = Alignment.Center,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .height(height)
             .border(height * 0.0625f, color, RoundedCornerShape(height * 0.31f))
             .padding(horizontal = height * 0.29f),
     ) {
+        if (leading != null) {
+            leading()
+            Spacer(Modifier.width(height * 0.24f))
+        }
         Text(
             text = text,
             maxLines = 1,

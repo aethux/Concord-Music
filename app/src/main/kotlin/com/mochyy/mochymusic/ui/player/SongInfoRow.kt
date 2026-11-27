@@ -32,8 +32,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +58,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.applesync.AppleRadioItem
+import com.mochyy.mochymusic.applesync.RadioFavorites
+import com.mochyy.mochymusic.playback.queues.StationStreamQueue
+import kotlinx.coroutines.launch
 import com.mochyy.mochymusic.constants.PlayerHorizontalPadding
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
@@ -110,6 +115,15 @@ fun SongInfoRow(
     val trackInfo by playerConnection.uiState.trackInfo.collectAsState()
     // the player's row of songs: the title rides it with the cover
     val carousel = LocalSongCarousel.current
+
+    // A station has no song to like: its heart is the station's favourite, the same list the Radio
+    // page draws on top, so the button and the menu row always say the same thing.
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val stationMediaId = playerConnection.player.currentMediaItem?.mediaId
+    val stationId = stationMediaId?.let(StationStreamQueue::stationIdOf)
+    val stationFavorites by remember { RadioFavorites.rows(context) }.collectAsState(initial = emptyList())
+    val liked = if (stationId != null) stationFavorites.any { it.id == stationId } else trackInfo.liked
 
     val (showFormatBadge) = rememberPreference(ShowFormatBadgeKey, defaultValue = true)
     val (showSampleRate) = rememberPreference(ShowFormatSampleRateKey, defaultValue = false)
@@ -214,11 +228,32 @@ fun SongInfoRow(
                 .then(if (sideLayer != null) Modifier.graphicsLayer(sideLayer) else Modifier)
             if (sideAction == com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.LIKE) {
                 PressScaleActionButton(
-                    icon = if (trackInfo.liked) R.drawable.ic_untitled_heart else R.drawable.ic_untitled_heart_unfill,
-                    tint = if (trackInfo.liked) Color.White else Color.White.copy(alpha = 0.85f),
-                    containerColor = if (trackInfo.liked) Color.White.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.15f),
+                    icon = if (liked) R.drawable.ic_untitled_heart else R.drawable.ic_untitled_heart_unfill,
+                    tint = if (liked) Color.White else Color.White.copy(alpha = 0.85f),
+                    containerColor = if (liked) Color.White.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.15f),
                     onClick = {
-                        if (likeBurst != null) {
+                        if (stationId != null) {
+                            // a station's heart keeps the station, in the list the Radio page draws
+                            val meta = playerConnection.player.currentMediaItem?.mediaMetadata
+                            val live = StationStreamQueue.isLive(stationMediaId.orEmpty())
+                            scope.launch {
+                                RadioFavorites.toggle(
+                                    context,
+                                    AppleRadioItem(
+                                        id = stationId,
+                                        kind = AppleRadioItem.Kind.Station,
+                                        title = meta?.title?.toString().orEmpty(),
+                                        subtitle = meta?.artist?.toString(),
+                                        artworkUrl = meta?.artworkUri?.toString(),
+                                        playback = if (live) {
+                                            AppleRadioItem.Playback.Live
+                                        } else {
+                                            AppleRadioItem.Playback.Episode
+                                        },
+                                    ),
+                                )
+                            }
+                        } else if (likeBurst != null) {
                             likeBurst.likeFromButton(LikeSlot.PLAYER, trackInfo.liked, playerConnection::toggleLike)
                         } else {
                             playerConnection.toggleLike()

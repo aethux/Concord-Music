@@ -333,14 +333,7 @@ class AppleMusicModule : SourceModule {
     /** trades the CDM's challenge for a license, for whichever of the song's keys it's asking about */
     private fun acquireLicense(challenge: ByteArray, keys: List<AppleHls.WidevineKey>, songId: String, token: String): ByteArray {
         val key = keys.firstOrNull { challenge.indexOf(it.keyId) >= 0 } ?: keys.last()
-        val body = buildJsonObject {
-            put("challenge", Base64.getEncoder().encodeToString(challenge))
-            put("key-system", "com.widevine.alpha")
-            put("uri", key.uri)
-            put("adamId", songId)
-            put("isLibrary", false)
-            put("user-initiated", true)
-        }.toString().toByteArray()
+        val body = AppleLicence.body(challenge, key.uri, songId)
         val response = host.http(
             HttpRequest(
                 LicenseUrl,

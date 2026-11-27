@@ -473,6 +473,31 @@ class AppleClient(
     }
 
     /**
+     * Apple's Radio page: the section tree behind `groupings?name=radio` (Cider's `ensureRadio`).
+     * One read answers the whole page, so the sections it returns are what the page lists.
+     *
+     * The query is Cider's own set, not the three-parameter fallback the reference probe used first:
+     * without `include`/`extend`, the section cards come back as bare references with no artwork.
+     */
+    suspend fun radioSections(): List<AppleRadioSection>? {
+        val page = page(
+            "/v1/editorial/${storefront()}/groupings?" + listOf(
+                "name=radio",
+                "tabs=subscriber",
+                "platform=web",
+                "art%5Burl%5D=f",
+                "omit%5Bresource%3Aartists%5D=relationships",
+                "include%5Balbums%5D=artists",
+                "include%5Bsongs%5D=artists",
+                "include%5Bmusic-videos%5D=artists",
+                "extend=editorialArtwork,artistUrl",
+                "fields%5Bartists%5D=name,url,artwork,editorialArtwork,genreNames,editorialNotes",
+            ).joinToString("&"),
+        ) ?: return null
+        return AppleRadioReader.sections(page)
+    }
+
+    /**
      * One Home shelf as its own page.
      *
      * Apple answers with the group alone and its **whole** card list (`limit`/`offset` are ignored —
@@ -838,6 +863,27 @@ class AppleClient(
     suspend fun station(id: String): AppleStation? {
         val page = page("/v1/catalog/${storefront()}/stations/$id") ?: return null
         return AppleStationReader.station(page)
+    }
+
+    /**
+     * The stream asset of a station Apple streams (`format: "stream"`), asked for with the station's
+     * own `playParams` — the call Cider's `playStreamedRadio` makes. `results.assets[0].url` is the
+     * playlist or stream; a DRM station also carries `keyServerUrl` and a certificate URL, which
+     * this app cannot use yet.
+     */
+    suspend fun stationStreamAsset(play: AppleStation.PlayParams): JsonObject? {
+        fun enc(value: String) = java.net.URLEncoder.encode(value, "UTF-8")
+        val query = buildList {
+            add("format=stream")
+            add("hasDrm=" + play.hasDrm)
+            add("id=" + enc(play.id))
+            play.kind?.let { add("kind=" + enc(it)) }
+            play.mediaType?.let { add("mediaType=$it") }
+            play.stationHash?.let { add("stationHash=" + enc(it)) }
+            play.streamingKind?.let { add("streamingKind=" + enc(it)) }
+            add("keyFormat=web")
+        }.joinToString("&")
+        return page("/v1/play/assets?$query")
     }
 
     /**

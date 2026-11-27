@@ -328,6 +328,26 @@ fun NavGraphBuilder.navigationBuilder(
         com.mochyy.mochymusic.ui.screens.AppleCuratorScreen(navController = navController)
     }
 
+    // Apple's Radio page: the stations, shows, albums and videos its own radio page lists
+    coverSourceComposable(route = "radio") {
+        com.mochyy.mochymusic.ui.screens.RadioScreen(navController = navController)
+    }
+
+    // one Radio section alone, laid out as a grid; it reads the page's cached tree
+    coverSourceComposable(
+        route = "radio_section/{sectionId}?title={title}",
+        arguments = listOf(
+            navArgument("sectionId") { type = NavType.StringType },
+            navArgument("title") { type = NavType.StringType; defaultValue = "" },
+        ),
+    ) { entry ->
+        com.mochyy.mochymusic.ui.screens.RadioSectionScreen(
+            navController = navController,
+            sectionId = entry.arguments?.getString("sectionId").orEmpty(),
+            title = entry.arguments?.getString("title").orEmpty(),
+        )
+    }
+
     // Apple's Replay: the years it keeps a summary for, each one a playlist
     coverSourceComposable("apple_replay") {
         com.mochyy.mochymusic.ui.screens.AppleReplayScreen(navController = navController)

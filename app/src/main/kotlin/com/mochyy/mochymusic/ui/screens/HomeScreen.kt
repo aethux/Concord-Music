@@ -71,6 +71,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -110,7 +111,10 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import android.net.Uri
 import com.mochyy.mochymusic.applesync.AppleCovers
 import com.mochyy.mochymusic.applesync.AppleHomeItem
+import com.mochyy.mochymusic.applesync.AppleRadioItem
+import com.mochyy.mochymusic.ui.component.AppleRadioCard
 import com.mochyy.mochymusic.viewmodels.AppleHomeViewModel
+import com.mochyy.mochymusic.viewmodels.AppleRadioViewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
@@ -260,7 +264,7 @@ private fun rememberTrackGridState(): LazyGridState =
 
 /** a horizontally scrolling row of cards, lined up with the section title. cards cascade in once. */
 @Composable
-private fun <T> HomeCardRow(
+internal fun <T> HomeCardRow(
     rowKey: String,
     items: List<T>,
     revealSeen: RevealSeenState,
@@ -594,12 +598,40 @@ private fun HomeShell() {
                     .launchMarkTarget()
                     .size(HomeMarkWidth, HomeMarkHeight)
             )
-            Box(
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .launchRise(order = 0, distance = HomeTopBarRise)
                     .height(44.dp),
-                contentAlignment = Alignment.Center
             ) {
+                // the radio button mirrors the profile button: the same 44 dp hit row around a
+                // 36 dp circle, filled with Mochy's surfaceVariant (a skeleton: nothing to tap yet)
+                Box(
+                    modifier = Modifier
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(50)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.radio),
+                            contentDescription = stringResource(R.string.radio),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+            Box(
+                    modifier = Modifier.height(44.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                 if (profileImageUrl != null) {
                     AsyncImage(
                         model = profileImageUrl,
@@ -628,6 +660,7 @@ private fun HomeShell() {
                     }
                 }
             }
+            }
         }
     }
 }
@@ -638,6 +671,7 @@ fun HomeScreen(
     snackbarHostState: SnackbarHostState,
     viewModel: HomeViewModel = hiltViewModel(),
     appleHomeViewModel: AppleHomeViewModel = hiltViewModel(),
+    radioViewModel: AppleRadioViewModel = hiltViewModel(),
 ) {
     val menuState = LocalMenuState.current
     val bottomSheetPageState = LocalBottomSheetPageState.current
@@ -819,6 +853,28 @@ fun HomeScreen(
     val appleGroups by appleHomeViewModel.groups.collectAsState()
     val appleFailed by appleHomeViewModel.failed.collectAsState()
     val appleSignedOut by appleHomeViewModel.signedOut.collectAsState()
+
+    // Apple's radio, read here too: a taste of its page, and the stations this phone keeps. The read
+    // is the page's own and lands in its cache, so opening Radio afterwards costs nothing.
+    val radioSections by radioViewModel.sections.collectAsState()
+    val radioFavorites by radioViewModel.favorites.collectAsState()
+    val openRadioItem: (AppleRadioItem) -> Unit = { item ->
+        scope.launch {
+            openAppleRadioItem(
+                item = item,
+                navController = navController,
+                context = context,
+                playerConnection = playerConnection,
+                stationQueue = { id -> radioViewModel.stationQueue(id) },
+            )
+        }
+    }
+    // the first row of Apple's page that is made of stations: its "Top Stations", or the hero
+    val homeStationRow = remember(radioSections) {
+        radioSections.orEmpty()
+            .map { section -> section to section.items.filter { it.kind == AppleRadioItem.Kind.Station } }
+            .firstOrNull { (_, stations) -> stations.isNotEmpty() }
+    }
 
     // Concord: signing in is Mochy's own import sheet, opened on Apple's sign-in
     val sheets = LocalZoomOutOverlayState.current
@@ -1797,6 +1853,66 @@ fun HomeScreen(
                     }
                 }
 
+                // Apple's radio on Home: the stations this phone keeps, then a taste of the page.
+                // Both rows open the Radio page from their title and their last card.
+                val openRadioPage: () -> Unit = { navController.navigate("radio") }
+                if (radioFavorites.isNotEmpty()) {
+                    item(key = "home_radio_favourites_title", contentType = "title") {
+                        HomeSectionTitle(
+                            title = stringResource(R.string.home_favourite_stations),
+                            onClick = openRadioPage,
+                        )
+                    }
+                    item(key = "home_radio_favourites_row", contentType = "cardRow") {
+                        HomeCardRow(
+                            rowKey = "home_radio_favourites",
+                            items = radioFavorites,
+                            revealSeen = revealSeen,
+                            key = { it.id },
+                            trailing = {
+                                HomeViewAllCard(size = homeCardSize(), onClick = openRadioPage)
+                            },
+                        ) { item ->
+                            AppleRadioCard(
+                                item = item,
+                                size = homeCardSize(),
+                                onClick = { openRadioItem(item) },
+                            )
+                        }
+                    }
+                    item(key = "home_radio_favourites_gap", contentType = "gap") {
+                        Spacer(Modifier.height(26.dp))
+                    }
+                }
+                homeStationRow?.let { (row, stations) ->
+                    item(key = "home_radio_title", contentType = "title") {
+                        HomeSectionTitle(
+                            title = stringResource(R.string.home_stations),
+                            onClick = openRadioPage,
+                        )
+                    }
+                    item(key = "home_radio_row", contentType = "cardRow") {
+                        HomeCardRow(
+                            rowKey = "home_radio_stations",
+                            items = stations.take(10),
+                            revealSeen = revealSeen,
+                            key = { it.id },
+                            trailing = {
+                                HomeViewAllCard(size = homeCardSize(), onClick = openRadioPage)
+                            },
+                        ) { item ->
+                            AppleRadioCard(
+                                item = item,
+                                size = homeCardSize(),
+                                onClick = { openRadioItem(item) },
+                            )
+                        }
+                    }
+                    item(key = "home_radio_gap", contentType = "gap") {
+                        Spacer(Modifier.height(26.dp))
+                    }
+                }
+
                 item(key = "bottom_spacer", contentType = "spacer") {
                     Spacer(modifier = Modifier.height(30.dp))
                 }
@@ -1923,7 +2039,8 @@ fun HomeScreen(
                         )
                     }
 
-                    Box(
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .launchRise(order = 0, distance = HomeTopBarRise)
                             .graphicsLayer {
@@ -1932,6 +2049,35 @@ fun HomeScreen(
                                 scaleY = scale
                                 transformOrigin = TransformOrigin(1f, 0.5f)
                             }
+                            .height(44.dp),
+                    ) {
+                        // the radio button mirrors the profile button beside it: the same 44 dp hit
+                        // row around a 36 dp circle, filled with Mochy's surfaceVariant
+                        Box(
+                            modifier = Modifier
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(50))
+                                .clickable { navController.navigate("radio") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.radio),
+                                    contentDescription = stringResource(R.string.radio),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
                             .height(44.dp)
                             .clip(RoundedCornerShape(50))
                             .clickable { navController.navigateToTab("settings") },
@@ -1970,6 +2116,7 @@ fun HomeScreen(
                                 }
                             }
                         }
+                    }
                     }
                 }
             }

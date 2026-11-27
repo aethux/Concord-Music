@@ -4046,7 +4046,15 @@ class MusicService :
     // the song share's preview and video read the song through this, so they hit the same cache and get the same links playback does
     fun shareDataSourceFactory(): DataSource.Factory = createDataSourceFactory()
 
-    private fun createDataSourceFactory(): DataSource.Factory {
+    private fun createDataSourceFactory(): DataSource.Factory =
+        com.mochyy.mochymusic.playback.custom.AppleRadioHlsDataSource.Factory(createBaseDataSourceFactory())
+
+    /**
+     * Apple's radio manifests name their Widevine key with a bare key id, which the player cannot
+     * use; they are rewritten on the way in (see [com.mochyy.mochymusic.playback.custom.AppleRadioHlsDataSource]).
+     * Everything else — songs, downloads, every other stream — passes through untouched.
+     */
+    private fun createBaseDataSourceFactory(): DataSource.Factory {
         // songs already on the phone are read straight from their file; only what comes over the network goes through the caches
         val upstream = LocalBypassDataSource.Factory(DefaultDataSource.Factory(this), createCacheDataSource())
         return ResolvingDataSource.Factory(upstream) { dataSpec ->
@@ -4057,6 +4065,12 @@ class MusicService :
                 val scheme = dataSpec.uri.scheme
                 if (scheme == "https" || scheme == "http" || scheme == "data") return@Factory dataSpec
                 error("No media id")
+            }
+
+            // A station's own stream: an address already resolved, and one that never ends, so it
+            // goes out as it is — the data source's marker keeps it out of both song caches.
+            if (mediaId.startsWith(com.mochyy.mochymusic.playback.queues.StationStreamQueue.CacheKeyPrefix)) {
+                return@Factory dataSpec
             }
 
             // A DASH stream's init and media segments (a source module's Tidal stream) are keyed by
@@ -4318,8 +4332,8 @@ class MusicService :
                     },
                     fetcherAction = { mediaId ->
                         val forced = forcedRoutes.containsKey(mediaId)
-                        // a file on the phone, else an Apple upload, else a provider in the order
-                        val ours = if (forced) null else (deviceStream(mediaItem) ?: appleUploadStream(mediaItem))
+                        // a file on the phone, an Apple upload, a station Apple streams, else a provider in the order
+                        val ours = if (forced) null else (deviceStream(mediaItem) ?: appleUploadStream(mediaItem) ?: stationStream(mediaItem))
                         (ours ?: routeStream(mediaId)).also { stream ->
                             if (stream != null) playingStreams[mediaId] = stream else playingStreams.remove(mediaId)
                         }
@@ -5317,6 +5331,50 @@ class MusicService :
             cacheKey = "$ModuleCacheKeyPrefix$module|$mediaId",
             source = "Apple Music · your upload",
         )
+    }
+
+    /**
+     * A station Apple streams (`format: "stream"`): one URL from `/v1/play/assets`.
+     *
+     * A non-DRM station is a progressive stream. A DRM one is HLS whose manifest is rewritten on the
+     * way in (`AppleRadioHlsDataSource`) and whose key is licensed from the station's own licence
+     * host with Apple's own body — the same Widevine pipeline the songs use, a different server.
+     */
+    private suspend fun stationStream(
+        mediaItem: androidx.media3.common.MediaItem,
+    ): com.mochyy.mochymusic.playback.custom.CustomStreamResult? {
+        if (com.mochyy.mochymusic.utils.OfflineMode.isOn) return null
+        val mediaId = mediaItem.mediaId
+        val stationId = com.mochyy.mochymusic.playback.queues.StationStreamQueue.stationIdOf(mediaId) ?: return null
+        val live = com.mochyy.mochymusic.playback.queues.StationStreamQueue.isLive(mediaId)
+        val pair = appleTokens.read() ?: return null
+        val stream = com.mochyy.mochymusic.applesync.AppleStationStream.resolve(pair, stationId) ?: return null
+        val module = com.mochyy.mochymusic.module.applemusic.AppleMusicModule.Id
+        forgetModuleFacts(mediaId)
+        resolvedSourceIds[mediaId] = module
+        notePlayingFrom(mediaId, PlayingFrom(module, "Apple Music", if (live) "live radio" else "radio episode"))
+        Timber.tag("StreamFetch").i("$mediaId plays from Apple Music as ${if (live) "live radio" else "a radio episode"}")
+        // never cached: the marker also keeps the request off the song-id path
+        val cacheKey = com.mochyy.mochymusic.playback.queues.StationStreamQueue.CacheKeyPrefix + mediaId
+        return when (stream) {
+            is com.mochyy.mochymusic.applesync.AppleStationStream.Stream.Progressive ->
+                com.mochyy.mochymusic.playback.custom.CustomStreamResult(
+                    streamUrl = stream.url,
+                    isHls = stream.isHls,
+                    cacheKey = cacheKey,
+                    source = "Apple Music · live radio",
+                )
+            is com.mochyy.mochymusic.applesync.AppleStationStream.Stream.Drm ->
+                com.mochyy.mochymusic.playback.custom.CustomStreamResult(
+                    streamUrl = stream.playlistUrl,
+                    isHls = true,
+                    widevineLicense = com.mochyy.mochymusic.module.LicenseServer { challenge ->
+                        com.mochyy.mochymusic.applesync.AppleStationStream.licence(pair, stream.licence, challenge)
+                    },
+                    cacheKey = cacheKey,
+                    source = "Apple Music · radio episode",
+                )
+        }
     }
 
     private suspend fun routeStream(mediaId: String): com.mochyy.mochymusic.playback.custom.CustomStreamResult? {

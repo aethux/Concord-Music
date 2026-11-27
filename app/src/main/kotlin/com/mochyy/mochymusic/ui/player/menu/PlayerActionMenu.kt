@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +65,9 @@ import com.mochyy.mochymusic.LocalDatabase
 import com.mochyy.mochymusic.LocalDownloadUtil
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.applesync.AppleRadioItem
+import com.mochyy.mochymusic.applesync.RadioFavorites
+import com.mochyy.mochymusic.playback.queues.StationStreamQueue
 import com.mochyy.mochymusic.constants.CanvasBestQualityKey
 import com.mochyy.mochymusic.constants.KeepScreenOn
 import com.mochyy.mochymusic.constants.PlayVideoBackgroundKey
@@ -89,6 +93,7 @@ import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.utils.rememberEnumPreference
 import com.mochyy.mochymusic.utils.rememberPreference
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import com.mochyy.mochymusic.ui.component.RemoteFocus
 
 /**
@@ -129,6 +134,14 @@ fun PlayerActionMenu(
     // only a song autoplay picked is ours to stop recommending, a song you chose yourself stays as it is
     val queue by playerConnection.queueSnapshot.collectAsState()
     val isAutoplaySong = queue.items.getOrNull(queue.currentIndex)?.isAutoplay == true
+
+    // A station is playing: it has no song to like, so the heart keeps the station itself — the same
+    // list the Radio page draws on top. The card's data comes back from the playing item's metadata.
+    val stationMediaId = playerConnection.player.currentMediaItem?.mediaId
+    val stationId = stationMediaId?.let(StationStreamQueue::stationIdOf)
+    val stationFavorites by remember { RadioFavorites.rows(context) }.collectAsState(initial = emptyList())
+    val stationFavorited = stationId != null && stationFavorites.any { it.id == stationId }
+    val scope = rememberCoroutineScope()
 
     var showChoosePlaylistDialog by remember { mutableStateOf(false) }
     var showSleepTimer by remember { mutableStateOf(false) }
@@ -433,9 +446,50 @@ fun PlayerActionMenu(
                 Spacer(modifier = Modifier.height(SectionGap))
 
                 MenuRow(
-                    icon = if (trackInfo.liked) R.drawable.ic_untitled_heart else R.drawable.ic_untitled_heart_unfill,
-                    title = if (trackInfo.liked) stringResource(R.string.menu_remove_from_liked) else stringResource(R.string.menu_add_to_liked),
-                    onClick = { playerConnection.toggleLike() },
+                    icon = if (stationId != null) {
+                        if (stationFavorited) R.drawable.ic_untitled_heart else R.drawable.ic_untitled_heart_unfill
+                    } else if (trackInfo.liked) {
+                        R.drawable.ic_untitled_heart
+                    } else {
+                        R.drawable.ic_untitled_heart_unfill
+                    },
+                    title = if (stationId != null) {
+                        stringResource(if (stationFavorited) R.string.unfavourite else R.string.favourite)
+                    } else {
+                        if (trackInfo.liked) {
+                            stringResource(R.string.menu_remove_from_liked)
+                        } else {
+                            stringResource(R.string.menu_add_to_liked)
+                        }
+                    },
+                    onClick = {
+                        if (stationId == null) {
+                            playerConnection.toggleLike()
+                        } else {
+                            val live = StationStreamQueue.isLive(stationMediaId.orEmpty())
+                            // the write first, the dismiss after: this scope dies with the sheet, so a
+                            // dismiss first would cancel the write that was just started
+                            scope.launch {
+                                RadioFavorites.toggle(
+                                    context,
+                                    AppleRadioItem(
+                                        id = stationId,
+                                        kind = AppleRadioItem.Kind.Station,
+                                        title = currentMetadata?.title.orEmpty(),
+                                        subtitle = currentMetadata?.artists?.firstOrNull()?.name,
+                                        // the playing item's art is already a real size
+                                        artworkUrl = currentMetadata?.thumbnailUrl,
+                                        playback = if (live) {
+                                            AppleRadioItem.Playback.Live
+                                        } else {
+                                            AppleRadioItem.Playback.Episode
+                                        },
+                                    ),
+                                )
+                                onDismiss()
+                            }
+                        }
+                    },
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 val inLibrary = librarySong?.song?.inLibrary != null

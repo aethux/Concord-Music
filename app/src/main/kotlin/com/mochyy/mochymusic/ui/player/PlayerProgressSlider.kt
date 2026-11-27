@@ -3,6 +3,7 @@
 package com.mochyy.mochymusic.ui.player
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
@@ -15,18 +16,22 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -51,6 +56,7 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorProducer
 import androidx.compose.ui.graphics.TransformOrigin
@@ -97,6 +103,10 @@ fun PlayerProgressSlider(
     endTimeModifier: Modifier = Modifier,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
+    // a station Apple streams: it has no length and cannot be sought, so the rail becomes a marker
+    val playingMetadata by playerConnection.mediaMetadata.collectAsState()
+    val liveStream = playingMetadata?.id
+        ?.startsWith(com.mochyy.mochymusic.playback.queues.StationStreamQueue.LiveMediaIdPrefix) == true
     val endTimestamp by com.mochyy.mochymusic.utils.rememberEnumPreference(
         com.mochyy.mochymusic.constants.PlayerEndTimestampKey,
         com.mochyy.mochymusic.constants.PlayerEndTimestamp.END_TIME,
@@ -224,6 +234,9 @@ fun PlayerProgressSlider(
             .fillMaxWidth()
             .height(28.dp)
     ) {
+        if (liveStream) {
+            LiveRadioMarker(modifier = seekBarModifier.then(onSeekBarPlaced?.let { Modifier.onGloballyPositioned(it) } ?: Modifier))
+        } else {
         Slider(
             state = sliderState,
             interactionSource = trackInteractionSource,
@@ -252,8 +265,12 @@ fun PlayerProgressSlider(
                 .then(seekBarModifier)
                 .streamFailureOverlay(failureProgress)
         )
+        }
     }
 
+    // a live window's "duration" is just how much it holds, and its position slides as the window
+    // moves; neither number means anything to a listener, so the live marker stands alone
+    if (!liveStream) {
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -292,6 +309,50 @@ fun PlayerProgressSlider(
                 .timeLift(expand, pivotX = 1f) { maxOf(stretch.floatValue, 0f) },
         )
     }
+    }
+}
+
+/**
+ * The rail's stand-in for a stream with no length: Mochy's own tag, a breathing dot and "LIVE".
+ * Nothing inside a live station can be seeked, so the bar is not drawn as an empty one.
+ */
+@Composable
+private fun LiveRadioMarker(modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.CenterStart,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .padding(horizontal = PlayerHorizontalPadding),
+    ) {
+        StreamFormatBadge(
+            text = stringResource(R.string.radio_live_badge),
+            color = Color.White.copy(alpha = 0.8f),
+            leading = { LiveDot() },
+        )
+    }
+}
+
+/** A dot that breathes rather than switches: alive, without a light flashing beside the controls. */
+@Composable
+private fun LiveDot() {
+    val transition = rememberInfiniteTransition(label = "live")
+    val alpha by transition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "liveDot",
+    )
+    Box(
+        modifier = Modifier
+            .size(5.dp)
+            .graphicsLayer { this.alpha = alpha }
+            .clip(CircleShape)
+            .background(Color.White),
+    )
 }
 
 /** A time label that reads its string itself, so only this text recomposes when the second changes. */

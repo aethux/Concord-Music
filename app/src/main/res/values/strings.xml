@@ -209,6 +209,16 @@
     <!-- a Home shelf's own page: Apple mints a shelf's id per feed read, so an old one can be gone -->
     <string name="apple_shelf_loading">Loading</string>
     <string name="apple_shelf_empty">Apple isn\'t showing this shelf right now.</string>
+    <string name="home_stations">Stations</string>
+    <string name="home_favourite_stations">Favourite stations</string>
+    <string name="radio_live">Live radio</string>
+    <string name="radio_episode">Radio episode</string>
+    <string name="radio_live_badge">LIVE</string>
+    <string name="radio_favourites">Favourites</string>
+    <string name="favourite">Favourite</string>
+    <string name="unfavourite">Remove from favourites</string>
+    <string name="view_show">View show</string>
+    <string name="radio_live_unavailable">This stream can\'t play in the app yet</string>
     <string name="apple_view_all">View all</string>
     <string name="apple_replay_title">Replay</string>
     <string name="apple_replay_row">Your year in music</string>

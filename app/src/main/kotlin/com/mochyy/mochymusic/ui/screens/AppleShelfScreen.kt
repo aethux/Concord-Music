@@ -160,7 +160,7 @@ fun AppleShelfScreen(
 
 /** one line in the middle of the page: a read under way, or a shelf Apple no longer lists */
 @Composable
-private fun ShelfNotice(
+internal fun ShelfNotice(
     text: String,
     action: String? = null,
     onAction: (() -> Unit)? = null,

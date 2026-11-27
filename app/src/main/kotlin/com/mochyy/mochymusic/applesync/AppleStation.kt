@@ -10,6 +10,9 @@ import com.mochyy.mochymusic.importer.idString
 import com.mochyy.mochymusic.importer.obj
 import com.mochyy.mochymusic.importer.string
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.intOrNull
 
 data class AppleStation(
     val id: String,
@@ -20,7 +23,23 @@ data class AppleStation(
     val kind: String?,
     val isLive: Boolean,
     val url: String?,
-)
+    /**
+     * The exact parameters `/v1/play/assets` asks for. A station Apple serves as tracks has no
+     * stream asset; one Apple streams (`format: "stream"`) is played from this instead.
+     */
+    val play: PlayParams? = null,
+) {
+    data class PlayParams(
+        val id: String,
+        val kind: String?,
+        /** `tracks` (a queue of songs) or `stream` (one live/programmed stream) */
+        val format: String?,
+        val hasDrm: Boolean,
+        val mediaType: Int?,
+        val stationHash: String?,
+        val streamingKind: String?,
+    )
+}
 
 object AppleStationReader {
 
@@ -34,6 +53,18 @@ object AppleStationReader {
             kind = attributes?.string("kind"),
             isLive = attributes?.string("isLive") == "true",
             url = attributes?.string("url"),
+            play = attributes?.get("playParams").obj()?.let { play ->
+                val playId = play.string("id") ?: return@let null
+                AppleStation.PlayParams(
+                    id = playId,
+                    kind = play.string("kind"),
+                    format = play.string("format"),
+                    hasDrm = (play["hasDrm"] as? JsonPrimitive)?.booleanOrNull == true,
+                    mediaType = (play["mediaType"] as? JsonPrimitive)?.intOrNull,
+                    stationHash = play.string("stationHash"),
+                    streamingKind = play.string("streamingKind"),
+                )
+            },
         )
     }
 }

@@ -62,7 +62,12 @@ class AppleSyncService : Service() {
             val light = intent?.getBooleanExtra(EXTRA_LIGHT, false) ?: false
             job = scope.launch {
                 runCatching { AppleSyncFlow.run(applicationContext, light = light) }
-                    .onFailure { AppleSyncStatus.fail(it.message ?: "The sync stopped.") }
+                    .onFailure {
+                        // a 401 here is a lapsed session, not a broken library: say so on the page
+                        AppleSession.onFailure(it)
+                        AppleSyncStatus.fail(it.message ?: "The sync stopped.")
+                    }
+                    .onSuccess { AppleSession.clear() }
             }
         } else {
             AppleSyncStatus.update(phase = AppleSyncStatus.progress.phase.ifBlank { "Syncing…" })

@@ -20,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -27,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.applesync.AppleMatchStatus
+import com.mochyy.mochymusic.applesync.AppleAccount
 import com.mochyy.mochymusic.applesync.AppleAutoSync
 import com.mochyy.mochymusic.applesync.AppleWritePrefs
 import com.mochyy.mochymusic.ui.component.DefaultDialog
@@ -60,10 +62,21 @@ fun ImportSyncScreen(
     val scope = rememberCoroutineScope()
     var appleWrites by remember { mutableStateOf<Boolean?>(null) }
     var appleOnOpen by remember { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(Unit) {
-        appleWrites = AppleWritePrefs.enabled(context)
-        appleOnOpen = AppleAutoSync.enabled(context)
+    // whose library this page reads: the name from Apple's own social profile
+    var appleSignedIn by remember { mutableStateOf<Boolean?>(null) }
+    var appleName by remember { mutableStateOf<String?>(null) }
+    var confirmSignOut by remember { mutableStateOf(false) }
+    // re-read on every return, so connecting on the sign-in page updates this row without a restart
+    LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        scope.launch {
+            appleWrites = AppleWritePrefs.enabled(context)
+            appleOnOpen = AppleAutoSync.enabled(context)
+            appleSignedIn = AppleAccount.signedIn(context)
+            appleName = AppleAccount.me(context)?.name
+        }
     }
+    // set by a sync Apple refused with a 401; cleared by a good sync or fresh tokens
+    val appleExpired by com.mochyy.mochymusic.applesync.AppleSession.expired.collectAsState()
     // Concord: the matching run lives in a service, so its state is read from the object both it and
     // this row write to, not from the view model that started it
     val appleMatch = AppleMatchStatus.progress
@@ -170,6 +183,36 @@ fun ImportSyncScreen(
                     icon = painterResource(R.drawable.playlist_add),
                     iconShape = CircleShape,
                     onClick = { navController.navigate(ImportProvidersRoute) },
+                ),
+                // whose library the page below reads, and the way out of it
+                SettingsItem(
+                    // the group style drops descriptionText, so the account name belongs in the title
+                    title = {
+                        Text(
+                            when {
+                                appleExpired -> stringResource(R.string.import_sync_apple_session_expired)
+                                appleSignedIn == false -> stringResource(R.string.import_sync_apple_account_out)
+                                appleName != null -> stringResource(
+                                    R.string.import_sync_apple_account_named,
+                                    appleName.orEmpty(),
+                                )
+                                else -> stringResource(R.string.import_sync_apple_account_title)
+                            },
+                        )
+                    },
+                    icon = painterResource(R.drawable.account),
+                    iconShape = CircleShape,
+                    onClick = {
+                        when {
+                            // the session lapsed: the one useful action is the way back in
+                            appleExpired -> navController.navigate(
+                                com.mochyy.mochymusic.ui.screens.settings.importsync.accountImportRoute(
+                                    com.mochyy.mochymusic.importer.account.AccountService.APPLE_MUSIC,
+                                ),
+                            )
+                            appleSignedIn == true -> confirmSignOut = true
+                        }
+                    },
                 ),
                 // Concord: read the Apple Music library into the app. Sits beside Import because it
                 // is the same question — the sign-in it needs lives on that screen.
@@ -308,6 +351,31 @@ fun ImportSyncScreen(
                     onClick = { exportLauncher.launch("Concord-library-${LocalDate.now()}.csv") },
                 ),
             ),
+        )
+    }
+
+    // the confirmation belongs at the screen's root, not inside a card that only draws sometimes
+    if (confirmSignOut) {
+        DefaultDialog(
+            onDismiss = { confirmSignOut = false },
+            content = { Text(stringResource(R.string.import_sync_apple_sign_out_confirm)) },
+            buttons = {
+                TextButton(onClick = { confirmSignOut = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+                TextButton(
+                    onClick = {
+                        confirmSignOut = false
+                        scope.launch {
+                            AppleAccount.signOut(context)
+                            appleSignedIn = false
+                            appleName = null
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.import_sync_apple_sign_out))
+                }
+            },
         )
     }
 

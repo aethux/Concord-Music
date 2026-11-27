@@ -37,6 +37,7 @@ class AppleTokens(private val context: Context) {
             putString(DeveloperKey, developer.trim())
             putString(UserKey, user.trim())
         }
+        AppleSession.clear()
     }
 
     suspend fun clear() {

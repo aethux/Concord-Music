@@ -389,6 +389,13 @@
     <string name="import_sync_apple_writes_desc">Off means nothing here ever changes your Apple library, playlists or ratings</string>
     <string name="import_sync_apple_on_open_title">Sync when I open Concord</string>
     <string name="import_sync_apple_on_open_desc">Reads your Apple library on open when the last sync is more than six hours old</string>
+    <string name="import_sync_apple_account_title">Apple Music account</string>
+    <string name="import_sync_apple_account_in">Signed in</string>
+    <string name="import_sync_apple_account_named">Apple Music account · %1$s</string>
+    <string name="import_sync_apple_session_expired">Apple Music session expired — tap to sign in again</string>
+    <string name="import_sync_apple_account_out">Not signed in — connect from Import</string>
+    <string name="import_sync_apple_sign_out">Sign out</string>
+    <string name="import_sync_apple_sign_out_confirm">Sign out of Apple Music? Nothing in your account is deleted; Concord just stops reading it until you connect again.</string>
 
     <string name="apple_playlist_not_editable">Apple won\'t let this app change that playlist</string>
     <string name="apple_playlist_failed">Apple didn\'t take that playlist change</string>

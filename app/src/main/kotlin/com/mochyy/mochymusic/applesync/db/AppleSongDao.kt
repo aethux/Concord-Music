@@ -9,6 +9,7 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Transaction
 import com.mochyy.mochymusic.db.entities.AlbumEntity
+import com.mochyy.mochymusic.db.entities.SongEntity
 
 @Dao
 interface AppleSongDao {
@@ -69,4 +70,12 @@ interface AppleSongDao {
 
     @Query("SELECT id FROM song WHERE id LIKE 'AM_%' AND inLibrary IS NULL")
     suspend fun appleSongsOutsideTheLibrary(): List<String>
+
+    /**
+     * Concord: the Apple rows this app holds *in* a library — the set a refresh compares against what
+     * Apple still lists. A row outside the library is skipped here, and `AppleImport` gives it its
+     * place back if Apple lists it again.
+     */
+    @Query("SELECT * FROM song WHERE id GLOB 'AM_*' AND inLibrary IS NOT NULL")
+    suspend fun appleSongsInTheLibrary(): List<SongEntity>
 }

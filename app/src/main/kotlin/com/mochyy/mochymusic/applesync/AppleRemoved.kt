@@ -1,16 +1,13 @@
-// Concord: copied from Mocha applesync/AppleRemoved.kt (apple-sync@c90b8251). Package renamed only,
-// plus two changes: `readd` is left out until the write path exists (it needs part 4's
-// AppleSongWrites.pushLibrary), and the two local toggles pass `syncToYouTube = false` — an AM_ row
-// belongs to Apple's library, and Mochy's default would fire a YouTube call with an Apple id.
+// Concord: rewritten from Mocha applesync/AppleRemoved.kt (apple-sync@c90b8251). Mocha kept a list of
+// the songs Apple had dropped and a screen that asked about each one (keep it here / remove it here /
+// put it back). Concord asks nothing: Apple is the library of record, so a song Apple no longer lists
+// leaves this library on the same refresh.
 //
-// Songs Apple no longer has. The refresh writes Apple's library into the replica, but nothing used
-// to notice what had left: a song deleted on Apple stayed in this library forever, still counted as
-// "on Apple Music" and still playing from a recording that is no longer there.
-//
-// The list is the difference between what this library holds with an Apple flag and what the last
-// pull saw. It lives in the sidecar's sync_state as catalogue ids, because it is a fact about the
-// last refresh rather than a table to migrate. Every answer (keep, remove here, put it back) takes
-// the id off the list, so the card only ever shows what is still waiting.
+// Nothing is deleted. The row, its history, its lyrics, its playlist entries and any downloaded file
+// all stay, which is what makes a saved song still play with the network off and a played one still
+// count. "Out of the library" is a state the import already understands: it is what
+// `appleSongsOutsideTheLibrary` reads, and `AppleImport` gives the row its place back the moment
+// Apple lists it again. So this is a flag flip that undoes itself, not a delete.
 
 package com.mochyy.mochymusic.applesync
 
@@ -20,55 +17,31 @@ import com.mochyy.mochymusic.db.MusicDatabase
 
 object AppleRemoved {
 
-    const val KEY = "removed_from_apple"
-
-    /** Catalogue ids Apple no longer has, newest check first. */
-    suspend fun list(dao: AppleSyncDao): List<String> =
-        runCatching { dao.state(KEY) }.getOrNull()
-            ?.split(",")
-            ?.filter { it.isNotBlank() }
-            ?.distinct()
-            .orEmpty()
+    /** The key Mocha's list lived under. Kept only so the ids it was left holding can be cleared. */
+    private const val KEY = "removed_from_apple"
 
     /**
-     * Recomputes the difference after a complete pull. Apple's library is read whole or the run
-     * fails, so a song's absence here means it is genuinely gone rather than not read yet.
+     * Takes out of this library every Apple song Apple no longer lists, and returns how many left.
+     *
+     * Only called after a complete pull: Apple's library is read whole or the run fails, so a song's
+     * absence means it is gone rather than not read yet. Both id dialects go in — an upload has no
+     * catalogue id, and its row here is keyed by the library one (`AM_i.…`).
      */
-    suspend fun record(dao: AppleSyncDao, database: MusicDatabase, remoteCatalogIds: Collection<String>) {
-        val remote = remoteCatalogIds.toSet()
-        // the ids the fork imported, minus the ones it knows are outside the library
-        val everyApple = runCatching { database.appleSongDao.appleSongIds() }.getOrDefault(emptyList())
-        val outside = runCatching { database.appleSongDao.appleSongsOutsideTheLibrary() }.getOrDefault(emptyList()).toSet()
-        val local = everyApple.filterNot { it in outside }.map { it.removePrefix("AM_") }
-        val gone = local.filter { it !in remote }.sorted()
-        dao.saveState(AppleStateEntity(key = KEY, value = gone.joinToString(",")))
-    }
-
-    /** "Keep it here": it stays in this app, and the card stops asking. */
-    suspend fun keep(dao: AppleSyncDao, catalogId: String) = save(dao, list(dao) - catalogId)
-
-    /** "Remove it here too": the row leaves the library but is not deleted, so history survives. */
-    suspend fun removeHere(dao: AppleSyncDao, database: MusicDatabase, catalogId: String) {
-        runCatching {
-            val row = database.getSongById("AM_$catalogId")?.song ?: return@runCatching
-            if (row.inLibrary != null) database.query { update(row.toggleLibrary(syncToYouTube = false)) }
+    suspend fun prune(dao: AppleSyncDao, database: MusicDatabase, remoteIds: Collection<String>): Int {
+        val remote = remoteIds.toSet()
+        val inLibrary = runCatching { database.appleSongDao.appleSongsInTheLibrary() }.getOrDefault(emptyList())
+        val gone = inLibrary.filter { it.id.removePrefix("AM_") !in remote }
+        if (gone.isNotEmpty()) {
+            database.query {
+                // the like goes with the library place, as it did when Mocha asked and the answer was
+                // "remove it here"; nothing else on the row changes
+                gone.forEach { row -> update(row.copy(inLibrary = null, liked = false, likedDate = null)) }
+            }
         }
-        keep(dao, catalogId)
-    }
-
-    private suspend fun save(dao: AppleSyncDao, ids: List<String>) {
-        dao.saveState(AppleStateEntity(key = KEY, value = ids.joinToString(",")))
-    }
-
-    /** Undo of "remove here": the row returns to the library and the card asks about it again. */
-    suspend fun unremove(dao: AppleSyncDao, database: MusicDatabase, catalogId: String) {
-        runCatching {
-            val row = database.getSongById("AM_$catalogId")?.song ?: return@runCatching
-            if (row.inLibrary == null) database.query { update(row.toggleLibrary(syncToYouTube = false)) }
+        // nothing reads the old list any more; one write is enough to clear the ids it held
+        if (runCatching { dao.state(KEY) }.getOrNull().orEmpty().isNotEmpty()) {
+            dao.saveState(AppleStateEntity(key = KEY, value = ""))
         }
-        save(dao, list(dao) + catalogId)
+        return gone.size
     }
-
-    /** The sidecar's state flow, for a card that should change the moment an answer is given. */
-    suspend fun count(database: MusicDatabase, dao: AppleSyncDao): Int = list(dao).size
 }

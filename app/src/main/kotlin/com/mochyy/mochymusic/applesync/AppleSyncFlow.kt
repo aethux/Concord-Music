@@ -99,16 +99,17 @@ object AppleSyncFlow {
             // still create an artist row of its own.
             runCatching { entry.database().fillArtistCoversFromSongs() }
 
-            // what this library still holds on Apple, but Apple no longer has.
-            // Both id dialects go in: an upload has no catalogue id, and its row here is keyed by
-            // the library one (`AM_i.…`), so passing catalogue ids alone marked every upload gone.
-            runCatching {
-                AppleRemoved.record(
+            // Apple is the library of record: a song it no longer lists leaves this library on the
+            // same refresh. Both id dialects go in: an upload has no catalogue id, and its row here
+            // is keyed by the library one (`AM_i.…`), so passing catalogue ids alone marked every
+            // upload gone. Nothing is deleted — the row, its history and any downloaded file stay.
+            val left = runCatching {
+                AppleRemoved.prune(
                     dao,
                     entry.database(),
                     pulled.remote.flatMap { listOfNotNull(it.catalogId, it.libraryId) },
                 )
-            }
+            }.getOrDefault(0)
 
             // Apple wins a duplicate, so the refresh itself folds any it can find instead of leaving
             // that until someone opens the review screen. Capped, and never fatal to the refresh.
@@ -124,7 +125,7 @@ object AppleSyncFlow {
                 .getOrNull()?.merged ?: 0
 
             val tookMs = System.currentTimeMillis() - startedAt
-            val message = describe(songs, playlists, mergedArtists, tookMs)
+            val message = describe(songs, playlists, left, mergedArtists, tookMs)
             record(dao, message)
             // the card and the notification finish with the same sentence
             AppleSyncStatus.update(phase = "Done")
@@ -149,7 +150,7 @@ object AppleSyncFlow {
      * new" is a better sentence than "1494 songs imported", and the counts that did not change say
      * so in words, which is what makes it possible to tell a no-op refresh from a stuck one.
      */
-    private fun describe(songs: AppleImport.Result, playlists: ApplePlaylistImport.Result?, mergedArtists: Int, tookMs: Long): String {
+    private fun describe(songs: AppleImport.Result, playlists: ApplePlaylistImport.Result?, left: Int, mergedArtists: Int, tookMs: Long): String {
         val parts = mutableListOf<String>()
         if (songs.added > 0) {
             parts += "${songs.added} new ${if (songs.added == 1) "song" else "songs"}"
@@ -163,6 +164,8 @@ object AppleSyncFlow {
         if (mergedArtists > 0) {
             parts += "$mergedArtists duplicate ${if (mergedArtists == 1) "artist" else "artists"} merged"
         }
+        // Apple's own removals: said out loud, because rows leaving a library is not a silent event
+        if (left > 0) parts += "$left ${if (left == 1) "song" else "songs"} left your library"
 
         if (playlists != null) {
             val changed = playlists.playlists - playlists.unchanged

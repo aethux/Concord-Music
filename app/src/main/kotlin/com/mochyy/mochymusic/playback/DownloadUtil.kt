@@ -74,11 +74,14 @@ import java.util.concurrent.Executor
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Concord: the prefix of a row imported from Apple Music — a catalogue id, or `i.<library id>` for an upload. */
+private const val ApplePrefix = "AM_"
+
 @Singleton
 class DownloadUtil
 @Inject
 constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
     val database: MusicDatabase,
     val databaseProvider: DatabaseProvider,
     @DownloadCache val downloadCache: SimpleCache,
@@ -148,6 +151,12 @@ constructor(
             // a tv copying a song its linked phone already has takes the phone's file, the very same song and much quicker
             com.mochyy.mochymusic.link.PhoneFiles.streamUrl(mediaId)?.let { return@Factory dataSpec.withUri(it.toUri()) }
 
+            // Concord: an upload has no catalogue entry, so no module can find it — Apple answers
+            // with its own signed m4a, the same file the player opens (MusicService.appleUploadStream)
+            appleUpload(mediaId)?.let { found ->
+                return@Factory dataSpec.buildUpon().setUri(found.url.toUri()).build()
+            }
+
             moduleDownload(mediaId)?.let { found ->
                 return@Factory dataSpec.buildUpon()
                     .setUri(found.url.toUri())
@@ -163,9 +172,19 @@ constructor(
                     .withRequestHeaders(dataSpec.httpRequestHeaders + songStreamHeaders[mediaId].orEmpty())
             }
 
+            // Concord: a catalogue Apple row has no video of its own. Its stream is HLS behind
+            // Widevine, which no saved file can hold, so the file comes from the YouTube twin the
+            // matching pass recorded (or the one picked by hand). Everything below stays keyed by
+            // the Apple id: the row, its format and the download's cache key never learn the video.
+            val fetchId = if (mediaId.startsWith(ApplePrefix)) {
+                appleTwinVideo(mediaId)
+                    ?: throw java.io.IOException("$mediaId has no YouTube copy, so there is nothing to download")
+            } else {
+                mediaId
+            }
             val playbackData = runBlocking(Dispatchers.IO) {
                 YTPlayerUtils.playerResponseForPlayback(
-                    mediaId,
+                    fetchId,
                     audioQuality = downloadQuality.youTubeQuality,
                     connectivityManager = connectivityManager,
                 )
@@ -335,6 +354,36 @@ constructor(
         downloadItags.remove(mediaId)
         moduleDownloads.remove(mediaId)?.let { failed -> failedProviders.merge(mediaId, setOf(failed.providerId)) { a, b -> a + b } }
         runCatching { downloadCache.removeResource(mediaId) }
+    }
+
+    /**
+     * Concord: the file for an upload — an Apple library song with no catalogue entry, so no module
+     * can find it by title. `/webPlayback` answers with a signed m4a carrying an `md5`, no HLS and no
+     * licence (`cider/uploads.md`); it is the same file the player opens. Looked up once per
+     * download, like a module's answer.
+     */
+    private fun appleUpload(mediaId: String): ModuleDownload? {
+        if (!mediaId.startsWith(ApplePrefix)) return null
+        val libraryId = mediaId.removePrefix(ApplePrefix).takeIf { it.startsWith("i.") } ?: return null
+        moduleDownloads[mediaId]?.let { return it }
+        val url = runBlocking(Dispatchers.IO) {
+            runCatching {
+                val tokens = dagger.hilt.android.EntryPointAccessors
+                    .fromApplication(
+                        context.applicationContext,
+                        com.mochyy.mochymusic.applesync.di.ApplePlaylistEntryPoint::class.java,
+                    ).tokens()
+                val pair = tokens.read() ?: return@runCatching null
+                com.mochyy.mochymusic.applesync.AppleClient(pair).uploadPlaybackUrl(libraryId)
+            }.getOrNull()
+        } ?: return null
+        return ModuleDownload(com.mochyy.mochymusic.module.applemusic.AppleMusicModule.Id, url, emptyMap())
+            .also { moduleDownloads[mediaId] = it }
+    }
+
+    /** Concord: the video a catalogue Apple row downloads from; null when the matching pass has none. */
+    private fun appleTwinVideo(mediaId: String): String? = runBlocking(Dispatchers.IO) {
+        com.mochyy.mochymusic.applesync.AppleVideoReference.youtubeIdFor(context, mediaId)
     }
 
     /** the first module in the download order with a whole file of [mediaId]; null when youtube comes first or nothing else has it */

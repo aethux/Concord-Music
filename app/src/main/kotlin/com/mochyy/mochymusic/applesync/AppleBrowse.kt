@@ -13,6 +13,8 @@ import com.mochyy.mochymusic.importer.idString
 import com.mochyy.mochymusic.importer.obj
 import com.mochyy.mochymusic.importer.string
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 /** One row of Apple's New page. A section is either cards or songs, never both. */
 sealed interface AppleBrowseSection {
@@ -29,6 +31,11 @@ sealed interface AppleBrowseSection {
         override val title: String,
         override val roomId: String,
         val items: List<AppleRadioItem>,
+        /**
+         * Apple's own chart rows (Daily Top 100, City Charts): their cards rank on a chart, which
+         * is what sends the row to the Charts page instead of to its room.
+         */
+        val charts: Boolean = false,
     ) : AppleBrowseSection
 
     data class Songs(
@@ -77,12 +84,22 @@ object AppleBrowseReader {
         return when (attributes.string("editorialElementKind")) {
             HeroKind -> AppleBrowseSection.Cards(id, title, roomId, AppleRadioReader.heroCards(node))
                 .takeIf { it.items.isNotEmpty() }
-            CardsKind -> AppleBrowseSection.Cards(id, title, roomId, AppleRadioReader.cards(node))
-                .takeIf { it.items.isNotEmpty() }
+            CardsKind -> {
+                // a chart row is the one whose cards carry `isChart`; the card itself stays the
+                // Radio page's parser, and the flag rides beside the list it describes
+                val charts = node["relationships"].obj()?.get("contents").obj()?.get("data").array()
+                    .any { element ->
+                        val row = element.obj()?.get("attributes").obj()
+                        (row?.get("isChart") as? JsonPrimitive)?.booleanOrNull == true
+                    }
+                AppleBrowseSection.Cards(id, title, roomId, AppleRadioReader.cards(node), charts)
+                    .takeIf { it.items.isNotEmpty() }
+            }
             SongsKind -> AppleBrowseSection.Songs(id, title, roomId, songsOf(node))
                 .takeIf { it.items.isNotEmpty() }
-            // a carousel and a footer: Apple sends both with no attributes and no relationships,
-            // and each 404s on its own, so there is nothing to draw
+            // the genre link list (322) and "More to Explore" (391): both carry `links` instead of
+            // contents, and every link is a music.apple.com WebObjects page, so neither is a row of
+            // cards this app can draw — the Charts row is reached through Daily Top 100 instead
             else -> null
         }
     }

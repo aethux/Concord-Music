@@ -115,7 +115,11 @@ object AppleRadioReader {
         node["relationships"].obj()?.get("children").obj()?.get("data").array()
             .mapNotNull { card -> card.obj()?.let { item(it) } }
 
-    private fun item(card: JsonObject, badge: String? = null): AppleRadioItem? {
+    /**
+     * One card from a bare resource — the Radio and Browse trees' own parser, and Charts' too,
+     * where the chart group holds its rows directly instead of under `relationships.contents`.
+     */
+    internal fun item(card: JsonObject, badge: String? = null): AppleRadioItem? {
         val type = card.string("type") ?: return null
         val id = card.idString("id") ?: return null
         val attributes = card["attributes"].obj()

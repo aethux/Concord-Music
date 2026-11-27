@@ -518,6 +518,39 @@ class AppleClient(
         return AppleBrowseReader.room(page)
     }
 
+    /**
+     * The storefront's genres, root first (`/v1/catalog/{sf}/genres`, 18 rows on `in`). Charts is
+     * the only caller: the page's chips are these rows, in Apple's order, and the first one is what
+     * "root" means — the chart request's own `with=cityCharts,dailyGlobalTopCharts` is only sent
+     * for it (probed: the root answers six chart groups, a genre only the three it has).
+     */
+    suspend fun genres(): List<AppleGenre>? {
+        val page = page("/v1/catalog/${storefront()}/genres") ?: return null
+        return AppleChartsReader.genres(page)
+    }
+
+    /**
+     * One genre's charts — Apple's Charts page for that genre.
+     *
+     * Cider's parameter set, minus the field trims its own readers need: `types` names the four
+     * kinds this page draws, `limit` caps every chart group (probed 2026-11-27: `limit=10` answered
+     * 10 rows per group), and `include=tracks` is what Cider sends. Each group carries its own
+     * `next`, and the page draws what one answer holds — paging a chart is not built.
+     */
+    suspend fun charts(genreId: String, withDailyAndCityCharts: Boolean): AppleChartsPage? {
+        val query = listOfNotNull(
+            "types=albums,songs,music-videos,playlists",
+            "platform=web",
+            "limit=25",
+            "genre=$genreId",
+            "include=tracks",
+            "extend=artistUrl",
+            if (withDailyAndCityCharts) "with=cityCharts,dailyGlobalTopCharts" else null,
+        ).joinToString("&")
+        val page = page("/v1/catalog/${storefront()}/charts?$query") ?: return null
+        return AppleChartsReader.charts(genreId, page)
+    }
+
     /** The editorial reads' shared parameter set: cards come back bare without the includes. */
     private fun editorialQuery(vararg extra: String): String = listOf(
         "platform=web",

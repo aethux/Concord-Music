@@ -212,6 +212,9 @@
     <string name="home_stations">Stations</string>
     <!-- the New tab: Apple's own name for the editorial page, and where its charts live -->
     <string name="browse_new">New</string>
+    <!-- Apple's Charts page, opened from the Daily Top 100 / City Charts rows on New -->
+    <string name="charts_title">Charts</string>
+    <string name="apple_charts_empty">Apple isn\'t showing charts for this genre right now.</string>
     <string name="home_favourite_stations">Favourite stations</string>
     <string name="radio_live">Live radio</string>
     <string name="radio_episode">Radio episode</string>

@@ -70,6 +70,7 @@ import com.mochyy.mochymusic.ui.screens.library.showLibraryImportSheet
 import com.mochyy.mochymusic.ui.screens.search.SearchResultRow
 import com.mochyy.mochymusic.ui.utils.backToMain
 import com.mochyy.mochymusic.viewmodels.AppleBrowseViewModel
+import com.mochyy.mochymusic.viewmodels.AppleChartsViewModel
 import kotlinx.coroutines.launch
 
 /** A song shelf shows its first few rows and its title is the way to the rest, as Apple's page does. */
@@ -108,7 +109,7 @@ fun AppleBrowseScreen(
             .fillMaxSize()
             .background(Color.Black),
     ) {
-        BrowseTopBar(title = stringResource(R.string.browse_new), navController = null)
+        AppleBrowseTopBar(title = stringResource(R.string.browse_new), navController = null)
         when {
             failed || sections?.isEmpty() == true -> Box(Modifier.weight(1f)) {
                 ShelfNotice(
@@ -141,10 +142,16 @@ fun AppleBrowseScreen(
                             open = open,
                             playSongs = { songs, start -> playBrowseSongs(playerConnection, songs, start) },
                             openRoom = { clicked ->
-                                navController.navigate(
-                                    "apple_browse_room/${clicked.roomId}?title=" +
-                                        android.net.Uri.encode(clicked.title)
-                                )
+                                // the two chart rows Apple puts on New open the Charts page; every
+                                // other section's "View all" is its room
+                                if (clicked is AppleBrowseSection.Cards && clicked.charts) {
+                                    navController.navigate("apple_charts/${AppleChartsViewModel.Root}")
+                                } else {
+                                    navController.navigate(
+                                        "apple_browse_room/${clicked.roomId}?title=" +
+                                            android.net.Uri.encode(clicked.title)
+                                    )
+                                }
                             },
                         )
                     }
@@ -194,7 +201,7 @@ fun AppleBrowseRoomScreen(
             .background(Color.Black),
     ) {
         // the title the row had first, so the header is right before the read lands
-        BrowseTopBar(
+        AppleBrowseTopBar(
             title = viewModel.title.ifBlank { room?.title.orEmpty() },
             navController = navController,
         )
@@ -295,7 +302,7 @@ private fun LazyListScope.browseSectionRows(
     }
 }
 
-private fun LazyListScope.songRows(
+internal fun LazyListScope.songRows(
     sectionId: String,
     songs: List<AppleSearchItem>,
     playSongs: (List<AppleSearchItem>, AppleSearchItem) -> Unit,
@@ -319,7 +326,7 @@ private fun LazyListScope.songRows(
 }
 
 /** The songs a shelf shows, as one queue starting where it was tapped — Apple's own behaviour. */
-private fun playBrowseSongs(
+internal fun playBrowseSongs(
     playerConnection: PlayerConnection,
     songs: List<AppleSearchItem>,
     start: AppleSearchItem,
@@ -332,7 +339,7 @@ private fun playBrowseSongs(
 
 /** What every card on either page opens, with Mochy's picker offered for a video YouTube can't find. */
 @Composable
-private fun browseOpener(
+internal fun browseOpener(
     navController: NavController,
     context: android.content.Context,
     playerConnection: PlayerConnection,
@@ -359,7 +366,7 @@ private fun browseOpener(
  * A tab root has nowhere to go back to, so it draws no arrow.
  */
 @Composable
-private fun BrowseTopBar(title: String, navController: NavController?) {
+internal fun AppleBrowseTopBar(title: String, navController: NavController?) {
     TopAppBar(
         title = {
             Text(

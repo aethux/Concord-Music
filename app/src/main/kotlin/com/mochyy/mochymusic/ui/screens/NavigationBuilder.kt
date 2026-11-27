@@ -364,6 +364,14 @@ fun NavGraphBuilder.navigationBuilder(
         com.mochyy.mochymusic.ui.screens.AppleBrowseRoomScreen(navController = navController)
     }
 
+    // one genre's charts: Apple's own page, opened from the two chart rows on New
+    coverSourceComposable(
+        route = "apple_charts/{genreId}",
+        arguments = listOf(navArgument("genreId") { type = NavType.StringType }),
+    ) {
+        com.mochyy.mochymusic.ui.screens.AppleChartsScreen(navController = navController)
+    }
+
     // Apple's Replay: the years it keeps a summary for, each one a playlist
     coverSourceComposable("apple_replay") {
         com.mochyy.mochymusic.ui.screens.AppleReplayScreen(navController = navController)

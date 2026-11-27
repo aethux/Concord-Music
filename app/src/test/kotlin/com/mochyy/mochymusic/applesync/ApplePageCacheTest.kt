@@ -193,6 +193,17 @@ class ApplePageCacheTest {
         assertEquals(listOf("storefront"), store.rows.values.map { it.kind })
     }
 
+    @Test
+    fun `each genre's charts is its own row, and the genre index one more`() = runBlocking {
+        cache.page("/v1/catalog/in/charts?types=songs,albums&limit=25&genre=34") { body("root") }
+        cache.page("/v1/catalog/in/charts?types=songs,albums&limit=25&genre=14") { body("pop") }
+        cache.page("/v1/catalog/in/genres") { body("genres") }
+        assertEquals(
+            listOf("charts|14", "charts|34", "genres|"),
+            store.rows.values.map { it.kind + "|" + it.remoteId }.sorted(),
+        )
+    }
+
     private fun body(value: String): JsonObject = buildJsonObject { put("v", JsonPrimitive(value)) }
 
     private fun JsonObject?.text(key: String): String = (this!!.get(key) as JsonPrimitive).content

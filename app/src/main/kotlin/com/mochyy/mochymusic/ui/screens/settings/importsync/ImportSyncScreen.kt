@@ -30,6 +30,7 @@ import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.applesync.AppleMatchStatus
 import com.mochyy.mochymusic.applesync.AppleAccount
 import com.mochyy.mochymusic.applesync.AppleAutoSync
+import com.mochyy.mochymusic.applesync.ApplePlayPrefs
 import com.mochyy.mochymusic.applesync.AppleWritePrefs
 import com.mochyy.mochymusic.ui.component.DefaultDialog
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
@@ -62,6 +63,8 @@ fun ImportSyncScreen(
     val scope = rememberCoroutineScope()
     var appleWrites by remember { mutableStateOf<Boolean?>(null) }
     var appleOnOpen by remember { mutableStateOf<Boolean?>(null) }
+    var appleReporting by remember { mutableStateOf<Boolean?>(null) }
+    var applePrivate by remember { mutableStateOf<Boolean?>(null) }
     // whose library this page reads: the name from Apple's own social profile
     var appleSignedIn by remember { mutableStateOf<Boolean?>(null) }
     var appleName by remember { mutableStateOf<String?>(null) }
@@ -71,6 +74,8 @@ fun ImportSyncScreen(
         scope.launch {
             appleWrites = AppleWritePrefs.enabled(context)
             appleOnOpen = AppleAutoSync.enabled(context)
+            appleReporting = ApplePlayPrefs.reporting(context)
+            applePrivate = ApplePlayPrefs.privateListening(context)
             appleSignedIn = AppleAccount.signedIn(context)
             appleName = AppleAccount.me(context)?.name
         }
@@ -311,6 +316,47 @@ fun ImportSyncScreen(
                             onCheckedChange = { next ->
                                 appleOnOpen = next
                                 scope.launch { AppleAutoSync.setEnabled(context, next) }
+                            },
+                        )
+                    },
+                ),
+                // Concord: Apple's play report, and the one switch that stops it
+                SettingsItem(
+                    title = { Text(stringResource(R.string.import_sync_apple_report_title)) },
+                    descriptionText = stringResource(R.string.import_sync_apple_report_desc),
+                    icon = painterResource(R.drawable.sync),
+                    iconShape = CircleShape,
+                    onClick = {
+                        val next = !(appleReporting ?: true)
+                        appleReporting = next
+                        scope.launch { ApplePlayPrefs.setReporting(context, next) }
+                    },
+                    trailingContent = {
+                        AppSwitch(
+                            checked = appleReporting ?: true,
+                            onCheckedChange = { next ->
+                                appleReporting = next
+                                scope.launch { ApplePlayPrefs.setReporting(context, next) }
+                            },
+                        )
+                    },
+                ),
+                SettingsItem(
+                    title = { Text(stringResource(R.string.import_sync_apple_private_title)) },
+                    descriptionText = stringResource(R.string.import_sync_apple_private_desc),
+                    icon = painterResource(R.drawable.sync),
+                    iconShape = CircleShape,
+                    onClick = {
+                        val next = !(applePrivate ?: false)
+                        applePrivate = next
+                        scope.launch { ApplePlayPrefs.setPrivateListening(context, next) }
+                    },
+                    trailingContent = {
+                        AppSwitch(
+                            checked = applePrivate ?: false,
+                            onCheckedChange = { next ->
+                                applePrivate = next
+                                scope.launch { ApplePlayPrefs.setPrivateListening(context, next) }
                             },
                         )
                     },

@@ -90,6 +90,8 @@ import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.car.CarLyrics
 import com.mochyy.mochymusic.car.CarLyricsPlayer
 import com.mochyy.mochymusic.car.CarLyricsSource
+import com.mochyy.mochymusic.applesync.ApplePlayPrefs
+import com.mochyy.mochymusic.applesync.ApplePlayReporter
 import com.mochyy.mochymusic.applesync.AppleSongWrites
 import com.mochyy.mochymusic.widget.WidgetLyricTracker
 import com.mochyy.mochymusic.constants.AudioNormalizationKey
@@ -719,6 +721,8 @@ class MusicService :
 
     // counts each youtube song people really listen to as a play on youtube, unless app behaviour turns it off
     private val playReporter by lazy { YouTubePlayReporter({ scope }, { player.currentPosition }) }
+    // Concord: Apple's own play report, held until a play counts (concord/cider/play-reporting.md)
+    private val applePlayReporter by lazy { ApplePlayReporter(this, { scope }, { player.currentPosition }) }
 
     val automixItems = MutableStateFlow<List<MediaItem>>(emptyList())
 
@@ -1206,6 +1210,18 @@ class MusicService :
             .collect(scope) { (enabled, countAfterMs) ->
                 playReporter.isEnabled = enabled
                 playReporter.countAfterMs = countAfterMs
+            }
+
+        // Concord: Apple's report follows the same offline rule, plus its own switch and private mode
+        dataStore.data
+            .map { prefs ->
+                val enabled = (prefs[ApplePlayPrefs.ReportingKey] ?: true) && prefs[OfflineModeKey] != true
+                enabled to (prefs[ApplePlayPrefs.PrivateKey] ?: false)
+            }
+            .distinctUntilChanged()
+            .collect(scope) { (enabled, private) ->
+                applePlayReporter.isEnabled = enabled
+                applePlayReporter.privateListening = private
             }
 
         dataStore.data.map { prefs ->
@@ -3106,9 +3122,11 @@ class MusicService :
 
         scrobbleTimer.onSongStop()
         playReporter.onSongStop()
+        applePlayReporter.onSongStop()
         if (player.playWhenReady && player.playbackState == Player.STATE_READY) {
             scrobbleTimer.onSongStart(player.currentMetadata, player.duration)
             playReporter.onSongStart(player.currentMetadata, player.duration)
+            applePlayReporter.onSongStart(player.currentMetadata, player.duration)
         }
 
         if (castConnectionHandler?.isCasting?.value == true &&
@@ -3174,6 +3192,7 @@ class MusicService :
         if (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED) {
             scrobbleTimer.onSongStop()
             playReporter.onSongStop()
+            applePlayReporter.onSongStop()
         }
     }
 
@@ -3246,6 +3265,7 @@ class MusicService :
         if (events.containsAny(Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED)) {
             scrobbleTimer.onPlayingChanged(player.isPlaying, player.currentMetadata, player.duration)
             playReporter.onPlayingChanged(player.isPlaying, player.currentMetadata, player.duration)
+            applePlayReporter.onPlayingChanged(player.isPlaying, player.currentMetadata, player.duration)
             // a pause is often the last thing before the app is closed, and the timed saves only
             // run every 30 seconds while paused: save the exact place now so it comes back there
             if (!player.isPlaying && player.playbackState == Player.STATE_READY && dataStore.get(PersistentQueueKey, true)) {
@@ -4594,6 +4614,7 @@ class MusicService :
         discordPresence.update(null)
         // sends the last stretch of the song that was playing while the player can still say where it stopped
         playReporter.onSongStop()
+        applePlayReporter.onSongStop()
         connectivityObserver.unregister()
         callWatcher.stop()
         abandonAudioFocus()

@@ -389,6 +389,10 @@
     <string name="import_sync_apple_writes_desc">Off means nothing here ever changes your Apple library, playlists or ratings</string>
     <string name="import_sync_apple_on_open_title">Sync when I open Concord</string>
     <string name="import_sync_apple_on_open_desc">Reads your Apple library on open when the last sync is more than six hours old</string>
+    <string name="import_sync_apple_report_title">Send my plays to Apple Music</string>
+    <string name="import_sync_apple_report_desc">Apple\'s Recently Played, Replay and recommendations see what plays here</string>
+    <string name="import_sync_apple_private_title">Private listening</string>
+    <string name="import_sync_apple_private_desc">Nothing is sent to Apple while this is on</string>
     <string name="import_sync_apple_account_title">Apple Music account</string>
     <string name="import_sync_apple_account_in">Signed in</string>
     <string name="import_sync_apple_account_named">Apple Music account · %1$s</string>

@@ -33,6 +33,12 @@ enum class PageKind(val key: String, val ttlMs: Long) {
     /** the Radio page's section tree: one big read, and Apple edits its sections slowly */
     RADIO("radio", 15L * 60 * 1000),
 
+    /** Apple's Browse ("New") page: the same kind of daily-edited tree as Radio */
+    BROWSE("browse", 15L * 60 * 1000),
+
+    /** One section's "View all" room — 100 items, and Apple edits a room far less often */
+    BROWSE_ROOM("browse_room", 6L * 60 * 60 * 1000),
+
     /**
      * The storefront the account is in. Not a page, but it is read in front of every page —
      * `artistPage`, `catalogAlbum` and `playlistPage` each ask it first — so leaving it live put one
@@ -236,6 +242,17 @@ class ApplePageCache(
                     query.contains("name=radio") -> {
                     kind = PageKind.RADIO
                     id = "radio"
+                }
+                // /v1/editorial/{sf}/groupings?name=music — Apple's Browse page, the same shape
+                p.size == 4 && at(0) == "v1" && at(1) == "editorial" && at(3) == "groupings" &&
+                    query.contains("name=music") -> {
+                    kind = PageKind.BROWSE
+                    id = "music"
+                }
+                // /v1/editorial/{sf}/rooms/{id} — one section's "View all" list
+                p.size == 5 && at(0) == "v1" && at(1) == "editorial" && at(3) == "rooms" -> {
+                    kind = PageKind.BROWSE_ROOM
+                    id = p[4]
                 }
                 // /v1/me/storefront — asked before every page, so it is worth one row
                 p.size == 3 && at(0) == "v1" && at(1) == "me" && at(2) == "storefront" -> {

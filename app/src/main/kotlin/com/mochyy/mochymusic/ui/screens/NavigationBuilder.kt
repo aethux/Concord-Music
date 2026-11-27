@@ -348,6 +348,22 @@ fun NavGraphBuilder.navigationBuilder(
         )
     }
 
+    // Apple's New page, as its own tab: the editorial tree, and the charts inside it
+    coverSourceComposable(Screens.Browse.route) {
+        com.mochyy.mochymusic.ui.screens.AppleBrowseScreen(navController = navController)
+    }
+
+    // one section's "View all": Apple's room, drawn with the same two shapes
+    coverSourceComposable(
+        route = "apple_browse_room/{roomId}?title={title}",
+        arguments = listOf(
+            navArgument("roomId") { type = NavType.StringType },
+            navArgument("title") { type = NavType.StringType; defaultValue = "" },
+        ),
+    ) {
+        com.mochyy.mochymusic.ui.screens.AppleBrowseRoomScreen(navController = navController)
+    }
+
     // Apple's Replay: the years it keeps a summary for, each one a playlist
     coverSourceComposable("apple_replay") {
         com.mochyy.mochymusic.ui.screens.AppleReplayScreen(navController = navController)

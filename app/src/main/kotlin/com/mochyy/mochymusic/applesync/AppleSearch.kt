@@ -125,7 +125,8 @@ object AppleSearchReader {
             }
             .distinctBy { it.id }
 
-    private fun rowOf(row: JsonObject?, kind: AppleSearchItem.Kind): AppleSearchItem? {
+    /** One resource as a search row. Also how Apple's Browse page reads its song shelves. */
+    internal fun rowOf(row: JsonObject?, kind: AppleSearchItem.Kind): AppleSearchItem? {
         row ?: return null
         val attributes = row["attributes"].obj() ?: return null
         val id = row.idString("id") ?: return null

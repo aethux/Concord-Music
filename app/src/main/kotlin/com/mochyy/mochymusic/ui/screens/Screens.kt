@@ -21,6 +21,17 @@ sealed class Screens(
         route = "home"
     )
 
+    /**
+     * Apple's "New", where Apple puts its editorial page and the charts inside it. The lit state is
+     * the outline grid's own squares filled, so the tab brightens the way every other tab does.
+     */
+    object Browse : Screens(
+        titleId = R.string.browse_new,
+        iconIdInactive = R.drawable.grid_view,
+        iconIdActive = R.drawable.grid_view_filled,
+        route = "apple_browse"
+    )
+
     object Search : Screens(
         titleId = R.string.search,
         iconIdInactive = R.raw.search,
@@ -43,7 +54,7 @@ sealed class Screens(
     )
 
     companion object {
-        val MainScreens = listOf(Home, Search, Library, Settings)
+        val MainScreens = listOf(Home, Browse, Search, Library, Settings)
     }
 }
 

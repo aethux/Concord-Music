@@ -97,8 +97,8 @@ import com.mochyy.mochymusic.ui.component.RemoteFocus
 import com.mochyy.mochymusic.ui.component.TopToaster
 import com.mochyy.mochymusic.ui.component.glassRoot
 import com.mochyy.mochymusic.ui.component.navigateToTab
-import com.mochyy.mochymusic.ui.player.findOfficialMusicVideoId
-import com.mochyy.mochymusic.ui.player.playYouTubeVideo
+import com.mochyy.mochymusic.ui.player.asMediaItem
+import com.mochyy.mochymusic.ui.player.openAppleMusicVideo
 import com.mochyy.mochymusic.ui.screens.library.showLibraryImportSheet
 import com.mochyy.mochymusic.utils.makeTimeString
 import com.mochyy.mochymusic.utils.rememberPreference
@@ -282,7 +282,7 @@ fun AppleSearchScreen(
                 playerConnection.playQueue(
                     ListQueue(
                         title = results.term.ifBlank { null },
-                        items = songs.map { it.toMediaItem() },
+                        items = songs.map { it.asMediaItem() },
                         startIndex = start,
                     ),
                 )
@@ -291,25 +291,16 @@ fun AppleSearchScreen(
             AppleSearchItem.Kind.Artist -> navController.navigate("apple_artist/${item.id}")
             AppleSearchItem.Kind.Playlist -> navController.navigate("apple_playlist/${item.id}")
             // a music video plays the way See video does: its YouTube counterpart in Mochy's own
-            // player. Apple's own video stream can't be decrypted here (concord/STATE.md)
+            // player, with Mochy's picker offered when YouTube has no match
             AppleSearchItem.Kind.Video -> coroutineScope.launch {
-                val mediaId = "AM_${item.id}"
-                val edit = com.mochyy.mochymusic.songedit.SongEdits.of(mediaId)
-                if (edit?.noVideo == true) {
-                    TopToaster.show(context.getString(R.string.apple_video_none))
-                    return@launch
-                }
-                // a video picked by hand wins, so a card YouTube can't find stays fixed
-                val youtubeId = edit?.videoId ?: findOfficialMusicVideoId(item.title, item.subtitle.orEmpty())
-                if (youtubeId == null) {
-                    TopToaster.show(context.getString(R.string.apple_video_none))
-                    // Mochy's own picker, writing the hand pick read above next time
-                    pickVideoFor = item to mediaId
-                    return@launch
-                }
-                playYouTubeVideo(playerConnection, youtubeId).onFailure {
-                    TopToaster.show(context.getString(R.string.apple_video_unreachable))
-                }
+                openAppleMusicVideo(
+                    context = context,
+                    videoId = item.id,
+                    title = item.title,
+                    artist = item.subtitle,
+                    playerConnection = playerConnection,
+                    onNoMatch = { pickVideoFor = item to "AM_${item.id}" },
+                )
             }
         }
     }
@@ -790,26 +781,6 @@ private fun kindTitle(kind: AppleSearchItem.Kind): String = stringResource(
         AppleSearchItem.Kind.Video -> R.string.apple_search_videos
     },
 )
-
-/** A catalogue row, as a playable item: the `AM_` id is how the Apple module finds the recording. */
-private fun AppleSearchItem.toMediaItem(): androidx.media3.common.MediaItem {
-    val song = Song(
-        song = SongEntity(
-            id = "AM_$id",
-            title = title,
-            duration = ((durationMs ?: 0L) / 1000L).toInt(),
-            thumbnailUrl = AppleCovers.sized(artworkUrl),
-            source = SongSource.Apple,
-        ),
-        artists = listOf(
-            ArtistEntity(
-                id = ArtistEntity.generateArtistId(),
-                name = subtitle?.takeIf { it.isNotBlank() } ?: "Unknown artist",
-            ),
-        ),
-    )
-    return song.toMediaItem()
-}
 
 @Composable
 private fun SearchNotice(text: String, action: String? = null, onAction: (() -> Unit)? = null) {

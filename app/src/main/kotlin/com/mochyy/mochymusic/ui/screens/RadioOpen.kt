@@ -16,6 +16,7 @@ import com.mochyy.mochymusic.playback.queues.AppleStationQueue
 import com.mochyy.mochymusic.playback.queues.StationStreamQueue
 import com.mochyy.mochymusic.ui.component.TopToaster
 import com.mochyy.mochymusic.ui.player.findOfficialMusicVideoId
+import com.mochyy.mochymusic.ui.player.openAppleMusicVideo
 import com.mochyy.mochymusic.ui.player.playYouTubeVideo
 
 internal suspend fun openAppleRadioItem(
@@ -24,6 +25,8 @@ internal suspend fun openAppleRadioItem(
     context: Context,
     playerConnection: PlayerConnection,
     stationQueue: suspend (stationId: String) -> AppleStationQueue?,
+    /** a video card with no YouTube match: the page that has a picker passes how to open it */
+    onVideoPick: ((AppleRadioItem) -> Unit)? = null,
 ) {
     when (item.kind) {
         AppleRadioItem.Kind.Station -> when (item.playback) {
@@ -60,15 +63,13 @@ internal suspend fun openAppleRadioItem(
         AppleRadioItem.Kind.Curator -> navController.navigate(
             "apple_curator/${item.id}?title=${Uri.encode(item.title)}",
         )
-        AppleRadioItem.Kind.Video -> {
-            val youtubeId = findOfficialMusicVideoId(item.title, item.subtitle.orEmpty())
-            if (youtubeId == null) {
-                TopToaster.show(context.getString(R.string.apple_video_none))
-            } else {
-                playYouTubeVideo(playerConnection, youtubeId).onFailure {
-                    TopToaster.show(context.getString(R.string.apple_video_unreachable))
-                }
-            }
-        }
+        AppleRadioItem.Kind.Video -> openAppleMusicVideo(
+            context = context,
+            videoId = item.id,
+            title = item.title,
+            artist = item.subtitle,
+            playerConnection = playerConnection,
+            onNoMatch = onVideoPick?.let { pick -> { pick(item) } },
+        )
     }
 }

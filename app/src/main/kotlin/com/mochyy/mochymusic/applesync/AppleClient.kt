@@ -498,6 +498,41 @@ class AppleClient(
     }
 
     /**
+     * Apple's Browse ("New") page: the editorial tree behind `groupings?name=music`.
+     *
+     * The classic host answers this one (probed 2026-11-27: 200, 972 KB) — the older note that
+     * `name=music` is refused there came from a request without this parameter set. One read carries
+     * every section and its first 20 cards; a section's own "View all" is its room.
+     */
+    suspend fun browseSections(): List<AppleBrowseSection>? {
+        val page = page(
+            "/v1/editorial/${storefront()}/groupings?" +
+                editorialQuery("name=music", "tabs=subscriber"),
+        ) ?: return null
+        return AppleBrowseReader.sections(page)
+    }
+
+    /** One section's whole list: `/rooms/{id}`, which is what Apple's New page calls "View all". */
+    suspend fun browseRoom(roomId: String): AppleBrowseRoom? {
+        val page = page("/v1/editorial/${storefront()}/rooms/$roomId?${editorialQuery()}") ?: return null
+        return AppleBrowseReader.room(page)
+    }
+
+    /** The editorial reads' shared parameter set: cards come back bare without the includes. */
+    private fun editorialQuery(vararg extra: String): String = listOf(
+        "platform=web",
+        "art%5Burl%5D=f",
+        "extend=editorialArtwork,artistUrl",
+        "omit%5Bresource%3Aartists%5D=relationships",
+        "include%5Bgroupings%5D=curator",
+        "include%5Balbums%5D=artists",
+        "include%5Bsongs%5D=artists",
+        "include%5Bmusic-videos%5D=artists",
+        "fields%5Bartists%5D=name,url,artwork,editorialArtwork,genreNames,editorialNotes",
+        *extra,
+    ).joinToString("&")
+
+    /**
      * One Home shelf as its own page.
      *
      * Apple answers with the group alone and its **whole** card list (`limit`/`offset` are ignored —

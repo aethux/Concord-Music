@@ -57,13 +57,19 @@ data class AppleRadioSection(
 
 object AppleRadioReader {
 
-    fun sections(page: JsonObject): List<AppleRadioSection> {
+    fun sections(page: JsonObject): List<AppleRadioSection> =
+        editorialChildren(page).mapNotNull { node -> node.obj()?.let(::section) }
+
+    /**
+     * The tab's elements under one `groupings` answer — the walk both editorial pages use, since
+     * Apple's Radio and Browse trees are the same `groupings → tabs → children` shape.
+     */
+    internal fun editorialChildren(page: JsonObject): List<kotlinx.serialization.json.JsonElement> {
         val tab = page["data"].array().firstOrNull()?.obj()
             ?.get("relationships").obj()?.get("tabs").obj()
             ?.get("data").array().firstOrNull()?.obj()
             ?: return emptyList()
         return tab["relationships"].obj()?.get("children").obj()?.get("data").array()
-            .mapNotNull { node -> node.obj()?.let(::section) }
     }
 
     private fun section(node: JsonObject): AppleRadioSection? {
@@ -73,13 +79,10 @@ object AppleRadioReader {
         val id = node.idString("id") ?: return null
         val cards = when (kind) {
             // a hero row of live stations: one card under each child
-            HeroKind -> node["relationships"].obj()?.get("children").obj()?.get("data").array()
-                .mapNotNull { child -> child.obj()?.let(::heroItem) }
+            HeroKind -> heroCards(node)
             // a brick shelf lists its cards as children too
-            ShelfKind -> node["relationships"].obj()?.get("children").obj()?.get("data").array()
-                .mapNotNull { child -> child.obj()?.let { item(it) } }
-            else -> node["relationships"].obj()?.get("contents").obj()?.get("data").array()
-                .mapNotNull { card -> card.obj()?.let { item(it) } }
+            ShelfKind -> childCards(node)
+            else -> cards(node)
         }
         if (cards.isEmpty()) return null
         val title = attributes.string("name") ?: attributes.string("title") ?: ""
@@ -93,6 +96,24 @@ object AppleRadioReader {
             .firstOrNull()?.obj() ?: return null
         return item(station, badge)
     }
+
+    /**
+     * The cards under one element's `contents`. Shared with Apple's Browse page, whose card
+     * sections are the same shape — the parser stays one implementation, on the radio page's model.
+     */
+    internal fun cards(node: JsonObject): List<AppleRadioItem> =
+        node["relationships"].obj()?.get("contents").obj()?.get("data").array()
+            .mapNotNull { card -> card.obj()?.let { item(it) } }
+
+    /** The cards under an element's `children`, each a badge over one nested resource. */
+    internal fun heroCards(node: JsonObject): List<AppleRadioItem> =
+        node["relationships"].obj()?.get("children").obj()?.get("data").array()
+            .mapNotNull { child -> child.obj()?.let(::heroItem) }
+
+    /** A brick shelf lists its cards as children, one per card. */
+    private fun childCards(node: JsonObject): List<AppleRadioItem> =
+        node["relationships"].obj()?.get("children").obj()?.get("data").array()
+            .mapNotNull { card -> card.obj()?.let { item(it) } }
 
     private fun item(card: JsonObject, badge: String? = null): AppleRadioItem? {
         val type = card.string("type") ?: return null

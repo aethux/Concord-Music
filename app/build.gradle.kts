@@ -61,6 +61,11 @@ extensions.configure<ApplicationExtension> {
         val discordClientId = localProperties.getProperty("DISCORD_CLIENT_ID")
             ?: System.getenv("DISCORD_CLIENT_ID") ?: ""
         buildConfigField("String", "DISCORD_CLIENT_ID", "\"$discordClientId\"")
+        // The same Discord app's secret: it is not a Public Client, so the token exchange has to
+        // send it (a public client would only need PKCE, which the sign-in also does).
+        val discordClientSecret = localProperties.getProperty("DISCORD_CLIENT_SECRET")
+            ?: System.getenv("DISCORD_CLIENT_SECRET") ?: ""
+        buildConfigField("String", "DISCORD_CLIENT_SECRET", "\"$discordClientSecret\"")
         manifestPlaceholders["discordRedirectScheme"] =
             if (discordClientId.isNotBlank()) "discord-$discordClientId" else "mochy-discord-unset"
 

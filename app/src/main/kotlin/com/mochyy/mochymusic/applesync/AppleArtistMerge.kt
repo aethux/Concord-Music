@@ -43,7 +43,9 @@ object AppleArtistMerge {
         var merged = 0
         var skipped = 0
         runCatching {
-            database.transaction {
+            // blocking on purpose: the counts below are read the moment this returns, and the summary
+            // it feeds is written before the service stops
+            database.blockingTransaction {
                 groups.values.take(Limit).forEach { rows ->
                     val survivor = pickSurvivor(rows)
                     if (survivor == null) {

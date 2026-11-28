@@ -51,6 +51,7 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.Date
+import java.util.concurrent.CountDownLatch
 
 class MusicDatabase(
     private val delegate: InternalDatabase,
@@ -97,6 +98,33 @@ class MusicDatabase(
                     block(this@MusicDatabase)
                 }
             }
+        }
+
+    /**
+     * The same transaction as [transaction], but it returns only after the block has run, and rethrows
+     * its failure on the caller's thread.
+     *
+     * [transaction] hands the block to the transaction executor and returns at once, so a caller that
+     * reads its own counters afterwards reads them before the work happened. The artist merge is the
+     * one caller that has to know: it reports how many rows it folded in the same breath.
+     */
+    fun blockingTransaction(block: MusicDatabase.() -> Unit) =
+        with(delegate) {
+            val done = CountDownLatch(1)
+            var failure: Throwable? = null
+            transactionExecutor.execute {
+                try {
+                    runInTransaction {
+                        block(this@MusicDatabase)
+                    }
+                } catch (t: Throwable) {
+                    failure = t
+                } finally {
+                    done.countDown()
+                }
+            }
+            done.await()
+            failure?.let { throw it }
         }
 
     suspend fun withTransaction(block: suspend MusicDatabase.() -> Unit) =

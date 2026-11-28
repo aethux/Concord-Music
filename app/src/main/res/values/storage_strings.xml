@@ -34,6 +34,7 @@
     <string name="storage_clear_cache_message">Songs kept from streaming and saved cover pictures are deleted. They come back as you play and browse. Your library and your downloads stay as they are.</string>
     <string name="storage_clear_cache_action">Clear cache</string>
     <string name="storage_manage_downloads">Manage downloads</string>
+    <string name="storage_manage_apple_origin">Songs from Apple Music are kept as their YouTube twin. Your uploads are kept as the file Apple serves.</string>
 
     <!-- where things are saved, and exporting songs -->
     <string name="storage_or">Or</string>

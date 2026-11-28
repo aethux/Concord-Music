@@ -256,6 +256,7 @@ fun AudioQualityScreen(navController: NavController, modules: ModulesViewModel =
             onReorder = modules::setVisibleDownloadOrder,
         )
         Footnote(stringResource(R.string.quality_download_order_footnote))
+        Footnote(stringResource(R.string.aq_download_apple_origin))
     }
 }
 

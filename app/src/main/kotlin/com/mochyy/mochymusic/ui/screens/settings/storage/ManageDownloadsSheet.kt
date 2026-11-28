@@ -232,6 +232,16 @@ private fun ManageDownloadsContent(
             style = storageText(12f, FontWeight.Medium, StorageMuted, 0f),
             modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 10.dp),
         )
+        // what the file under an Apple row actually is: a catalogue song keeps its YouTube twin, an
+        // upload keeps Apple's own signed file (DownloadUtil.appleTwinVideo / appleUpload)
+        val hasApple = remember(all) { all.orEmpty().any { it.song.id.startsWith("AM_") } }
+        if (hasApple) {
+            Text(
+                stringResource(R.string.storage_manage_apple_origin),
+                style = storageText(11f, FontWeight.Medium, StorageMuted, -0.1f),
+                modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
+            )
+        }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.12f)))
 
         LazyColumn(

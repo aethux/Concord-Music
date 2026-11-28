@@ -34,4 +34,5 @@
     <string name="aq_status_on">On</string>
     <string name="aq_status_off_tap">Off, tap to turn on</string>
     <string name="aq_status_not_installed">Not installed</string>
+    <string name="aq_download_apple_origin">A song from Apple Music is saved from its YouTube twin, because Apple cannot hand over a file of its own. Your uploads are the exception: Apple serves those as a plain file, and that is what gets saved.</string>
 </resources>

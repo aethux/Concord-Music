@@ -389,6 +389,16 @@
     <string name="import_sync_apple_writes_desc">Off means nothing here ever changes your Apple library, playlists or ratings</string>
     <string name="import_sync_apple_on_open_title">Sync when I open Concord</string>
     <string name="import_sync_apple_on_open_desc">Reads your Apple library on open when the last sync is more than six hours old</string>
+    <string name="import_sync_apple_refresh_title">Refresh in the background</string>
+    <string name="import_sync_apple_refresh_line">%1$s · last read %2$s</string>
+    <string name="import_sync_apple_refresh_line_never">%1$s · not read yet</string>
+    <string name="import_sync_apple_refresh_off">Off</string>
+    <string name="import_sync_apple_refresh_off_desc">Only when you open the app or pull to refresh</string>
+    <string name="import_sync_apple_refresh_15">Every 15 minutes</string>
+    <string name="import_sync_apple_refresh_60">Every hour</string>
+    <string name="import_sync_apple_refresh_6h">Every 6 hours</string>
+    <string name="import_sync_apple_refresh_24h">Every day</string>
+    <string name="import_sync_apple_refresh_note">Android decides when it runs: fifteen minutes is the shortest it allows, and a phone that is asleep runs it late. A background refresh only reads Apple, so it never changes anything in your library there.</string>
     <string name="import_sync_apple_report_title">Send my plays to Apple Music</string>
     <string name="import_sync_apple_report_desc">Apple\'s Recently Played, Replay and recommendations see what plays here</string>
     <string name="import_sync_apple_private_title">Private listening</string>

@@ -1,5 +1,6 @@
 package com.mochyy.mochymusic.ui.screens.settings.importsync
 
+import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +32,7 @@ import com.mochyy.mochymusic.applesync.AppleMatchStatus
 import com.mochyy.mochymusic.applesync.AppleAccount
 import com.mochyy.mochymusic.applesync.AppleAutoSync
 import com.mochyy.mochymusic.applesync.ApplePlayPrefs
+import com.mochyy.mochymusic.applesync.AppleRefreshSchedule
 import com.mochyy.mochymusic.applesync.AppleWritePrefs
 import com.mochyy.mochymusic.ui.component.DefaultDialog
 import com.mochyy.mochymusic.ui.component.LocalZoomOutOverlayState
@@ -63,6 +65,10 @@ fun ImportSyncScreen(
     val scope = rememberCoroutineScope()
     var appleWrites by remember { mutableStateOf<Boolean?>(null) }
     var appleOnOpen by remember { mutableStateOf<Boolean?>(null) }
+    // minutes between background refreshes, 0 = off (AppleRefreshSchedule)
+    var appleRefresh by remember { mutableStateOf(0) }
+    // when the last finished sync ran, ms since 1970; 0 when there has never been one
+    var appleLastRead by remember { mutableStateOf(0L) }
     var appleReporting by remember { mutableStateOf<Boolean?>(null) }
     var applePrivate by remember { mutableStateOf<Boolean?>(null) }
     // whose library this page reads: the name from Apple's own social profile
@@ -74,6 +80,8 @@ fun ImportSyncScreen(
         scope.launch {
             appleWrites = AppleWritePrefs.enabled(context)
             appleOnOpen = AppleAutoSync.enabled(context)
+            appleRefresh = AppleRefreshSchedule.readMinutes(context)
+            appleLastRead = AppleRefreshSchedule.lastReadAt(context)
             appleReporting = ApplePlayPrefs.reporting(context)
             applePrivate = ApplePlayPrefs.privateListening(context)
             appleSignedIn = AppleAccount.signedIn(context)
@@ -318,6 +326,40 @@ fun ImportSyncScreen(
                                 scope.launch { AppleAutoSync.setEnabled(context, next) }
                             },
                         )
+                    },
+                ),
+                // Concord: the interval a refresh runs on with the app closed, which sync-on-open
+                // cannot cover. Read-only by design, so it stays available with writes switched off.
+                // The line under it is a description composable, not descriptionText: that one is
+                // hidden when descriptions are hidden, which would leave the row showing no value.
+                SettingsItem(
+                    title = { Text(stringResource(R.string.import_sync_apple_refresh_title)) },
+                    description = {
+                        Text(
+                            if (appleLastRead > 0) {
+                                stringResource(
+                                    R.string.import_sync_apple_refresh_line,
+                                    appleRefreshLabel(appleRefresh),
+                                    DateUtils.getRelativeTimeSpanString(
+                                        appleLastRead,
+                                        System.currentTimeMillis(),
+                                        DateUtils.MINUTE_IN_MILLIS,
+                                        DateUtils.FORMAT_ABBREV_RELATIVE,
+                                    ).toString(),
+                                )
+                            } else {
+                                stringResource(R.string.import_sync_apple_refresh_line_never, appleRefreshLabel(appleRefresh))
+                            },
+                        )
+                    },
+                    icon = painterResource(R.drawable.sync),
+                    iconShape = CircleShape,
+                    onClick = {
+                        sheets.showAppleRefreshSheet(selected = appleRefresh) { minutes ->
+                            appleRefresh = minutes
+                            scope.launch { AppleRefreshSchedule.saveMinutes(context, minutes) }
+                            AppleRefreshSchedule.apply(context, minutes)
+                        }
                     },
                 ),
                 // Concord: Apple's play report, and the one switch that stops it

@@ -117,8 +117,14 @@ object AppleSyncFlow {
                 runCatching { AppleReconcile.run(context.applicationContext, limit = 10) }
             }
 
+            // one act, one artist row, last: the library list, a song's catalogue artist and the
+            // older YouTube import each wrote their own, and a playlist item inserted with a name for
+            // an id creates one more, so this runs after every writer rather than beside them
+            val mergedArtists = runCatching { AppleArtistMerge.run(entry.database()) }
+                .getOrNull()?.merged ?: 0
+
             val tookMs = System.currentTimeMillis() - startedAt
-            val message = describe(songs, playlists, tookMs)
+            val message = describe(songs, playlists, mergedArtists, tookMs)
             record(dao, message)
             // the card and the notification finish with the same sentence
             AppleSyncStatus.update(phase = "Done")
@@ -143,7 +149,7 @@ object AppleSyncFlow {
      * new" is a better sentence than "1494 songs imported", and the counts that did not change say
      * so in words, which is what makes it possible to tell a no-op refresh from a stuck one.
      */
-    private fun describe(songs: AppleImport.Result, playlists: ApplePlaylistImport.Result?, tookMs: Long): String {
+    private fun describe(songs: AppleImport.Result, playlists: ApplePlaylistImport.Result?, mergedArtists: Int, tookMs: Long): String {
         val parts = mutableListOf<String>()
         if (songs.added > 0) {
             parts += "${songs.added} new ${if (songs.added == 1) "song" else "songs"}"
@@ -153,6 +159,10 @@ object AppleSyncFlow {
             parts += "${songs.skipped} ${if (songs.skipped == 1) "song" else "songs"} already there"
         }
         if (songs.albums > 0) parts += "${songs.albums} albums"
+        // the same act under more than one row: said out loud, because an artist page changes shape
+        if (mergedArtists > 0) {
+            parts += "$mergedArtists duplicate ${if (mergedArtists == 1) "artist" else "artists"} merged"
+        }
 
         if (playlists != null) {
             val changed = playlists.playlists - playlists.unchanged

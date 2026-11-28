@@ -50,6 +50,11 @@ object AppleLibraryArtists {
 
                     existing.isYouTubeArtist -> Unit
 
+                    // Concord: the row already is the catalogue artist, which is the id Apple's artist
+                    // page and picture answer to. Re-keying it onto the library's grouping id would
+                    // trade that for nothing, and the artist merge would only move it back.
+                    existing.id.all(Char::isDigit) -> Unit
+
                     else -> {
                         database.rekey(existing, artist)
                         rekeyed++

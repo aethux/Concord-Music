@@ -1592,6 +1592,10 @@ interface DatabaseDao {
     @Query("SELECT * FROM artist WHERE id = :id LIMIT 1")
     fun getArtistById(id: String): ArtistEntity?
 
+    /** Every artist in one read, for a pass that compares names across the whole library. */
+    @Query("SELECT * FROM artist")
+    fun artistsOnce(): List<ArtistEntity>
+
     // The library-artists import re-keys an artist row to Apple's own `r.…` id. Every link moves
     // first; a row that already points at the new id is left for the delete that follows, because
     // OR IGNORE skips a primary-key clash rather than failing the whole update.

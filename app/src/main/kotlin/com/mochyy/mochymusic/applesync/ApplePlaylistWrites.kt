@@ -497,7 +497,11 @@ object ApplePlaylistWrites {
             }
             val afterCatalog = after.mapNotNull { row -> row.catalogId?.let { it to row } }.toMap()
             val afterIds = after.mapTo(HashSet()) { it.id }
-            val still = unresolved.filterNot { it.id in afterIds }
+            val still = unresolved.filterNot { row ->
+                // a song sent by its catalogue id comes back as a `library-songs` row carrying that
+                // id in `playParams.catalogId`, so its own id never matches: both keys count
+                row.id in afterIds || row.catalogId?.let { it in afterCatalog } == true
+            }
             if (still.isNotEmpty()) {
                 entry.dao().audit(audit("REPLACE_TRACKS", remoteId, "SKIP", reason = "UNRESOLVED ${still.size}"))
                 if (!quiet) TopToaster.error(context.getString(R.string.apple_playlist_failed))
@@ -562,6 +566,12 @@ object ApplePlaylistWrites {
                 "/v1/me/library/playlists/$remoteId/tracks?limit=100&offset=$offset",
                 null,
             )
+            // An EMPTY playlist has no `tracks` relationship at all, and Apple says so with 404 "No
+            // related resources" rather than an empty `data` (probed 2026-11-28). Without this a new
+            // playlist could never receive its first song: this read answered 404, the push stopped
+            // before building anything, and no audit row recorded why. If the playlist itself is
+            // gone the POST/PUT that follows reports it, so 404 here is an empty list, not an error.
+            if (answer.status == 404) return rows
             if (answer.status !in 200..299) return null
             val data = AccountHttp.parse(answer.body)?.get("data")?.array() ?: return rows
             if (data.isEmpty()) return rows

@@ -84,9 +84,6 @@ fun parseFullVersion(text: String): FullVersion {
 
 private const val CacheTtlMillis = 15L * 60L * 1000L
 
-// older releases in this repo are the app under its old id, so "downgrade" to one would add a second app instead
-private val FirstReleaseWithThisId = FullVersion(major = 8, minor = 2, patch = 3)
-
 /** A release with the version it was parsed to, so it can be compared without parsing again. */
 private class ParsedRelease(val version: FullVersion, val release: GithubRelease)
 
@@ -168,7 +165,6 @@ private suspend fun fetchReleases(): Result<List<ParsedRelease>> = withContext(D
                 val fullVer = parseFullVersion("$title $tag")
 
                 if (fullVer.major == 0 && fullVer.minor == 0 && fullVer.patch == 0) continue
-                if (fullVer.copy(buildNumber = 0) < FirstReleaseWithThisId) continue
 
                 val displayVersion = if (fullVer.buildNumber > 0) "${fullVer.name} (${fullVer.buildNumber})" else fullVer.name
 

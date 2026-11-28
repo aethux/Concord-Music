@@ -104,8 +104,15 @@ object AppleSongWrites {
                 TopToaster.error(context.getString(R.string.apple_write_unconfirmed, song.title))
                 return false
             }
-            // Cider's setRating: value 1 also adds to the library, when the switch allows it
-            val added = if (liked) addToLibrary(context, tokens, dao, catalogId) else false
+            // Cider's setRating: value 1 also adds to the library, when the switch allows it — but only
+            // when the song is not there yet. Apple can hold the song already, as an upload it matched
+            // to this catalogue id, and adding that id again makes a second library entry of one song
+            // (the pull cannot show it: its rows are keyed by catalogue id and collapse).
+            val added = if (liked && !alreadyInLibrary(song, dao)) {
+                addToLibrary(context, tokens, dao, catalogId)
+            } else {
+                false
+            }
             setLocal(entry, song.id, liked, inLibrary = if (added) true else null)
             // the player's own caption does the talking (LikedLabel); a pill here said it twice
             true
@@ -215,6 +222,19 @@ object AppleSongWrites {
             // Apple's library id arrives with the library read; without it the delete cannot be named
             TopToaster.error(context.getString(R.string.apple_library_not_synced))
             return false
+        }
+        // The button only offers Add while the row says it is not in the library, and that row can be
+        // behind Apple (added on another device, or held as an upload matched to this catalogue id).
+        // Adding the catalogue id again makes a second entry of one song, so an add of something
+        // already there just makes the row say what Apple already knows.
+        if (add && alreadyInLibrary(song, dao)) {
+            setLocal(entry, song.id, song.liked, inLibrary = true)
+            TopToaster.show(
+                text = context.getString(R.string.added_to_library),
+                thumbnail = song.thumbnailUrl,
+                iconRes = R.drawable.library_add_check,
+            )
+            return true
         }
         if (refuse(context, dao, write, if (add) catalogId else libraryId!!, confirmed = !add)) return false
         if (!WriteBudget.take()) {
@@ -347,6 +367,13 @@ object AppleSongWrites {
     private suspend fun catalogueId(dao: AppleSyncDao, songId: String): String? =
         dao.track(songId)?.catalogId
             ?: songId.removePrefix("AM_").takeIf { it.isNotBlank() && !it.startsWith("i.") }
+
+    /**
+     * True when Apple already answers this song in the library. Both records are the library read's own
+     * answers — the mirror row's `inLibrary` and the sidecar's `libraryId` — so nothing is assumed.
+     */
+    private suspend fun alreadyInLibrary(song: SongEntity, dao: AppleSyncDao): Boolean =
+        song.inLibrary != null || dao.track(song.id)?.libraryId != null
 
     /** The epoch never changes after it is taken, so reading it once per process is enough. */
     @Volatile

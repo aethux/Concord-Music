@@ -4656,18 +4656,21 @@ class MusicService :
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             MusicWidgetReceiver.ACTION_PLAY_PAUSE -> {
-                if (player.isPlaying) player.pause() else player.play()
+                // the app's own button goes through the transport, which rewinds a finished queue before
+                // playing; a raw player.play() left this button dead once the queue had ended
+                transport.togglePlayPause()
                 updateWidgetUI(player.isPlaying)
             }
             MusicWidgetReceiver.ACTION_LIKE -> {
                 toggleLike()
             }
             MusicWidgetReceiver.ACTION_NEXT -> {
-                player.seekToNext()
+                // the same skip the app makes, so the widget keeps its crossfade and skip timing
+                transport.skipNext()
                 updateWidgetUI(player.isPlaying)
             }
             MusicWidgetReceiver.ACTION_PREVIOUS -> {
-                player.seekToPrevious()
+                transport.skipPrevious()
                 updateWidgetUI(player.isPlaying)
             }
             MusicWidgetReceiver.ACTION_UPDATE_WIDGET -> {
@@ -4725,6 +4728,7 @@ class MusicService :
                     currentPosition = player.currentPosition,
                     currentLyric = currentLyric,
                     nextLyric = nextLyric,
+                    album = songData?.album?.title.orEmpty(),
                     progressOnly = progressOnly,
                     repeatMode = player.repeatMode,
                 )

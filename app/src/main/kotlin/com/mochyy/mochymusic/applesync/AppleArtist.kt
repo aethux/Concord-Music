@@ -13,6 +13,8 @@ import com.mochyy.mochymusic.importer.obj
 import com.mochyy.mochymusic.importer.string
 import com.mochyy.mochymusic.importer.strings
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 /** An album on an artist's page: enough to draw a card and open the album. */
 data class AppleAlbumRef(
@@ -59,6 +61,11 @@ data class AppleArtist(
     val videos: List<AppleMusicVideo> = emptyList(),
     val similar: List<AppleArtistRef> = emptyList(),
     /**
+     * Apple's favourite on this artist, read through `extend=…inFavorites` (the page's own request
+     * carries it). Null when the payload did not answer, so the page falls back to what it knows.
+     */
+    val inFavorites: Boolean? = null,
+    /**
      * Concord: the hero video, logo and bio, parsed from this same payload by the canvas provider's
      * one parser (`AppleMusicArtistBackgroundProvider.editorialFrom`). Null when Apple sent no
      * editorial for this artist, or when the caller fetched the artist without `extend`.
@@ -78,6 +85,8 @@ object AppleArtistReader {
             genres = attributes?.strings("genreNames").orEmpty(),
             url = attributes?.string("url"),
             bio = attributes?.string("artistBio"),
+            // `extend=…inFavorites` sends this as a real boolean; absent means Apple did not answer
+            inFavorites = (attributes?.get("inFavorites") as? JsonPrimitive)?.booleanOrNull,
         )
     }
 

@@ -4,9 +4,11 @@ package com.mochyy.mochymusic.viewmodels
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
 import com.mochyy.mochymusic.applesync.AppleArtist
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleCovers
+import com.mochyy.mochymusic.applesync.AppleFavorites
 import com.mochyy.mochymusic.applesync.ApplePageCache
 import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.db.entities.ArtistEntity
@@ -17,6 +19,7 @@ import com.mochyy.mochymusic.canvas.AppleArtistEditorial
 import com.mochyy.mochymusic.db.MusicDatabase
 import com.mochyy.mochymusic.playback.queues.AppleStationQueue
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +35,7 @@ class AppleArtistViewModel @Inject constructor(
     private val tokens: AppleTokens,
     private val database: MusicDatabase,
     private val pageCache: ApplePageCache,
+    @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -115,29 +119,54 @@ class AppleArtistViewModel @Inject constructor(
         observer?.cancel()
         observer = viewModelScope.launch {
             launch { database.songsByArtistName(name).collect { _librarySongs.value = it } }
-            launch { database.artistRowByName(name).collect { row -> _liked.value = row?.bookmarkedAt != null } }
+            launch {
+                database.artistRowByName(name).collect { row ->
+                    // the local bookmark only speaks when Apple did not: after a favourite the two
+                    // are kept in step by toggleLike(), so this never fights Apple's answer
+                    if (page.value?.artist?.inFavorites == null) {
+                        _liked.value = row?.bookmarkedAt != null
+                    }
+                }
+            }
             launch { database.albumsByArtistName(name).collect { _libraryAlbums.value = it } }
         }
     }
 
+    /**
+     * The heart on the artist: Apple's favourite, which is what Cider's follow writes
+     * (`POST /v1/me/favorites?ids[artists]`).
+     *
+     * Apple is asked first, and the local bookmark only moves once it answered — so the heart can
+     * never show a favourite Apple refused. Writing the local bookmark as well is what keeps Mochy's
+     * own artist lists in step. Home's "Favourite Artists" row needs nothing from here: Apple's own
+     * feed carries that shelf (`kind: your-favorites`), so this is the only write it takes.
+     */
     fun toggleLike() {
         val artist = page.value?.artist ?: return
         viewModelScope.launch(Dispatchers.IO) {
+            val keep = !_liked.value
+            if (!AppleFavorites.set(context, "artists", artist.id, keep)) return@launch
+            // the page's own disk row still says what it said before the write, for a day: drop it,
+            // the way the album and playlist pages drop theirs after a write
+            runCatching { pageCache.invalidate(PageKind.ARTIST, listOf(artist.id)) }
+            _liked.value = keep
             val existing = database.artistByName(artist.name)
             if (existing == null) {
-                database.insert(
-                    com.mochyy.mochymusic.db.entities.ArtistEntity(
-                        id = artist.name,
-                        name = artist.name,
-                        thumbnailUrl = artist.artworkUrl,
-                        bookmarkedAt = java.time.LocalDateTime.now(),
+                if (keep) {
+                    database.insert(
+                        ArtistEntity(
+                            id = artist.name,
+                            name = artist.name,
+                            thumbnailUrl = artist.artworkUrl,
+                            bookmarkedAt = java.time.LocalDateTime.now(),
+                        ),
                     )
-                )
+                }
             } else {
                 database.update(
                     existing.copy(
-                        bookmarkedAt = if (existing.bookmarkedAt == null) java.time.LocalDateTime.now() else null,
-                    )
+                        bookmarkedAt = if (keep) java.time.LocalDateTime.now() else null,
+                    ),
                 )
             }
         }
@@ -185,6 +214,9 @@ class AppleArtistViewModel @Inject constructor(
             }
             _failed.value = false
             _page.value = Page(artist = artist, songs = songs)
+            // Apple's own answer first: the payload asked for `inFavorites`, and the local bookmark
+            // is only the fallback for a page Apple did not answer
+            artist.inFavorites?.let { _liked.value = it }
             observeLibrary(artist.name)
             // the banner's hero video, logo and bio came with this same payload
             _editorial.value = artist.editorial

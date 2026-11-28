@@ -139,13 +139,11 @@ import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.LocalPlayerAwareWindowInsets
 import com.mochyy.mochymusic.LocalPlayerConnection
-import com.mochyy.mochymusic.models.ArtistGroup
 import com.mochyy.mochymusic.models.toMediaMetadata
 import com.mochyy.mochymusic.playback.queues.ListQueue
 import com.mochyy.mochymusic.playback.queues.YouTubeQueue
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.ui.component.AppleSignInPrompt
-import com.mochyy.mochymusic.ui.component.ArtistListCard
 import com.mochyy.mochymusic.importer.account.AccountService
 import com.mochyy.mochymusic.ui.component.BonesHost
 import com.mochyy.mochymusic.ui.component.coverTintBackground
@@ -933,32 +931,6 @@ fun HomeScreen(
             .take(16)
     }
 
-    val appleArtistGroups = remember(appleGroups) {
-        appleGroups.orEmpty()
-            .filter { it.title.endsWith(FansLikeSuffix) }
-            .map { group ->
-                ArtistGroup(
-                    artistName = group.title.removeSuffix(FansLikeSuffix),
-                    artistId = group.artistId,
-                    artistThumbnailUrl = (group.artistArtwork
-                        ?: group.items.firstOrNull()?.artworkUrl)?.let { AppleCovers.sized(it) },
-                    // ArtistListCard draws its cover strip from YTItems. This row is a placeholder
-                    // until the artist content is decided, so only the covers are carried over, in
-                    // the shape the card already reads — no YouTube call is made for them.
-                    items = group.items.mapNotNull { item ->
-                        val art = AppleCovers.sized(item.artworkUrl, 300) ?: return@mapNotNull null
-                        com.music.innertube.models.AlbumItem(
-                            browseId = item.id,
-                            playlistId = "",
-                            title = item.title,
-                            artists = null,
-                            thumbnail = art,
-                        )
-                    },
-                )
-            }
-    }
-
     // warm every card's loop, so a card is already moving by the time it is scrolled to. Nothing is
     // fetched when the person has motion covers switched off.
     val motionCoversOn by rememberPreference(AppleAnimatedCoversKey, defaultValue = true)
@@ -1305,48 +1277,6 @@ fun HomeScreen(
         CommunityPlaylistCard(
             item = item,
             onClick = { navController.navigate("online_playlist/${item.playlist.id}") }
-        )
-    }
-
-    val artistGroupCard: @Composable (ArtistGroup) -> Unit = { group ->
-        ArtistListCard(
-            group = group,
-            onClick = {
-                group.artistId?.let {
-                    com.mochyy.mochymusic.utils.ArtistPageCache.putPicks(it, group)
-                    navController.navigate("artist/$it/similar")
-                }
-            },
-            // the card is named after one Apple artist, so its menu is that artist's
-            onLongClick = {
-                group.artistId?.let { id ->
-                    showAppleItemMenu(
-                        AppleHomeItem(
-                            id = id,
-                            kind = AppleHomeItem.Kind.Artist,
-                            title = group.artistName,
-                            subtitle = null,
-                            artworkUrl = group.artistThumbnailUrl,
-                            motionUrl = null,
-                            url = null,
-                            artistId = id,
-                        )
-                    )
-                }
-            },
-            onItemClick = { item ->
-                when (item) {
-                    is SongItem -> playerConnection.playQueue(
-                        YouTubeQueue(
-                            item.endpoint ?: WatchEndpoint(videoId = item.id),
-                            item.toMediaMetadata()
-                        )
-                    )
-                    is AlbumItem -> navController.navigate("album/${item.id}")
-                    is PlaylistItem -> navController.navigate("online_playlist/${item.id}")
-                    else -> {}
-                }
-            }
         )
     }
 
@@ -1832,24 +1762,6 @@ fun HomeScreen(
                             }
                         }
 
-                        // Mochy's artist cards, under the stations. The content is still to come:
-                        // each card carries the artist name and a picture, no items yet.
-                        if (group.title.equals(StationsTitle, ignoreCase = true) && appleArtistGroups.isNotEmpty()) {
-                            item(key = "apple_artist_list_title", contentType = "title") {
-                                HomeSectionTitle(title = stringResource(R.string.artist_list))
-                            }
-                            item(key = "apple_artist_list_row", contentType = "cardRow") {
-                                HomeCardRow(
-                                    rowKey = "apple_artist_list",
-                                    items = appleArtistGroups,
-                                    revealSeen = revealSeen,
-                                    key = { it.artistName },
-                                ) { artist -> artistGroupCard(artist) }
-                            }
-                            item(key = "apple_artist_list_gap", contentType = "gap") {
-                                Spacer(Modifier.height(26.dp))
-                            }
-                        }
                     }
                 }
 

@@ -32,6 +32,12 @@ data class AppleAlbumPage(
      * library holds from it — not the release. The page says so instead of looking short.
      */
     val libraryOnly: Boolean = false,
+    /**
+     * Whether the library holds this album: `inLibrary` on the catalogue resource, asked for the way
+     * Cider asks (`fields=inLibrary`, attributes under `resources.albums`). Null when Apple did not
+     * answer, so the page shows a save button rather than claiming a state it was not told.
+     */
+    val inLibrary: Boolean? = null,
 )
 
 object AppleAlbumReader {

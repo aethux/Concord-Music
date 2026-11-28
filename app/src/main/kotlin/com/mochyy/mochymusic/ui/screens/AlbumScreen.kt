@@ -126,6 +126,7 @@ fun AlbumScreen(
     val moreByArtist by viewModel.moreByArtist.collectAsState()
     val description by viewModel.description.collectAsState()
     val loadFailed by viewModel.loadFailed.collectAsState()
+    val saved by viewModel.saved.collectAsState()
     val appleLibraryOnly by viewModel.appleLibraryOnly.collectAsState()
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
     val hideVideoSongs by rememberPreference(key = HideVideoSongsKey, defaultValue = false)
@@ -335,8 +336,19 @@ fun AlbumScreen(
                     }
                 },
                 onShuffleClick = { play(shuffled = true) },
-                isSaved = album.album.bookmarkedAt != null,
-                onSaveClick = { database.query { update(album.album.toggleLike()) } },
+                isSaved = if (viewModel.isAppleAlbum) {
+                    // Apple's own answer when it gave one; a page it could not ask shows unsaved
+                    saved ?: false
+                } else {
+                    album.album.bookmarkedAt != null
+                },
+                onSaveClick = {
+                    if (viewModel.isAppleAlbum) {
+                        viewModel.toggleSaved()
+                    } else {
+                        database.query { update(album.album.toggleLike()) }
+                    }
+                },
                 onCreatorClick = { creator ->
                     val id = creator.artistId
                     when {

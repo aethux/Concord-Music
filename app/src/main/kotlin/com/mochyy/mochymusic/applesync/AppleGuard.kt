@@ -20,6 +20,9 @@ enum class AppleKind {
     LIBRARY_SONG,
     PLAYLIST,
     CATALOG_SONG,
+
+    /** a catalogue album, for saving it to the library and taking it back out */
+    ALBUM,
 }
 
 data class AppleRef(val kind: AppleKind, val id: String)

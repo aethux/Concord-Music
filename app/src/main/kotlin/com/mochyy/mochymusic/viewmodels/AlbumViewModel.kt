@@ -5,11 +5,15 @@ package com.mochyy.mochymusic.viewmodels
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
 import com.music.innertube.YouTube
 import com.music.innertube.models.AlbumItem
+import com.mochyy.mochymusic.applesync.AppleAlbumPage
 import com.mochyy.mochymusic.applesync.AppleAlbums
 import com.mochyy.mochymusic.applesync.AppleClient
 import com.mochyy.mochymusic.applesync.AppleCovers
+import com.mochyy.mochymusic.applesync.AppleKind
+import com.mochyy.mochymusic.applesync.AppleLibraryFollow
 import com.mochyy.mochymusic.applesync.ApplePageCache
 import com.mochyy.mochymusic.applesync.AppleTokens
 import com.mochyy.mochymusic.db.MusicDatabase
@@ -23,6 +27,7 @@ import com.mochyy.mochymusic.utils.reportException
 import com.mochyy.mochymusic.utils.ArtistImageResolver
 import com.mochyy.mochymusic.utils.ArtistPageCache
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +49,7 @@ constructor(
     private val database: MusicDatabase,
     private val tokens: AppleTokens,
     private val pageCache: ApplePageCache,
+    @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val albumId = savedStateHandle.get<String>("albumId")!!
@@ -76,6 +82,51 @@ constructor(
     private val appleArtistIdFlow = MutableStateFlow<String?>(null)
 
     private val appleAlbum = MutableStateFlow<AlbumWithSongs?>(null)
+
+    /**
+     * The page Apple answered for this album, kept for the save button: its `id` is the catalogue id
+     * every library write takes, and its `inLibrary` is the state Apple reported.
+     */
+    private var applePage: AppleAlbumPage? = null
+
+    /** True when the library holds this album; null until Apple has said either way. */
+    private val _saved = MutableStateFlow<Boolean?>(null)
+    val saved: StateFlow<Boolean?> = _saved.asStateFlow()
+
+    /**
+     * Saves this catalogue album to Apple's library, or takes it back out — Cider's calls, with the
+     * guard, the write budget and the audit in front of them (`AppleLibraryFollow`).
+     *
+     * The button's state moves only after Apple answered, and only to what was asked for. A removal
+     * needs the `l.…` id, so an album Apple does not hold ends here: there is nothing to delete and
+     * the page simply shows unsaved.
+     */
+    fun toggleSaved() {
+        val page = applePage ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val save = _saved.value != true
+            val pair = runCatching { tokens.read() }.getOrNull() ?: return@launch
+            val libraryId = when {
+                save -> null
+                // an upload or unmatched album is in the library under its own id already
+                page.libraryOnly -> page.id
+                else -> runCatching { AppleClient(pair).albumLibraryId(page.id) }.getOrNull()
+                    ?: run {
+                        _saved.value = false
+                        return@launch
+                    }
+            }
+            val outcome = AppleLibraryFollow.change(
+                context,
+                "albums",
+                page.id,
+                libraryId,
+                save,
+                AppleKind.ALBUM,
+            )
+            if (outcome.ok) _saved.value = save
+        }
+    }
 
     val albumWithSongs: StateFlow<AlbumWithSongs?> =
         if (appleRemoteId == null) {
@@ -128,6 +179,8 @@ constructor(
                 return@launch
             }
             val localAlbumId = albumId
+            applePage = page
+            _saved.value = page.inLibrary
             appleLibraryOnly.value = page.libraryOnly
             val artistName = page.artistName.ifBlank { "Unknown artist" }
             // the artist row the page draws its creator line from; untappable unless the artist is

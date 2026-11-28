@@ -26,12 +26,13 @@ object AppleLibraryFollow {
     /** [libraryId] is the `r.`/`p.` id the follow just created, so the caller can save it at once. */
     data class Outcome(val ok: Boolean, val libraryId: String? = null)
 
-    /** [type] is Apple's plural path segment: `artists` or `playlists`. */
+    /** [type] is Apple's plural path segment: `albums`, `artists` or `playlists`. */
     private const val Host = "https://amp-api.music.apple.com"
 
     /**
-     * Follows or unfollows a catalogue object. [libraryId] is the `r.`/`p.` id Apple gave the row
-     * in the library; it is required for a removal, because the catalogue id answers 500 there.
+     * Follows or unfollows a catalogue object. [libraryId] is the `r.`/`p.`/`l.` id Apple gave the
+     * row in the library; it is required for a removal, because the catalogue id answers 500 there.
+     * [kind] is only the guard's name for the target, so an album is not filed as a playlist.
      */
     suspend fun change(
         context: Context,
@@ -39,6 +40,7 @@ object AppleLibraryFollow {
         catalogueId: String,
         libraryId: String?,
         follow: Boolean,
+        kind: AppleKind = AppleKind.PLAYLIST,
     ): Outcome = withContext(Dispatchers.IO) {
         val entry = EntryPointAccessors.fromApplication(
             context.applicationContext,
@@ -58,7 +60,7 @@ object AppleLibraryFollow {
         val decision = AppleGuard.decide(
             AppleOp(
                 write = write,
-                targets = listOf(AppleRef(AppleKind.PLAYLIST, target)),
+                targets = listOf(AppleRef(kind, target)),
                 confirmed = !follow,
             ),
             AppleGuardContext(

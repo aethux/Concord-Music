@@ -416,6 +416,8 @@ class AppleClient(
                 parse = AppleLibrary::songs,
                 keep = "limit=100",
             ),
+            // an upload or an unmatched album is only here because the library holds it
+            inLibrary = true,
             // Apple keeps the album but not which catalogue release it is (`catalog` comes back
             // empty), so this is what the library holds, not the album. The page says so.
             libraryOnly = true,
@@ -457,8 +459,48 @@ class AppleClient(
                     keep = "limit=100",
                 )
             },
+            // whether the library holds it: the page's save button draws from this, and a page that
+            // cannot ask still draws - the state is null, not a guess
+            inLibrary = runCatching { albumInLibrary(albumId, storefront) }.getOrNull(),
         )
     }
+
+    /**
+     * Whether the library holds this catalogue album.
+     *
+     * Cider asks this as an attribute rather than a second resource: `fields=inLibrary` on the
+     * catalogue object, read from `resources.albums[<id>].attributes`. Probed on this account
+     * 2026-11-28 — `true` on a saved album, `false` on one that is not; `extend=inLibrary` is a 400,
+     * and `fields` without a type strips every other attribute, so it stays its own request.
+     *
+     * Not cached: a save or an unsave changes the answer at once, and a stale page cache would then
+     * show the wrong button. Throws when Apple answers with an error; the caller decides what an
+     * unanswered membership means for the screen.
+     */
+    suspend fun albumInLibrary(albumId: String): Boolean? = albumInLibrary(albumId, storefront())
+
+    /** the same read when the caller already resolved the storefront (the album page did) */
+    suspend fun albumInLibrary(albumId: String, storefront: String): Boolean? {
+        val page = read(
+            "/v1/catalog/$storefront?ids%5Balbums%5D=$albumId&fields=inLibrary" +
+                "&format%5Bresources%5D=map",
+        ) ?: return null
+        return (page["resources"].obj()?.get("albums").obj()?.get(albumId).obj()
+            ?.get("attributes").obj()?.get("inLibrary") as? JsonPrimitive)?.booleanOrNull
+    }
+
+    /**
+     * The `l.…` id this catalogue album has in the library, or null when Apple holds it not at all.
+     *
+     * Cider resolves the same twin inside its removal, because a DELETE takes the library id and not
+     * the catalogue one. Probed 2026-11-28: 200 with the `l.` id when the album is saved, 404 "No
+     * related resources" when it is not — so null here means "not saved", not "Apple failed".
+     */
+    suspend fun albumLibraryId(albumId: String): String? = albumLibraryId(albumId, storefront())
+
+    suspend fun albumLibraryId(albumId: String, storefront: String): String? =
+        read("/v1/catalog/$storefront/albums/$albumId/library")
+            ?.get("data").array()?.firstOrNull()?.obj()?.idString("id")
 
     /**
      * Apple's own Home feed: the shelf list the web player asks for, resources sideloaded. Null means

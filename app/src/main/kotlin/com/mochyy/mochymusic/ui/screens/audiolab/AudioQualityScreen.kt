@@ -151,42 +151,44 @@ fun AudioQualityScreen(navController: NavController, modules: ModulesViewModel =
         onBack = { navController.navigateUp() },
         subtitle = "${effective.title} · ${effective.format}",
     ) {
-        LabSheetTitle(stringResource(R.string.aq_section_streaming))
-        LabGroup {
-            ProviderCaption(
-                logo = R.drawable.provider_youtube_music,
-                name = "YouTube Music",
-                status = when {
-                    youTubeOn -> stringResource(R.string.aq_youtube_status_on)
-                    order.none(usable) -> stringResource(R.string.aq_youtube_status_off_none)
-                    else -> stringResource(R.string.aq_youtube_status_off)
-                },
-                on = youTubeOn,
-            )
-            YouTubeOptions.forEach { option ->
-                QualityRow(stringResource(option.title), stringResource(option.description), selected = quality == option.quality, enabled = youTubeOn) { onQuality(option.quality) }
-            }
-
-            // each module's own qualities, under its name
-            shownModules.forEach { entry ->
-                val id = entry.module.info.id
-                val active = entry.enabled && entry.account is AccountState.SignedIn
-                Spacer(Modifier.height(6.dp))
-                ProviderCaption(logo = providerLogo(id), name = entry.module.info.name, status = moduleStatus(entry), on = active)
-                val qualityChoice = entry.module.choices.firstOrNull { it.id == "quality" }
-                if (qualityChoice != null) {
-                    val picked = entry.picks[qualityChoice.id]?.takeIf { p -> qualityChoice.options.any { it.id == p } }
-                        ?: qualityChoice.options.first().id
-                    qualityChoice.options.forEach { option ->
-                        QualityRow(option.label, option.description, selected = picked == option.id, enabled = active) {
-                            modules.setPick(id, qualityChoice.id, option.id)
-                        }
+        // the YouTube tiers only mean something while YouTube is on; the provider row below carries
+        // its switch, so the block goes rather than sitting there dimmed
+        if (youTubeOn || shownModules.isNotEmpty()) {
+            LabSheetTitle(stringResource(R.string.aq_section_streaming))
+            LabGroup {
+                if (youTubeOn) {
+                    ProviderCaption(
+                        logo = R.drawable.provider_youtube_music,
+                        name = "YouTube Music",
+                        status = stringResource(R.string.aq_youtube_status_on),
+                        on = true,
+                    )
+                    YouTubeOptions.forEach { option ->
+                        QualityRow(stringResource(option.title), stringResource(option.description), selected = quality == option.quality, enabled = true) { onQuality(option.quality) }
                     }
-                } else if (id == MonochromeModule.Id) {
-                    QualityRow(stringResource(R.string.aq_quality_lossless), stringResource(R.string.aq_desc_monochrome_lossless), selected = true, enabled = active) {}
                 }
-                LabTextAction(stringResource(R.string.aq_module_settings, entry.module.info.name), R.drawable.navigate_next) {
-                    navController.navigate(com.mochyy.mochymusic.ui.screens.settings.modules.moduleRoute(id))
+
+                // each module's own qualities, under its name
+                shownModules.forEach { entry ->
+                    val id = entry.module.info.id
+                    val active = entry.enabled && entry.account is AccountState.SignedIn
+                    Spacer(Modifier.height(6.dp))
+                    ProviderCaption(logo = providerLogo(id), name = entry.module.info.name, status = moduleStatus(entry), on = active)
+                    val qualityChoice = entry.module.choices.firstOrNull { it.id == "quality" }
+                    if (qualityChoice != null) {
+                        val picked = entry.picks[qualityChoice.id]?.takeIf { p -> qualityChoice.options.any { it.id == p } }
+                            ?: qualityChoice.options.first().id
+                        qualityChoice.options.forEach { option ->
+                            QualityRow(option.label, option.description, selected = picked == option.id, enabled = active) {
+                                modules.setPick(id, qualityChoice.id, option.id)
+                            }
+                        }
+                    } else if (id == MonochromeModule.Id) {
+                        QualityRow(stringResource(R.string.aq_quality_lossless), stringResource(R.string.aq_desc_monochrome_lossless), selected = true, enabled = active) {}
+                    }
+                    LabTextAction(stringResource(R.string.aq_module_settings, entry.module.info.name), R.drawable.navigate_next) {
+                        navController.navigate(com.mochyy.mochymusic.ui.screens.settings.modules.moduleRoute(id))
+                    }
                 }
             }
         }

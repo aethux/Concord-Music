@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Concord: new - the dashboard in one row: artwork, song and album, then the four buttons on the right -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- the card itself, drawn as a bitmap so its opacity follows the stored setting -->
+    <ImageView
+        android:id="@+id/widget_dashboard_surface"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_dashboard_surface" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="8dp">
+
+        <ImageView
+            android:id="@+id/widget_dashboard_art"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:contentDescription="@string/album_art"
+            android:scaleType="centerCrop"
+            android:src="@drawable/widget_dashboard_art_placeholder" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_dashboard_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/widget_np_preview_title"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_dashboard_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/widget_dashboard_preview_subtitle"
+                android:textColor="#B3FFFFFF"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/widget_dashboard_like"
+                android:layout_width="32dp"
+                android:layout_height="36dp"
+                android:background="@null"
+                android:contentDescription="@string/like"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_widget_heart_outline_nav" />
+
+            <ImageButton
+                android:id="@+id/widget_dashboard_prev"
+                android:layout_width="32dp"
+                android:layout_height="36dp"
+                android:background="@null"
+                android:contentDescription="@string/widget_np_previous"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_np_prev" />
+
+            <ImageButton
+                android:id="@+id/widget_dashboard_play"
+                android:layout_width="36dp"
+                android:layout_height="40dp"
+                android:background="@null"
+                android:contentDescription="@string/play_pause"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_np_play" />
+
+            <ImageButton
+                android:id="@+id/widget_dashboard_next"
+                android:layout_width="32dp"
+                android:layout_height="36dp"
+                android:background="@null"
+                android:contentDescription="@string/widget_np_next"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_np_next" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

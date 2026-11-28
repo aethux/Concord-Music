@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Concord: new - the rounded square shown where the dashboard's artwork goes until a song is playing -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#0A0A10"
+        android:endColor="#2C2F4F"
+        android:type="linear" />
+    <corners android:radius="18dp" />
+</shape>

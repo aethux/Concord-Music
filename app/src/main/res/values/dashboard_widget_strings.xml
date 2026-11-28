@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_dashboard">Dashboard 4×2</string>
+    <string name="widget_dashboard_wide">Dashboard 1×4</string>
+    <string name="widget_dashboard_description">Artwork, title and artist with playback under it; opening it asks how see-through and how large it should be</string>
+    <string name="widget_dashboard_wide_description">The same dashboard in one row: artwork and song on the left, heart and playback on the right</string>
+    <string name="widget_dashboard_opacity">Opacity</string>
+    <string name="widget_dashboard_size">Size</string>
+    <string name="widget_dashboard_preview_subtitle">Artist - Album</string>
+</resources>

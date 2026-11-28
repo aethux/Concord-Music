@@ -1331,6 +1331,41 @@
                 android:resource="@xml/np_4x2_widget_info" />
         </receiver>
 
+        <!-- Dashboard widget: artwork, title and artist with playback under them, with its own opacity and size -->
+        <receiver
+            android:name=".widget.DashboardWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_dashboard">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/dashboard_widget_info" />
+        </receiver>
+
+        <!-- The same dashboard in one row -->
+        <receiver
+            android:name=".widget.DashboardWideWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_dashboard_wide">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/dashboard_wide_widget_info" />
+        </receiver>
+
+        <!-- the launcher opens this when the dashboard is placed, and its long-press lets it be opened again -->
+        <activity
+            android:name=".widget.DashboardWidgetConfigActivity"
+            android:exported="true"
+            android:label="@string/widget_dashboard"
+            android:theme="@style/Theme.mochy" />
+
         <!-- Google Cast Options Provider -->
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"

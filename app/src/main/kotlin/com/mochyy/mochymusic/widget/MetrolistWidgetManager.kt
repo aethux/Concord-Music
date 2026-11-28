@@ -53,6 +53,7 @@ class MochyWidgetManager @Inject constructor(
     private var npArtworkUri: String? = null
     private var npBackdrop: Bitmap? = null
     private var npThumb: Bitmap? = null
+    private var npDashboardThumb: Bitmap? = null
     private var npAccent: Int = Color.WHITE
 
     // widgets that already hold a full drawing of this song, so a tick only sends them text and nothing flashes
@@ -89,13 +90,15 @@ class MochyWidgetManager @Inject constructor(
         currentPosition: Long = 0,
         currentLyric: String = "",
         nextLyric: String = "",
+        // the album line of the dashboard card, empty when the song is not from one
+        album: String = "",
         // the once-a-second tick, it also moves the lyric widgets on to the line being sung
         progressOnly: Boolean = false,
         // one of Player.REPEAT_MODE_*, for the repeat button of the now playing 4x1 widget
         repeatMode: Int = 0,
     ) = withContext(Dispatchers.Default) {
         updating.withLock {
-            drawWidgets(title, artist, artworkUri, isPlaying, isLiked, duration, currentPosition, currentLyric, nextLyric, progressOnly, repeatMode)
+            drawWidgets(title, artist, artworkUri, isPlaying, isLiked, duration, currentPosition, currentLyric, nextLyric, album, progressOnly, repeatMode)
         }
     }
 
@@ -109,6 +112,7 @@ class MochyWidgetManager @Inject constructor(
         currentPosition: Long,
         currentLyric: String,
         nextLyric: String,
+        album: String,
         progressOnly: Boolean,
         repeatMode: Int,
     ) {
@@ -121,9 +125,13 @@ class MochyWidgetManager @Inject constructor(
         val np2x2Ids = appWidgetManager.getAppWidgetIds(ComponentName(context, NowPlaying2x2WidgetReceiver::class.java))
         val np4x1Ids = if (progressOnly) IntArray(0) else appWidgetManager.getAppWidgetIds(ComponentName(context, NowPlaying4x1WidgetReceiver::class.java))
         val np4x2Ids = appWidgetManager.getAppWidgetIds(ComponentName(context, NowPlaying4x2WidgetReceiver::class.java))
+        // the dashboard has no progress line, so the once-a-second tick has nothing to change on it
+        val dashboardIds = if (progressOnly) IntArray(0) else appWidgetManager.getAppWidgetIds(ComponentName(context, DashboardWidgetReceiver::class.java))
+        val dashboardWideIds = if (progressOnly) IntArray(0) else appWidgetManager.getAppWidgetIds(ComponentName(context, DashboardWideWidgetReceiver::class.java))
         hasLyricWidgets = np2x2Ids.isNotEmpty() || np4x2Ids.isNotEmpty()
         if (widgetIds.isEmpty() && turntableWidgetIds.isEmpty() &&
-            np2x2Ids.isEmpty() && np4x1Ids.isEmpty() && np4x2Ids.isEmpty()
+            np2x2Ids.isEmpty() && np4x1Ids.isEmpty() && np4x2Ids.isEmpty() &&
+            dashboardIds.isEmpty() && dashboardWideIds.isEmpty()
         ) return
 
         val albumArt: Bitmap?
@@ -169,7 +177,7 @@ class MochyWidgetManager @Inject constructor(
             }
         }
 
-        if (np2x2Ids.isNotEmpty() || np4x2Ids.isNotEmpty()) {
+        if (np2x2Ids.isNotEmpty() || np4x2Ids.isNotEmpty() || dashboardIds.isNotEmpty() || dashboardWideIds.isNotEmpty()) {
             prepareNowPlayingArtwork(artworkUri, albumArt)
         }
         val lyricChanged = advanceLyric(currentLyric, nextLyric)
@@ -224,6 +232,20 @@ class MochyWidgetManager @Inject constructor(
                         )
                     }
                 }
+            }
+        }
+
+        // the dashboard carries no progress line, so it is drawn once per song and play state, not on the tick
+        listOf(
+            dashboardIds to DashboardWidgetLook.DashboardForm.Card,
+            dashboardWideIds to DashboardWidgetLook.DashboardForm.Wide,
+        ).forEach { (ids, form) ->
+            ids.forEach { id ->
+                val options = appWidgetManager.getAppWidgetOptions(id)
+                appWidgetManager.updateAppWidget(
+                    id,
+                    createDashboardRemoteViews(id, options, form, title, artist, album, isPlaying, isLiked)
+                )
             }
         }
     }
@@ -327,6 +349,33 @@ class MochyWidgetManager @Inject constructor(
             ?: views.setImageViewResource(R.id.widget_np_backdrop, R.drawable.widget_np_art_placeholder)
     }
 
+    // the dashboard card: the song, its album, the heart and the three buttons, on a surface from the stored opacity
+    private fun createDashboardRemoteViews(
+        widgetId: Int,
+        options: Bundle,
+        form: DashboardWidgetLook.DashboardForm,
+        title: String,
+        artist: String,
+        album: String,
+        isPlaying: Boolean,
+        isLiked: Boolean,
+    ): RemoteViews {
+        val views = RemoteViews(context.packageName, form.layoutRes)
+        views.setTextViewText(R.id.widget_dashboard_title, title)
+        val subtitle = listOf(artist, album).filter { it.isNotBlank() }.joinToString(" - ")
+        views.setTextViewText(
+            R.id.widget_dashboard_subtitle,
+            subtitle.ifBlank { context.getString(R.string.tap_to_open) },
+        )
+        npDashboardThumb?.let { views.setImageViewBitmap(R.id.widget_dashboard_art, it) }
+            ?: views.setImageViewResource(R.id.widget_dashboard_art, R.drawable.widget_dashboard_art_placeholder)
+        views.setImageViewResource(R.id.widget_dashboard_play, if (isPlaying) R.drawable.ic_np_pause else R.drawable.ic_np_play)
+        views.setImageViewResource(R.id.widget_dashboard_like, if (isLiked) R.drawable.ic_widget_heart_nav else R.drawable.ic_widget_heart_outline_nav)
+        DashboardWidgetLook.bind(context, views, widgetId, options, form)
+        DashboardWidgetLook.bindIntents(context, views)
+        return views
+    }
+
     private fun bindProgress(views: RemoteViews, duration: Long, position: Long) {
         val safeDuration = duration.coerceAtLeast(0L)
         val safePosition = position.coerceIn(0L, safeDuration.takeIf { it > 0 } ?: Long.MAX_VALUE)
@@ -372,7 +421,8 @@ class MochyWidgetManager @Inject constructor(
         if (artworkUri == npArtworkUri && (albumArt == null || npBackdrop != null)) return
         npArtworkUri = artworkUri
         npBackdrop = albumArt?.let { frostedBackdrop(it) }
-        npThumb = albumArt?.let { thumbnailOf(it) }
+        npThumb = albumArt?.let { thumbnailOf(it, ThumbPx) }
+        npDashboardThumb = albumArt?.let { thumbnailOf(it, DashboardThumbPx) }
         npAccent = albumArt?.let { accentOf(it) } ?: Color.WHITE
         // a new cover means every widget needs a full drawing again, bitmaps included
         npDrawn.clear()
@@ -416,9 +466,9 @@ class MochyWidgetManager @Inject constructor(
     }
 
     // the cover as a rounded square, scaled down so the widget isn't sent more pixels than it shows
-    private fun thumbnailOf(source: Bitmap): Bitmap {
+    private fun thumbnailOf(source: Bitmap, px: Int): Bitmap {
         val rounded = getRoundedCornerBitmap(source, minOf(source.width, source.height) * 0.14f)
-        return Bitmap.createScaledBitmap(rounded, ThumbPx, ThumbPx, true)
+        return Bitmap.createScaledBitmap(rounded, px, px, true)
     }
 
     // a light, lively colour from the cover for the header line, white when the cover has none
@@ -747,5 +797,6 @@ class MochyWidgetManager @Inject constructor(
         const val BackdropPx = 120
         const val BackdropBlur = 3
         const val ThumbPx = 192
+        const val DashboardThumbPx = 300
     }
 }
